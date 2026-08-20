@@ -1,7 +1,7 @@
 const SUPABASE_URL='https://ovtftzubdbatsiutfyze.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY='sb_publishable_1ncDTYuHizIfkrkIk7fU0Q_8q8h0s_Y';
 const sb=window.supabase?.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY);
-const $=s=>document.querySelector(s), $=s=>document.querySelectorAll(s);
+const $=s=>document.querySelector(s), $$=s=>document.querySelectorAll(s);
 let currentUser=null, currentAlbumId=null, wizardUploadFiles=[];
 let viewHistory=['home'];
 let localAlbums=JSON.parse(localStorage.getItem('pf_local_albums')||'[]');
