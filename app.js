@@ -108,3 +108,53 @@ $('#allJobs')?.addEventListener('click',()=>go('events'));
 $('#allReviews')?.addEventListener('click',()=>{modal('<h2>อัลบั้มที่ต้องตรวจทั้งหมด</h2><p>มี 3 อัลบั้มที่รอตรวจคุณภาพ</p><div id="allReviewItems"></div><button class="secondary full" id="reviewClose">ปิด</button>');$('#allReviewItems').innerHTML=events.slice(0,3).map((a,i)=>'<button class="review-list-button" data-open-review="'+i+'"><b>'+a.title+'</b><span>'+a.photos+' · เปิดตรวจ →</span></button>').join('');$('#reviewClose').onclick=closeModal;$$('[data-open-review]').forEach(b=>b.onclick=()=>{closeModal();go('editor')})});
 $$('.crop-grid button').forEach(b=>b.onclick=()=>{$$('.crop-grid button').forEach(x=>x.classList.remove('active'));b.classList.add('active');const ratios={'ต้นฉบับ':'auto','4:5':'4 / 5','1:1':'1','16:9':'16 / 9'};$('#editPhoto').style.aspectRatio=ratios[b.textContent];$('#editPhoto').style.objectFit='cover';toast('เปลี่ยนอัตราส่วนเป็น '+b.textContent+' แล้ว')});
 $('#watermark')?.addEventListener('change',e=>{document.querySelector('.canvas').classList.toggle('show-watermark',e.target.checked);toast(e.target.checked?'เปิดลายน้ำแล้ว':'ปิดลายน้ำแล้ว')});
+
+
+// iOS workflow surfaces from the product specification
+let parentSelection=[];
+function sheet(content){
+  modal('<span class="sheet-handle"></span>'+content);
+}
+function openAiLooks(){
+  sheet('<span class="eyebrow"><i></i> AI SUGGESTED LOOKS</span><h2>เลือกแนวแต่งที่เหมาะกับภาพ</h2><p>ปัดซ้าย–ขวาเพื่อดู Preview ก่อนใช้จริง</p><div class="look-grid">'+[
+    ['natural','Natural Sport','สีผิวธรรมชาติ',editPhotos[0]],
+    ['clean','Clean Bright','สว่าง สะอาด',editPhotos[1]],
+    ['sport','Deep Sport','คม เข้ม มีพลัง',editPhotos[2]],
+    ['cinema','Cinematic','โทนภาพยนตร์',editPhotos[3]]
+  ].map(x=>'<button class="look-card" data-look="'+x[0]+'"><span style="background-image:url('+x[3]+')"></span><b>'+x[1]+'</b><small>'+x[2]+'</small></button>').join('')+'</div><button class="secondary full" id="learnStyle">เรียนรู้สไตล์จากภาพที่ฉันแต่ง</button>');
+  $$('[data-look]').forEach(b=>b.onclick=()=>{const map={natural:[103,104,105,0],clean:[110,102,108,0],sport:[106,120,135,-2],cinema:[92,115,82,-8]};[color.brightness,color.contrast,color.saturate,color.hue]=map[b.dataset.look];applyColor();closeModal();toast('ใช้ AI Look กับภาพนี้แล้ว')});
+  $('#learnStyle').onclick=()=>{closeModal();toast('AI บันทึกสไตล์ของช่างภาพสำหรับงานนี้แล้ว')};
+}
+function openReference(){
+  sheet('<span class="eyebrow"><i></i> MATCH REFERENCE</span><h2>แต่งสีตามรูปตัวอย่าง</h2><p>AI จะวิเคราะห์แสง White Balance, Tone, HSL และ Mood แล้วปรับแต่ละภาพให้เหมาะกับแสงจริง</p><div class="drop-zone" id="referenceDrop"><span class="upload-icon">＋</span><b>เพิ่มรูป Reference</b><p>JPG, PNG หรือ HEIC</p></div><input type="file" id="referenceFile" accept="image/*" hidden><div class="sheet-actions"><button data-reference-scope="current">ใช้กับภาพปัจจุบัน</button><button data-reference-scope="selected">ใช้กับภาพที่เลือก</button><button data-reference-scope="album">ใช้กับทั้งอัลบั้ม</button></div>');
+  $('#referenceDrop').onclick=()=>$('#referenceFile').click();
+  $('#referenceFile').onchange=()=>toast('AI วิเคราะห์ Reference แล้ว พร้อมสร้าง Preview');
+  $$('[data-reference-scope]').forEach(b=>b.onclick=()=>{closeModal();color={brightness:104,contrast:112,saturate:108,hue:-3};applyColor();toast('Match Reference เรียบร้อย — ยังแก้ต่อได้')});
+}
+function openCulling(){
+  sheet('<span class="eyebrow"><i></i> AI CULLING</span><h2>ตรวจผลการคัดรูป</h2><p>AI เลือก Best Shot และทำเครื่องหมายภาพเบลอ ภาพซ้ำ และหลับตาแล้ว</p><div class="version-row"><button class="active">ทั้งหมด 6</button><button>เลือก 4</button><button>ตรวจซ้ำ 2</button></div><div class="cull-grid">'+editPhotos.map((src,i)=>'<button class="'+(i<4?'selected':'')+'" data-cull="'+i+'"><img src="'+src+'" alt="ภาพสำหรับตรวจคัด"><small>'+(i<4?'✓ Keep':'× Review')+'</small></button>').join('')+'</div><button class="primary full" id="confirmCull">ยืนยัน 4 รูปและไปแต่งสี</button>');
+  $$('[data-cull]').forEach(b=>b.onclick=()=>b.classList.toggle('selected'));
+  $('#confirmCull').onclick=()=>{closeModal();toast('ยืนยันผลคัดแล้ว — เปิดหน้าแต่งสี')};
+}
+function openSelection(){
+  sheet('<h2>รูปที่เลือก '+parentSelection.length+' รูป</h2><p>เลือกคุณภาพไฟล์ก่อนดาวน์โหลด</p><div class="sheet-actions"><button data-quality="web">Web Quality <small>เหมาะสำหรับมือถือและโซเชียล</small></button><button data-quality="high">High Quality <small>สำหรับเก็บและพิมพ์ภาพ</small></button><button data-quality="original">Original <small>ไฟล์ต้นฉบับตามสิทธิ์</small></button><button class="primary" id="downloadSelected">ดาวน์โหลด '+parentSelection.length+' รูป</button></div>');
+  $('#downloadSelected').onclick=()=>{closeModal();toast('กำลังเตรียมไฟล์ ZIP สำหรับดาวน์โหลด')};
+}
+function openParentGallery(e){
+  closeModal();sheet('<span class="eyebrow"><i></i> '+e.title+'</span><h2>เลือกรูปที่ต้องการ</h2><p>แตะหัวใจเพื่อเลือกรูป แล้วดาวน์โหลดพร้อมกันได้</p><div class="cull-grid">'+editPhotos.map((src,i)=>'<button data-parent-photo="'+i+'"><img src="'+src+'" alt="รูปในอัลบั้ม"><small>♡ เลือกรูป</small></button>').join('')+'</div>');
+  $$('[data-parent-photo]').forEach(b=>b.onclick=()=>{const id=+b.dataset.parentPhoto;const pos=parentSelection.indexOf(id);if(pos>=0){parentSelection.splice(pos,1);b.classList.remove('selected');b.querySelector('small').textContent='♡ เลือกรูป'}else{parentSelection.push(id);b.classList.add('selected');b.querySelector('small').textContent='♥ เลือกแล้ว'}$('#selectionCount').textContent=parentSelection.length;$('#selectionPill').classList.toggle('visible',parentSelection.length>0)});
+}
+openAlbum=function(e){
+  sheet('<span class="eyebrow"><i></i> EVENT GALLERY</span><h2>'+e.title+'</h2><p>'+e.date+' · '+e.place+'</p><div class="drop-zone"><b>'+e.photos+'</b><p>ค้นหาภาพของคุณในอัลบั้มนี้</p></div><div class="sheet-actions"><button class="primary" id="albumFace">⌾ ค้นหารูปของฉันด้วยใบหน้า</button><button id="viewAllPhotos">ดูรูปทั้งหมด</button></div>');
+  $('#albumFace').onclick=faceModal;$('#viewAllPhotos').onclick=()=>openParentGallery(e);
+};
+$('#continueEditing')?.addEventListener('click',()=>go('editor'));
+$('#quickUpload')?.addEventListener('click',()=>$('#fileInput').click());
+$('#quickCull')?.addEventListener('click',openCulling);
+$('#quickReference')?.addEventListener('click',openReference);
+$('#aiCull')?.addEventListener('click',openCulling);
+$('#aiLooks')?.addEventListener('click',openAiLooks);
+$('#aiReference')?.addEventListener('click',openReference);
+$('#selectionPill')?.addEventListener('click',openSelection);
+$('#comparePhoto')?.addEventListener('pointerdown',()=>{$('#editPhoto').style.filter='none'});
+$('#comparePhoto')?.addEventListener('pointerup',applyColor);
