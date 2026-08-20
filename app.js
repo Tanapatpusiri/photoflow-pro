@@ -63,7 +63,7 @@ document.addEventListener('click',async e=>{
   if(!email||!password)return toast('กรอกอีเมลและรหัสผ่านก่อน');
   const {data,error}=await sb.auth.signInWithPassword({email,password});
   if(error)return toast(`เข้าสู่ระบบไม่สำเร็จ: ${error.message}`);
-  currentUser=data.user;closeModal();await syncSession();toast('เข้าสู่ระบบสำเร็จ');
+  currentUser=data.user;closeModal();await syncSession();go('studio');toast('เข้าสู่ระบบสำเร็จ — เปิดสตูดิโอช่างภาพแล้ว');
  }
  if(e.target.id==='submitRegister'){
   e.preventDefault();e.stopImmediatePropagation();
@@ -88,3 +88,12 @@ document.addEventListener('click',async e=>{
  }
  if(e.target.id==='confirmPublish'&&currentAlbumId){await sb.from('albums').update({status:'published',published_at:new Date().toISOString()}).eq('id',currentAlbumId)}
 },true);
+
+// Mobile navigation and signed-in account entry
+$$('.mobile-dock [data-view]').forEach(b=>b.onclick=()=>{if(['studio','editor','admin'].includes(b.dataset.view)&&!currentUser){$('#loginBtn').click();return toast('เข้าสู่ระบบก่อนใช้เมนูช่างภาพ')}go(b.dataset.view)});
+$('#loginBtn').onclick=async()=>{
+ await syncSession();
+ if(currentUser){modal(`<span class="eyebrow"><i></i> MY ACCOUNT</span><h2>บัญชีของฉัน</h2><p>${currentUser.email}</p><button class="primary full" id="openStudio">เปิดสตูดิโอช่างภาพ</button><button class="secondary full" style="margin-top:10px" id="openAdmin">เปิดระบบแอดมิน</button><button class="secondary full" style="margin-top:10px" id="logoutAccount">ออกจากระบบ</button>`);return}
+ modal(`<span class="eyebrow"><i></i> SECURE ACCESS</span><h2>เข้าสู่ระบบ</h2><input placeholder="อีเมล"><input type="password" placeholder="รหัสผ่าน"><select><option>ช่างภาพ</option><option>ผู้ดูแลระบบ</option><option>ผู้ปกครอง / บุคคลทั่วไป</option></select><button class="primary full" id="doLogin">เข้าสู่ระบบ</button><p style="text-align:center">ยังไม่มีบัญชี? <u id="register" style="cursor:pointer">สมัครเป็นช่างภาพ</u></p>`)
+};
+document.addEventListener('click',async e=>{if(e.target.id==='openStudio'){closeModal();go('studio')}if(e.target.id==='openAdmin'){closeModal();go('admin')}if(e.target.id==='logoutAccount'){await sb.auth.signOut();currentUser=null;closeModal();await syncSession();go('home');toast('ออกจากระบบแล้ว')}});

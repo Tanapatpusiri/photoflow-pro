@@ -47,7 +47,7 @@
     </section>
 
     <section id="studio" class="view page-view studio-view">
-      <div class="studio-top"><div><span class="eyebrow"><i></i> PHOTOGRAPHER STUDIO</span><h1>หลังบ้านช่างภาพ</h1><p>จัดการงาน อัปโหลด และส่งภาพถึงลูกค้าจากที่เดียว</p></div><button class="primary" id="newAlbum">＋ สร้างอัลบั้มใหม่</button></div>
+      <div class="studio-top"><div><span class="eyebrow"><i></i> PHOTOGRAPHER STUDIO</span><h1>หน้าสำหรับช่างภาพ</h1><p>สร้างอัลบั้ม อัปโหลด แต่งสีด้วย AI ตรวจภาพ และส่งถึงลูกค้าจากที่เดียว</p></div><button class="primary" id="newAlbum">＋ สร้างอัลบั้มใหม่</button></div>
       <div class="stats"><article><span>อัลบั้มทั้งหมด</span><strong>12</strong><small>+3 เดือนนี้</small></article><article><span>รูปที่เผยแพร่</span><strong>8,426</strong><small>พื้นที่ใช้ไป 42%</small></article><article><span>ดาวน์โหลด</span><strong>2,184</strong><small>↑ 18% จากเดือนก่อน</small></article><article><span>รายได้เดือนนี้</span><strong>฿18,450</strong><small>รอรับ ฿3,200</small></article></div>
       <div class="studio-grid"><section class="panel"><div class="panel-head"><h2>งานล่าสุด</h2><button>ดูทั้งหมด</button></div><div id="jobList"></div></section><aside class="panel upload-panel"><span class="upload-icon">↑</span><h2>อัปโหลดภาพใหม่</h2><p>ลากไฟล์มาวาง หรือเลือกจากอุปกรณ์<br>รองรับ JPG, PNG และ RAW</p><button class="primary" id="uploadBtn">เลือกไฟล์ภาพ</button><input type="file" id="fileInput" multiple accept="image/*" hidden><small>ระบบจะสร้างภาพตัวอย่างและติดลายน้ำอัตโนมัติ</small></aside></div>
     </section>
@@ -74,6 +74,14 @@
       <div class="admin-grid lower"><section class="panel"><div class="panel-head"><h2>เครื่องมือจัดการระบบ</h2></div><div class="admin-tools"><button data-tool="users"><b>♙</b><span>สมาชิกและสิทธิ์<small>กำหนด Admin / ช่างภาพ / ลูกค้า</small></span></button><button data-tool="albums"><b>▦</b><span>อัลบั้มทั้งหมด<small>แก้ไข ซ่อน ลบ และกู้คืน</small></span></button><button data-tool="ai"><b>✦</b><span>ตั้งค่า AI<small>ใบหน้า สีอัตโนมัติ และการคัดภาพ</small></span></button><button data-tool="storage"><b>◫</b><span>พื้นที่และไฟล์<small>โควตา สำรองข้อมูล และลายน้ำ</small></span></button><button data-tool="payments"><b>฿</b><span>ยอดขายและชำระเงิน<small>ออเดอร์ ค่าคอมมิชชัน และถอนเงิน</small></span></button><button data-tool="audit"><b>≡</b><span>ประวัติการใช้งาน<small>ตรวจทุกการแก้ไขในระบบ</small></span></button></div></section><section class="panel activity"><div class="panel-head"><h2>กิจกรรมล่าสุด</h2></div><p><i class="green"></i><b>อนุมัติช่างภาพ</b><span>ธนา พงศ์พิพัฒน์ · 5 นาที</span></p><p><i></i><b>เผยแพร่อัลบั้ม</b><span>Bangkok Youth League · 18 นาที</span></p><p><i class="orange"></i><b>AI ประมวลผลเสร็จ</b><span>1,248 ภาพ · 24 นาที</span></p><p><i></i><b>สำรองข้อมูลสำเร็จ</b><span>ระบบอัตโนมัติ · 1 ชม.</span></p></section></div>
     </section>
   </main>
+
+  <nav class="mobile-dock" aria-label="เมนูมือถือ">
+    <button data-view="home"><span>⌂</span>หน้าหลัก</button>
+    <button data-view="events"><span>▦</span>อัลบั้ม</button>
+    <button class="dock-main" data-view="studio"><span>✦</span>ช่างภาพ</button>
+    <button data-view="editor"><span>◐</span>แต่งสี</button>
+    <button data-view="admin"><span>⚙</span>แอดมิน</button>
+  </nav>
 
   <div class="modal" id="modal" aria-hidden="true"><div class="modal-card"><button class="modal-close" id="modalClose">×</button><div id="modalBody"></div></div></div>
   <div class="toast" id="toast"></div>
