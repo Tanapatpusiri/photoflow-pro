@@ -49,6 +49,16 @@
 
     <section id="studio" class="view page-view studio-view">
       <div class="studio-top"><div><span class="eyebrow"><i></i> PHOTOGRAPHER STUDIO</span><h1>หน้าสำหรับช่างภาพ</h1><p>สร้างอัลบั้ม อัปโหลด แต่งสีด้วย AI ตรวจภาพ และส่งถึงลูกค้าจากที่เดียว</p></div><button class="primary" id="newAlbum">＋ สร้างอัลบั้มใหม่</button></div>
+      <section class="photographer-focus">
+        <div class="focus-head"><div><span class="eyebrow"><i></i> CONTINUE WORKING</span><h2>งานที่ควรทำต่อ</h2></div><span class="focus-status">AI พร้อมแล้ว</span></div>
+        <button class="continue-card" id="continueEditing"><span class="continue-cover"></span><span><b>Bangkok Youth League</b><small>แต่งสีแล้ว 42 จาก 126 รูป</small><i><u style="width:33%"></u></i></span><strong>ทำต่อ →</strong></button>
+        <div class="quick-actions">
+          <button id="quickUpload"><b>↑</b><span>อัปโหลดรูป<small>มือถือหรือคอม</small></span></button>
+          <button id="quickCull"><b>✦</b><span>AI คัดรูป<small>หา Best Shot</small></span></button>
+          <button id="quickReference"><b>◐</b><span>แต่งตามรูป<small>เพิ่ม Reference</small></span></button>
+        </div>
+        <div class="ai-progress-card"><div><b>AI กำลังจัดกลุ่มใบหน้า</b><small>4,218 / 6,420 รูป</small></div><strong>66%</strong><i><u></u></i><small>ออกจากหน้านี้ได้ ระบบจะแจ้งเมื่อเสร็จ</small></div>
+      </section>
       <div class="stats"><article><span>อัลบั้มทั้งหมด</span><strong>12</strong><small>+3 เดือนนี้</small></article><article><span>รูปที่เผยแพร่</span><strong>8,426</strong><small>พื้นที่ใช้ไป 42%</small></article><article><span>ดาวน์โหลด</span><strong>2,184</strong><small>↑ 18% จากเดือนก่อน</small></article><article><span>รายได้เดือนนี้</span><strong>฿18,450</strong><small>รอรับ ฿3,200</small></article></div>
       <div class="studio-grid"><section class="panel"><div class="panel-head"><h2>งานล่าสุด</h2><button id="allJobs">ดูทั้งหมด</button></div><div id="jobList"></div></section><aside class="panel upload-panel"><span class="upload-icon">↑</span><h2>อัปโหลดภาพใหม่</h2><p>ลากไฟล์มาวาง หรือเลือกจากอุปกรณ์<br>รองรับ JPG, PNG และ RAW</p><button class="primary" id="uploadBtn">เลือกไฟล์ภาพ</button><input type="file" id="fileInput" multiple accept="image/*" hidden><small>ระบบจะสร้างภาพตัวอย่างและติดลายน้ำอัตโนมัติ</small></aside></div>
     </section>
@@ -60,7 +70,8 @@
         <aside class="photo-strip"><div class="strip-head"><b>รูปทั้งหมด</b><span id="photoCount">6 รูป</span></div><div id="photoStrip"></div><button class="secondary" id="addMorePhotos">＋ เพิ่มรูป</button></aside>
         <section class="canvas"><div class="ai-running" id="aiRunning">✦ AI กำลังวิเคราะห์แสงและสี...</div><img id="editPhoto" src="https://images.unsplash.com/photo-1526232761682-d26e03ac148e?auto=format&fit=crop&w=1400&q=90" alt="ภาพที่กำลังแต่ง"><div class="before-label">กดค้างเพื่อดูภาพก่อนแต่ง</div></section>
         <aside class="adjust-panel">
-          <div class="adjust-tabs"><button class="active" data-adjust="basic">ปรับสี</button><button data-adjust="ai">AI</button><button data-adjust="crop">ครอป</button></div>
+          <div class="mobile-editor-tools"><button id="comparePhoto">◑<span>ก่อน/หลัง</span></button><button id="aiCull">✓<span>คัดรูป</span></button><button id="aiLooks">✦<span>AI Looks</span></button><button id="aiReference">▣<span>Reference</span></button></div>
+          <div class="adjust-tabs"><button class="active" data-adjust="basic">Light</button><button data-adjust="ai">AI</button><button data-adjust="crop">Crop</button></div>
           <section id="basicAdjust" class="adjust-section"><h3>ค่าพื้นฐาน</h3><label>ความสว่าง <output id="brightnessOut">100</output><input type="range" min="50" max="150" value="100" data-filter="brightness"></label><label>คอนทราสต์ <output id="contrastOut">100</output><input type="range" min="50" max="160" value="100" data-filter="contrast"></label><label>ความสดของสี <output id="saturateOut">100</output><input type="range" min="0" max="180" value="100" data-filter="saturate"></label><label>อุณหภูมิสี <output id="hueOut">0</output><input type="range" min="-20" max="20" value="0" data-filter="hue"></label><h3>พรีเซ็ต</h3><div class="presets"><button data-preset="sport">Sport Pop</button><button data-preset="natural">Natural</button><button data-preset="cinema">Cinema</button><button data-preset="bw">B&W</button></div><button class="secondary full" id="resetColor">รีเซ็ตสี</button></section>
           <section id="aiAdjust" class="adjust-section hidden"><div class="ai-card"><span>✦</span><h3>AI Auto Enhance</h3><p>ปรับแสง สีผิว ความคม และลด Noise ให้ทั้งอัลบั้ม</p><button class="primary full" id="aiEnhance">ปรับภาพทั้งหมดด้วย AI</button></div><label class="switch-row">คัดภาพเบลอ/หลับตา <input type="checkbox" checked></label><label class="switch-row">จัดกลุ่มด้วยใบหน้า <input type="checkbox" checked></label><label class="switch-row">อ่านหมายเลขเสื้อ <input type="checkbox" checked></label><label class="switch-row">ซิงก์สีทั้งชุด <input type="checkbox" checked></label></section>
           <section id="cropAdjust" class="adjust-section hidden"><h3>ครอปและหมุน</h3><div class="crop-grid"><button>ต้นฉบับ</button><button>4:5</button><button>1:1</button><button>16:9</button></div><button class="secondary full" id="rotatePhoto">↻ หมุน 90°</button><label class="switch-row">ใส่ลายน้ำ <input id="watermark" type="checkbox" checked></label></section>
@@ -85,6 +96,7 @@
   </nav>
 
   <div class="modal" id="modal" aria-hidden="true"><div class="modal-card"><button class="modal-close" id="modalClose">×</button><div id="modalBody"></div></div></div>
+  <button class="selection-pill" id="selectionPill">♥ เลือกแล้ว <b id="selectionCount">0</b> รูป</button>
   <div class="toast" id="toast"></div>
   <footer><div class="brand"><span class="brand-mark">P</span><span>PhotoFlow</span><b>PRO</b></div><p>ภาพที่ดี ไม่ควรถูกลืมไว้ในฮาร์ดดิสก์</p><span>© 2026 PhotoFlow Pro</span></footer>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.57.4/dist/umd/supabase.js"></script>
