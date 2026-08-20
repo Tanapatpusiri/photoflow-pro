@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+  <meta name="theme-color" content="#10110f" />
+  <title>PhotoFlow Pro — ค้นหารูปการแข่งขันของคุณ</title>
+  <meta name="description" content="แกลเลอรีภาพกีฬาสำหรับช่างภาพ ทีม และผู้ปกครอง ค้นรูปด้วยใบหน้าและดาวน์โหลดได้ในที่เดียว" />
+  <link rel="preconnect" href="https://images.unsplash.com" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#home" aria-label="PhotoFlow Pro"><span class="brand-mark">P</span><span>PhotoFlow</span><b>PRO</b></a>
+    <nav><button class="nav-link active" data-view="home">หน้าหลัก</button><button class="nav-link" data-view="events">อัลบั้มการแข่งขัน</button><button class="nav-link" data-view="studio">สำหรับช่างภาพ</button></nav>
+    <div class="top-actions"><button class="icon-btn" id="searchBtn" aria-label="ค้นหา">⌕</button><button class="login-btn" id="loginBtn">เข้าสู่ระบบ</button></div>
+  </header>
+
+  <main>
+    <section id="home" class="view active-view">
+      <div class="hero">
+        <div class="hero-content">
+          <span class="eyebrow"><i></i> THE SMART SPORTS GALLERY</span>
+          <h1>ทุกโมเมนต์<br><em>หาเจอในไม่กี่วินาที</em></h1>
+          <p>รวมภาพการแข่งขันจากช่างภาพมืออาชีพ ค้นรูปของคุณด้วยใบหน้า หมายเลขเสื้อ หรือชื่อทีม</p>
+          <div class="hero-actions"><button class="primary" id="faceSearch">⌾ ค้นหาด้วยใบหน้า</button><button class="secondary" data-go="events">ดูอัลบั้มทั้งหมด →</button></div>
+          <div class="trust"><span>✓ รูปคุณภาพสูง</span><span>✓ ดาวน์โหลดปลอดภัย</span><span>✓ รองรับทุกอุปกรณ์</span></div>
+        </div>
+        <div class="hero-photo" role="img" aria-label="นักฟุตบอลกำลังแข่งขัน"><div class="photo-credit"><small>FEATURED EVENT</small><strong>Bangkok Youth League</strong><span>18 สิงหาคม 2569 · 1,248 ภาพ</span></div></div>
+      </div>
+
+      <section class="section-wrap">
+        <div class="section-head"><div><span class="section-no">01</span><h2>การแข่งขันล่าสุด</h2><p>ภาพใหม่จากสนาม พร้อมให้ค้นหาและดาวน์โหลดแล้ว</p></div><button class="text-btn" data-go="events">ดูทั้งหมด ↗</button></div>
+        <div class="event-grid" id="latestGrid"></div>
+      </section>
+
+      <section class="how">
+        <div class="section-head light"><div><span class="section-no">02</span><h2>หารูปของคุณ ง่ายกว่าที่เคย</h2></div></div>
+        <div class="steps"><article><b>01</b><span class="step-icon">⌾</span><h3>อัปโหลดรูปใบหน้า</h3><p>ใช้รูปหน้าตรงที่ชัดเจน ระบบจะใช้เพื่อค้นหาเท่านั้น</p></article><article><b>02</b><span class="step-icon">✦</span><h3>AI ค้นหาให้ทันที</h3><p>ระบบเทียบใบหน้ากับภาพจากทุกอัลบั้มที่เปิดให้ค้นหา</p></article><article><b>03</b><span class="step-icon">↓</span><h3>เลือกและดาวน์โหลด</h3><p>ดาวน์โหลดทีละภาพ หรือเลือกทั้งหมดเป็นไฟล์เดียว</p></article></div>
+      </section>
+    </section>
+
+    <section id="events" class="view page-view">
+      <div class="page-title"><span class="eyebrow"><i></i> EXPLORE EVENTS</span><h1>อัลบั้มการแข่งขัน</h1><p>เลือกงานแข่ง ทีม หรือค้นหาภาพด้วยหมายเลขเสื้อ</p></div>
+      <div class="filters"><label class="searchbox">⌕ <input id="eventSearch" placeholder="ค้นหาชื่องาน ทีม หรือสถานที่" /></label><button class="filter active" data-filter="all">ทั้งหมด</button><button class="filter" data-filter="football">ฟุตบอล</button><button class="filter" data-filter="running">วิ่ง</button><button class="filter" data-filter="other">อื่น ๆ</button></div>
+      <div class="event-grid wide" id="eventGrid"></div>
+    </section>
+
+    <section id="studio" class="view page-view studio-view">
+      <div class="studio-top"><div><span class="eyebrow"><i></i> PHOTOGRAPHER STUDIO</span><h1>หลังบ้านช่างภาพ</h1><p>จัดการงาน อัปโหลด และส่งภาพถึงลูกค้าจากที่เดียว</p></div><button class="primary" id="newAlbum">＋ สร้างอัลบั้มใหม่</button></div>
+      <div class="stats"><article><span>อัลบั้มทั้งหมด</span><strong>12</strong><small>+3 เดือนนี้</small></article><article><span>รูปที่เผยแพร่</span><strong>8,426</strong><small>พื้นที่ใช้ไป 42%</small></article><article><span>ดาวน์โหลด</span><strong>2,184</strong><small>↑ 18% จากเดือนก่อน</small></article><article><span>รายได้เดือนนี้</span><strong>฿18,450</strong><small>รอรับ ฿3,200</small></article></div>
+      <div class="studio-grid"><section class="panel"><div class="panel-head"><h2>งานล่าสุด</h2><button>ดูทั้งหมด</button></div><div id="jobList"></div></section><aside class="panel upload-panel"><span class="upload-icon">↑</span><h2>อัปโหลดภาพใหม่</h2><p>ลากไฟล์มาวาง หรือเลือกจากอุปกรณ์<br>รองรับ JPG, PNG และ RAW</p><button class="primary" id="uploadBtn">เลือกไฟล์ภาพ</button><input type="file" id="fileInput" multiple accept="image/*" hidden><small>ระบบจะสร้างภาพตัวอย่างและติดลายน้ำอัตโนมัติ</small></aside></div>
+    </section>
+  </main>
+
+  <div class="modal" id="modal" aria-hidden="true"><div class="modal-card"><button class="modal-close" id="modalClose">×</button><div id="modalBody"></div></div></div>
+  <div class="toast" id="toast"></div>
+  <footer><div class="brand"><span class="brand-mark">P</span><span>PhotoFlow</span><b>PRO</b></div><p>ภาพที่ดี ไม่ควรถูกลืมไว้ในฮาร์ดดิสก์</p><span>© 2026 PhotoFlow Pro</span></footer>
+  <script src="app.js"></script>
+</body>
+</html>
