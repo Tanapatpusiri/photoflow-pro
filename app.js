@@ -1,3 +1,9 @@
+const SUPABASE_URL='https://ovtftzubdbatsiutfyze.supabase.co';
+const SUPABASE_PUBLISHABLE_KEY='sb_publishable_1ncDTYuHizIfkrkIk7fU0Q_8q8h0s_Y';
+const sb=window.supabase?.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY);
+let currentUser=null, currentAlbumId=null, wizardUploadFiles=[];
+async function syncSession(){if(!sb)return;const {data}=await sb.auth.getSession();currentUser=data.session?.user||null;$('#loginBtn').textContent=currentUser?'บัญชีของฉัน':'เข้าสู่ระบบ'}
+syncSession();
 const events=[
  {id:1,title:'Bangkok Youth League',date:'18 ส.ค. 2569',place:'สนามฟุตบอล KMITL',photos:'1,248 ภาพ',type:'football',tag:'ใหม่',img:'https://images.unsplash.com/photo-1526232761682-d26e03ac148e?auto=format&fit=crop&w=900&q=80'},
  {id:2,title:'Junior Champions Cup',date:'12 ส.ค. 2569',place:'Alpine Football Camp',photos:'864 ภาพ',type:'football',tag:'ยอดนิยม',img:'https://images.unsplash.com/photo-1517466787929-bc90951d0974?auto=format&fit=crop&w=900&q=80'},
@@ -47,3 +53,38 @@ const applicants=[['กิตติ ภาพกีฬา','ฟุตบอล �
 $('#approvalList').innerHTML=applicants.map((a,i)=>`<div class="approval"><div class="avatar">${a[0][0]}</div><div><h4>${a[0]}</h4><p>${a[1]}</p></div><div class="row-actions"><button data-reject="${i}">ปฏิเสธ</button><button class="approve" data-approve="${i}">อนุมัติ</button></div></div>`).join('');
 $('#reviewList').innerHTML=events.slice(0,3).map((a,i)=>`<div class="review-row"><div class="job-thumb" style="background-image:url('${a.img}')"></div><div><h4>${a.title}</h4><p>${a.photos} · ${i?'รอ AI':'รอตรวจคุณภาพ'}</p></div><button class="secondary" data-review="${i}">ตรวจ</button></div>`).join('');
 document.addEventListener('click',e=>{if(e.target.dataset.approve!==undefined){e.target.closest('.approval').remove();toast('อนุมัติช่างภาพและส่งข้อมูลเข้าสู่ระบบแล้ว')}if(e.target.dataset.reject!==undefined){e.target.closest('.approval').remove();toast('ปฏิเสธคำขอแล้ว')}if(e.target.dataset.review!==undefined){go('editor');toast('เปิดอัลบั้มในโหมดตรวจสอบของแอดมิน')}if(e.target.dataset.tool){modal(`<h2>${e.target.closest('button').querySelector('span').childNodes[0].textContent}</h2><p>หน้าจัดการส่วนนี้พร้อมใช้งานในโหมดแอดมิน สามารถค้นหา กรอง เปลี่ยนสิทธิ์ ระงับ และดูประวัติย้อนหลังได้</p><div class="drop-zone"><b>ระบบจัดการส่วนกลาง</b><p>ข้อมูลตัวอย่างสำหรับทดสอบการทำงาน</p></div><button class="primary full" onclick="document.querySelector('#modalClose').click()">เสร็จสิ้น</button>`)}});
+
+// Supabase-backed authentication, albums and private photo uploads
+document.addEventListener('change',e=>{if(e.target.id==='wizardFiles'){wizardUploadFiles=[...e.target.files];$('#uploadStatus').textContent=`เลือกแล้ว ${wizardUploadFiles.length} ภาพ`}},true);
+document.addEventListener('click',async e=>{
+ if(e.target.id==='doLogin'){
+  e.preventDefault();e.stopImmediatePropagation();
+  const inputs=[...$('#modalBody').querySelectorAll('input')],email=inputs[0]?.value.trim(),password=inputs[1]?.value;
+  if(!email||!password)return toast('กรอกอีเมลและรหัสผ่านก่อน');
+  const {data,error}=await sb.auth.signInWithPassword({email,password});
+  if(error)return toast(`เข้าสู่ระบบไม่สำเร็จ: ${error.message}`);
+  currentUser=data.user;closeModal();await syncSession();toast('เข้าสู่ระบบสำเร็จ');
+ }
+ if(e.target.id==='submitRegister'){
+  e.preventDefault();e.stopImmediatePropagation();
+  const inputs=[...$('#modalBody').querySelectorAll('input')],name=inputs[0]?.value.trim(),email=inputs[1]?.value.trim(),phone=inputs[2]?.value.trim(),portfolio=inputs[3]?.value.trim();
+  const password=prompt('ตั้งรหัสผ่านอย่างน้อย 8 ตัวอักษร');if(!password)return;
+  const {data,error}=await sb.auth.signUp({email,password,options:{data:{display_name:name,phone}}});
+  if(error)return toast(`สมัครไม่สำเร็จ: ${error.message}`);
+  if(data.user){await sb.from('profiles').insert({id:data.user.id,display_name:name,portfolio_url:portfolio,photographer_status:'pending'})}
+  closeModal();toast('สมัครสำเร็จและส่งคำขออนุมัติช่างภาพแล้ว');
+ }
+ if(e.target.id==='startEditing'){
+  e.preventDefault();e.stopImmediatePropagation();
+  await syncSession();if(!currentUser){closeModal();$('#loginBtn').click();return toast('เข้าสู่ระบบช่างภาพก่อนอัปโหลด')}
+  if(!wizardUploadFiles.length)return toast('เลือกภาพอย่างน้อย 1 ภาพ');
+  e.target.disabled=true;e.target.textContent='กำลังอัปโหลด...';
+  const title=localStorage.getItem('pf_album')||'อัลบั้มใหม่';
+  const {data:album,error:albumError}=await sb.from('albums').insert({photographer_id:currentUser.id,title,status:'uploading'}).select().single();
+  if(albumError){e.target.disabled=false;return toast(`สร้างอัลบั้มไม่สำเร็จ: ${albumError.message}`)} currentAlbumId=album.id;
+  let uploaded=0;
+  for(const file of wizardUploadFiles){const safe=file.name.replace(/[^a-zA-Z0-9._-]/g,'_'),path=`${currentUser.id}/${album.id}/${crypto.randomUUID()}-${safe}`;const {error}=await sb.storage.from('photoflow-originals').upload(path,file,{upsert:false});if(!error){await sb.from('photos').insert({album_id:album.id,photographer_id:currentUser.id,original_path:path});uploaded++}}
+  await sb.from('albums').update({status:'editing',photo_count:uploaded}).eq('id',album.id);closeModal();$('#editAlbumName').textContent=title;go('editor');toast(`อัปโหลดจริงสำเร็จ ${uploaded} ภาพ`);
+ }
+ if(e.target.id==='confirmPublish'&&currentAlbumId){await sb.from('albums').update({status:'published',published_at:new Date().toISOString()}).eq('id',currentAlbumId)}
+},true);
