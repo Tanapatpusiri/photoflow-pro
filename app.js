@@ -1,6 +1,7 @@
 const SUPABASE_URL='https://ovtftzubdbatsiutfyze.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY='sb_publishable_1ncDTYuHizIfkrkIk7fU0Q_8q8h0s_Y';
 const sb=window.supabase?.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY);
+const $=s=>document.querySelector(s), $=s=>document.querySelectorAll(s);
 let currentUser=null, currentAlbumId=null, wizardUploadFiles=[];
 let viewHistory=['home'];
 let localAlbums=JSON.parse(localStorage.getItem('pf_local_albums')||'[]');
@@ -15,7 +16,6 @@ const events=[
  {id:6,title:'Bangkok Basketball Open',date:'20 ก.ค. 2569',place:'Sports Complex',photos:'921 ภาพ',type:'other',tag:'',img:'https://images.unsplash.com/photo-1546519638-68e109498ffc?auto=format&fit=crop&w=900&q=80'}
 ];
 const jobs=events.slice(0,4);let filter='all';
-const $=s=>document.querySelector(s), $$=s=>document.querySelectorAll(s);
 function card(e){return `<article class="event-card" data-event="${e.id}"><div class="event-cover" style="background-image:url('${e.img}')">${e.tag?`<span>${e.tag}</span>`:''}</div><div class="event-info"><h3>${e.title}</h3><p>${e.date} · ${e.place}</p><div class="event-meta"><span>${e.photos}</span><b>เปิดอัลบั้ม →</b></div></div></article>`}
 function render(){ $('#latestGrid').innerHTML=events.slice(0,3).map(card).join(''); const q=($('#eventSearch')?.value||'').toLowerCase(); $('#eventGrid').innerHTML=events.filter(e=>(filter==='all'||e.type===filter)&&(`${e.title} ${e.place}`.toLowerCase().includes(q))).map(card).join('')||'<p>ไม่พบอัลบั้มที่ค้นหา</p>'; bindCards() }
 function bindCards(){$$('[data-event]').forEach(el=>el.onclick=()=>openAlbum(events.find(e=>e.id==el.dataset.event)))}
