@@ -9,6 +9,7 @@
 import {readFile,writeFile,mkdir,rm} from 'node:fs/promises';
 import {createHash,randomUUID} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
+import zlib from 'node:zlib';
 import {probeExif} from '../lib/football-gallery-exif.js';
 
 const base=process.env.FG_E2E_BASE||'http://localhost:3100';
@@ -20,6 +21,23 @@ const work='/tmp/fg-e2e-work-'+Date.now();await mkdir(work,{recursive:true});
 const results=[];
 function check(name,ok,detail=''){results.push({name,ok:!!ok,detail:String(detail).slice(0,300)});console.log(`${ok?'PASS':'FAIL'}  ${name}${detail&&!ok?'  — '+detail:''}`)}
 const sha=b=>createHash('sha256').update(b).digest('hex');
+const crc32=b=>zlib.crc32(b).toString(16).padStart(8,'0');
+// Follows one app redirect manually (keeping headers such as Range), as a browser does.
+async function follow(client,path,headers={}){
+ const r=await client.req(path,{headers});
+ if(r.status<300||r.status>=400)return r;
+ const res=await fetch(r.headers.get('location'),{headers});
+ const ct=res.headers.get('content-type')||'';
+ return {status:res.status,headers:res.headers,res,body:ct.includes('json')?await res.json():null,location:r.headers.get('location')};
+}
+// Google Drive resumable upload exactly like the browser uploader: aligned chunks with Content-Range.
+async function driveChunks(uploadUrl,bytes,from,to,chunkSize,total){
+ for(let pos=from;pos<to;pos+=chunkSize){
+  const end=Math.min(to,pos+chunkSize);
+  const r=await fetch(uploadUrl,{method:'PUT',headers:{'content-range':`bytes ${pos}-${end-1}/${total}`},body:bytes.subarray(pos,end)});
+  if(![200,201,308].includes(r.status))throw Error('drive chunk '+r.status+' '+await r.text());
+ }
+}
 
 class Client{
  constructor(ip){this.jar=new Map();this.ip=ip}
@@ -43,10 +61,21 @@ async function upload(eventId,name,{batch,camera='',interruptAfter=0,lie}={}){
  const bytes=await readFile(media+'/'+name);
  const probe=probeExif(new Uint8Array(bytes.subarray(0,262144)))||{};
  const declared=lie?.sha||sha(bytes),declaredBytes=lie?.bytes??bytes.length;
- const init=await admin.req('/api/football-gallery/admin/upload',{method:'POST',json:{action:'init',event:eventId,filename:lie?.filename||name,bytes:declaredBytes,sha256:declared,batch,camera,capturedAt:probe.capturedAt||undefined,hasGps:typeof probe.hasGps==='boolean'?probe.hasGps:undefined}});
+ const init=await admin.req('/api/football-gallery/admin/upload',{method:'POST',json:{action:'init',event:eventId,filename:lie?.filename||name,bytes:declaredBytes,sha256:declared,crc32:crc32(bytes),batch,camera,capturedAt:probe.capturedAt||undefined,hasGps:typeof probe.hasGps==='boolean'?probe.hasGps:undefined}});
  if(init.status!==201)return {init};
  const info=init.body;let resumed=false;
- if(info.mode==='single'){
+ if(info.mode==='drive'){
+  const total=declaredBytes,cut=interruptAfter?Math.min(bytes.length,interruptAfter*info.chunkSize):bytes.length;
+  // A file whose real size differs from the declared size cannot finish on Google's side.
+  await driveChunks(info.uploadUrl,bytes,0,cut,info.chunkSize,total).catch(e=>{if(!lie)throw e});
+  if(interruptAfter){
+   const early=await admin.req('/api/football-gallery/admin/upload',{method:'POST',json:{action:'complete',fileId:info.fileId}});
+   check(`${name}: completing an unfinished Drive upload is refused`,early.status===409,JSON.stringify(early.body));
+   const st=await admin.req('/api/football-gallery/admin/upload',{method:'POST',json:{action:'drive-status',fileId:info.fileId}});
+   check(`${name}: resume continues from the offset Google reports (${cut} bytes)`,st.body.offset===cut,JSON.stringify(st.body));
+   await driveChunks(st.body.uploadUrl,bytes,st.body.offset,bytes.length,info.chunkSize,total);resumed=true;
+  }
+ }else if(info.mode==='single'){
   const put=await fetch(info.url,{method:'PUT',headers:{'content-type':info.contentType},body:bytes});
   if(!put.ok)throw Error('PUT '+put.status);
  }else{
@@ -81,7 +110,9 @@ async function preview(mediaId,file){
  const jpeg=await readFile(thumbs+'/'+file);
  const i=await admin.req('/api/football-gallery/admin/preview',{method:'POST',json:{action:'init',mediaId,bytes:jpeg.length,sha256:sha(jpeg)}});
  if(i.status!==201)return i;
- const put=await fetch(i.body.url,{method:'PUT',headers:{'content-type':'image/jpeg'},body:jpeg});
+ const put=i.body.mode==='drive'
+  ?await fetch(i.body.uploadUrl,{method:'PUT',headers:{'content-range':`bytes 0-${jpeg.length-1}/${jpeg.length}`},body:jpeg})
+  :await fetch(i.body.url,{method:'PUT',headers:{'content-type':'image/jpeg'},body:jpeg});
  if(!put.ok)return {status:put.status};
  return admin.req('/api/football-gallery/admin/preview',{method:'POST',json:{action:'complete',mediaId}});
 }
@@ -92,6 +123,23 @@ check('admin API without session -> 401',(await new Client('10.0.0.9').req('/api
 check('admin login wrong password -> 401',(await admin.req('/api/football-gallery/admin/login',{method:'POST',json:{email:ADMIN_EMAIL,password:'wrong-password-xx'}})).status===401);
 const login=await admin.req('/api/football-gallery/admin/login',{method:'POST',json:{email:ADMIN_EMAIL,password:ADMIN_PASSWORD}});
 check('admin login -> 200 + httpOnly session cookie',login.status===200&&admin.jar.has('fg_admin'),login.status);
+const storage=await admin.req('/api/football-gallery/admin/google');
+const DRIVE=storage.body?.driver==='drive';
+console.log('storage driver:',DRIVE?'Google Drive':'S3/R2');
+if(DRIVE){
+ check('Drive: not connected before the owner authorises',storage.body.connected===false);
+ const start=await admin.req('/api/football-gallery/admin/google/connect');
+ const google=new URL(start.headers.get('location'));
+ check('Drive: connect asks Google only for drive.file (offline, consent)',google.searchParams.get('scope')==='https://www.googleapis.com/auth/drive.file'&&google.searchParams.get('access_type')==='offline');
+ const consent=await fetch(google,{redirect:'manual'});
+ const back=new URL(consent.headers.get('location'));
+ const forged=await new Client('10.0.0.66').req(back.pathname+back.search);
+ check('Drive: callback without the starting browser cookie is rejected',forged.headers.get('location')?.includes('drive=invalid-state'));
+ const cb=await admin.req(back.pathname+back.search);
+ check('Drive: owner connects Google Drive',cb.headers.get('location')?.includes('drive=connected'),cb.headers.get('location'));
+ const after=await admin.req('/api/football-gallery/admin/google');
+ check('Drive: status shows the connected account and quota',after.body.connected&&after.body.account&&after.body.quota,JSON.stringify(after.body));
+}
 check('CSRF: mutation without Origin -> 403',(await admin.req('/api/football-gallery/admin/events',{method:'POST',json:{title:'x'},origin:false})).status===403);
 check('CSRF: mutation from foreign Origin -> 403',(await admin.req('/api/football-gallery/admin/events',{method:'POST',json:{title:'x'},origin:'https://evil.example'})).status===403);
 check('CSRF: Origin "null" -> 403 (not a 500)',(await admin.req('/api/football-gallery/admin/events',{method:'POST',json:{title:'x'},origin:'null'})).status===403);
@@ -110,8 +158,9 @@ const up={};
 await Promise.all([0,1,2].map(async()=>{while(queue.length){const [n,b,c]=queue.shift();up[n]=await upload(evA.id,n,{batch:b,camera:c})}}));
 up['CLIP0001.MOV']=await upload(evA.id,'CLIP0001.MOV',{batch:batch2,camera:'Sony A1',interruptAfter:3});
 for(const [n,u] of Object.entries(up))check(`upload ${n}: stored, size + SHA-256 verified from storage`,u.complete?.status===200&&u.verify?.status===200&&u.verify.body.verified&&u.verify.body.sha256===u.sha,`${u.init?.status} ${u.complete?.status} ${JSON.stringify(u.verify?.body)}`);
-check('CLIP0001.MOV (150 MB) used resumable multipart upload',up['CLIP0001.MOV'].info?.mode==='multipart'&&up['CLIP0001.MOV'].resumed);
-check('CLIP0001.MOV verified in several resumable steps (>100 MB no longer blocked)',up['CLIP0001.MOV'].steps>1,`steps=${up['CLIP0001.MOV'].steps}`);
+check('CLIP0001.MOV (150 MB) used a resumable upload and resumed after interruption',['multipart','drive'].includes(up['CLIP0001.MOV'].info?.mode)&&up['CLIP0001.MOV'].resumed,up['CLIP0001.MOV'].info?.mode);
+if(DRIVE)check('Drive: SHA-256 confirmed from Google without downloading the file again',up['CLIP0001.MOV'].steps===1);
+else check('CLIP0001.MOV verified in several resumable steps (>100 MB no longer blocked)',up['CLIP0001.MOV'].steps>1,`steps=${up['CLIP0001.MOV'].steps}`);
 check('JPEG+RAW with same name in one batch are ONE gallery item (DSC0001)',up['DSC0001.JPG'].info.mediaId===up['DSC0001.ARW'].info.mediaId);
 check('RAW uploaded before its JPEG still pairs (DSC0002)',up['DSC0002.JPG'].info.mediaId===up['DSC0002.ARW'].info.mediaId);
 check('different photos stay separate items',new Set([up['DSC0001.JPG'].info.mediaId,up['DSC0002.JPG'].info.mediaId,up['DSC0003.JPG'].info.mediaId]).size===3);
@@ -200,7 +249,7 @@ async function download(client,path){
  const r=await client.req(path);
  if(r.status!==302)return {status:r.status};
  const signed=await fetch(r.headers.get('location'));
- return {status:signed.status,bytes:Buffer.from(await signed.arrayBuffer()),disposition:signed.headers.get('content-disposition'),location:r.headers.get('location')};
+ return {status:signed.status,bytes:Buffer.from(await signed.arrayBuffer()),disposition:signed.headers.get('content-disposition'),location:r.headers.get('location'),type:signed.headers.get('content-type')};
 }
 for(const n of ['DSC0001.JPG','DSC0001.ARW','CLIP0001.MOV','PHONE_0042.MP4']){
  const d=await download(parent,`/api/football-gallery/events/${evA.slug}/files/${up[n].info.fileId}`);
@@ -211,7 +260,10 @@ const thumbFile=pairItem.files.find(f=>f.variant==='THUMB');
 const t=await download(parent,`/api/football-gallery/events/${evA.slug}/files/${thumbFile.id}`);
 check('preview is a separate small inline JPEG',t.status===200&&t.bytes.length<200000&&t.bytes[0]===0xff&&t.bytes[1]===0xd8&&t.disposition?.includes('inline'));
 const signedOnce=t.location;
-check('signed storage URLs are short-lived (<= 90 s)',/X-Amz-Expires=(\d+)/.exec(signedOnce)?.[1]<=90);
+if(DRIVE){
+ const ttl=JSON.parse(Buffer.from(signedOnce.split('/').pop().split('.')[0],'base64url').toString()).x-Date.now()/1000;
+ check('download links are short-lived signed tickets (<= 15 min)',ttl>0&&ttl<=900,ttl);
+}else check('signed storage URLs are short-lived (<= 90 s)',/X-Amz-Expires=(\d+)/.exec(signedOnce)?.[1]<=90);
 const blocked=await parent.req(`/api/football-gallery/events/${evA.slug}/files/${up['DSC0003.JPG'].info.fileId}`);
 check('unapproved original cannot be downloaded even with a valid grant (404)',blocked.status===404);
 
@@ -222,7 +274,7 @@ check('Download All job: split into several ZIP parts (64 MiB test limit)',all.s
 const expected=new Map(Object.values(up).filter(u=>u.info).map(u=>[u.sha,u]));
 let zipOk=true,zipFiles=0;
 for(const p of all.body.parts){
- const r=await parent.req(p.url);
+ const r=await follow(parent,p.url);
  const buf=Buffer.from(await r.res.arrayBuffer());
  const file=`${work}/part-${p.index}.zip`;await writeFile(file,buf);
  const lenOk=Number(r.headers.get('content-length'))===buf.length&&buf.length===p.bytes;
@@ -234,7 +286,7 @@ for(const p of all.body.parts){
 }
 check(`ZIP contents: ${zipFiles} originals byte-identical to uploads (SHA256SUMS.txt)`,zipOk&&zipFiles===all.body.files,`${zipFiles}/${all.body.files}`);
 const big=all.body.parts.find(p=>p.bytes>100e6);
-const head=await parent.req(big.url,{headers:{range:'bytes=0-999'}}),rest=await parent.req(big.url,{headers:{range:'bytes=1000-'}});
+const head=await follow(parent,big.url,{range:'bytes=0-999'}),rest=await follow(parent,big.url,{range:'bytes=1000-'});
 const joined=Buffer.concat([Buffer.from(await head.res.arrayBuffer()),Buffer.from(await rest.res.arrayBuffer())]);
 const whole=await readFile(`${work}/part-${big.index}.zip`);
 check('interrupted ZIP download can resume with HTTP Range (206)',head.status===206&&rest.status===206&&Buffer.compare(joined,whole)===0);
@@ -245,6 +297,15 @@ check('JPEG-only export contains 3 JPEG originals',jpegOnly.body.files===3,jpegO
 const sel=await zipJob(parent,{scope:'selection',mediaIds:[up['IMG_9001.jpg'].info.mediaId],formats:{jpeg:true,raw:true,video:true}});
 check('selected-items export',sel.body.files===1);
 check('ZIP export without any format -> 400',(await zipJob(parent,{scope:'event',formats:{}})).status===400);
+if(DRIVE){
+ const many=all.body.parts.every(p=>p.files<=45);
+ check('Drive: ZIP parts stay within the Worker Free plan subrequest budget (<= 45 files)',many);
+ const fileTicketUrl=(await parent.req(`/api/football-gallery/events/${evA.slug}/files/${up['DSC0002.JPG'].info.fileId}`)).headers.get('location');
+ const tampered=fileTicketUrl.replace(/.$/,c=>c==='A'?'B':'A');
+ check('Drive: a tampered download ticket is rejected by the Worker',(await fetch(tampered)).status===403);
+ globalThis.__staleOriginal=fileTicketUrl;
+ globalThis.__staleZip=(await parent.req(childB.body.parts[0].url)).headers.get('location');
+}
 
 // ================= 9. permissions
 const stranger=new Client('10.0.2.2');
@@ -299,11 +360,15 @@ check('revoke the LINE invite',ok(await admin.req('/api/football-gallery/admin/g
 check('device that joined via the revoked invite loses access immediately',(await parent.req('/api/football-gallery/events/'+evA.slug)).status===403);
 check('revoked invite link no longer works',(await new Client('10.0.6.6').req(new URL(invite.body.url).pathname)).headers.get('location')?.includes('invite=invalid'));
 check('code-based access (not revoked) still works',(await parent2.req('/api/football-gallery/events/'+evA.slug)).status===200);
+if(DRIVE){
+ check('Drive: an already-issued original link stops working once the invite is revoked',(await fetch(globalThis.__staleOriginal)).status===403);
+ check('Drive: an already-issued ZIP link stops working once the invite is revoked',(await fetch(globalThis.__staleZip)).status===403);
+}
 
 // ================= 13. abort, audit, logout, admin rate limit
-const abortInit=await admin.req('/api/football-gallery/admin/upload',{method:'POST',json:{action:'init',event:evA.id,filename:'BIG_ABORT.MOV',bytes:200*1024*1024,sha256:'d'.repeat(64),batch:'abort'}});
+const abortInit=await admin.req('/api/football-gallery/admin/upload',{method:'POST',json:{action:'init',event:evA.id,filename:'BIG_ABORT.MOV',bytes:200*1024*1024,sha256:'d'.repeat(64),crc32:'deadbeef',batch:'abort'}});
 const aborted=await admin.req('/api/football-gallery/admin/upload',{method:'POST',json:{action:'abort',fileId:abortInit.body.fileId}});
-check('abandoned multipart upload can be aborted and removed',abortInit.body.mode==='multipart'&&aborted.status===200&&(await admin.req('/api/football-gallery/admin/upload',{method:'POST',json:{action:'list-parts',fileId:abortInit.body.fileId}})).status===404);
+check('abandoned large upload can be aborted and removed',['multipart','drive'].includes(abortInit.body.mode)&&aborted.status===200&&(await admin.req('/api/football-gallery/admin/upload',{method:'POST',json:{action:'list-parts',fileId:abortInit.body.fileId}})).status===404);
 const auditLog=await admin.req(`/api/football-gallery/admin/audit?event=${evA.id}`);
 const actions=new Set(auditLog.body.entries.map(e=>e.action));
 check('audit log records uploads, approvals, grants, downloads, removals',['upload.confirmed','original.integrity-verified','review.approve','grant.create-invite','grant.revoke-invite','download.original','download.archive','removal.requested','removal.done','review.suspend-event'].every(a=>actions.has(a)),[...actions].join(','));
