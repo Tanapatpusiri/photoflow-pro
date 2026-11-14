@@ -4,6 +4,7 @@ import '../gallery.css';
 import './admin.css';
 import Uploader from './upload-client';
 import ReviewClient from './review-client';
+import StorageCard from './storage-client';
 const api='/api/football-gallery/admin';
 const STATUS={draft:'Draft',published:'เผยแพร่',suspended:'ระงับ',archived:'เก็บถาวร'};
 export default function FootballAdmin(){
@@ -25,6 +26,7 @@ export default function FootballAdmin(){
  return <main className="fga-root"><div className="fga-shell"><a href="/football-gallery" className="fga-back">‹ Football Gallery</a><header><h1>Studio</h1><p>จัดการอัลบั้มการแข่งขัน • เฉพาะผู้ดูแล</p>{authorized&&<button className="fga-logout" onClick={logout}>ออกจากระบบ</button>}</header>
   {message&&<div className="fga-message" role="status">{message}</div>}
   {loading?<p>กำลังตรวจสอบสิทธิ์…</p>:!authorized?<section className="fga-card"><h2>เข้าสู่ระบบแอดมิน</h2><p>ต้องเป็นบัญชีที่ได้รับอนุญาตจากเจ้าของระบบ</p><form onSubmit={login}><label>อีเมล<input type="email" value={email} onChange={e=>setEmail(e.target.value)} required autoComplete="username"/></label><label>รหัสผ่าน<input type="password" value={password} onChange={e=>setPassword(e.target.value)} required autoComplete="current-password"/></label><button disabled={busy}>{busy?'กำลังตรวจสอบ…':'เข้าสู่ระบบ'}</button></form></section>:<>
+    <StorageCard/>
     <section className="fga-card"><h2>สร้างงานใหม่</h2><p>งานใหม่จะอยู่ในสถานะ Draft จนกว่าจะตรวจสิทธิ์เผยแพร่ภาพเด็ก</p><form onSubmit={createEvent}><label>ชื่องาน<input value={title} onChange={e=>setTitle(e.target.value)} required maxLength={180} placeholder="ชื่อการแข่งขัน"/></label><label>สถานที่<input value={venue} onChange={e=>setVenue(e.target.value)} maxLength={180} placeholder="สถานที่ (ไม่บังคับ)"/></label><label>วันที่งาน<input type="date" value={date} onChange={e=>setDate(e.target.value)}/></label><button disabled={busy||!title.trim()}>{busy?'กำลังบันทึก…':'สร้างอัลบั้มใหม่'}</button></form></section>
     <section className="fga-card"><h2>งานทั้งหมด</h2>{events.length===0?<p>ยังไม่มีงานที่สร้าง</p>:<div className="fga-items">{events.map(e=><button key={e.id} onClick={()=>selectEvent(e.id)} className={activeId===e.id?'active':''}><strong>{e.title}</strong><span>{STATUS[e.status]||e.status} · {e.players||0} คน · {e.media||0} รายการ · เผยแพร่ {e.published||0}{e.open_removals?' · คำขอถอดภาพ '+e.open_removals:''}</span></button>)}</div>}</section>
     {active&&<section className="fga-card"><h2>นักฟุตบอล — {active.title}</h2><div className="fga-items">{players.map(p=><div key={p.id}><strong>{p.name} {p.jersey?'#'+p.jersey:''}</strong><span>{p.team||'ไม่ระบุทีม'} · {p.visible?'แสดงในอัลบั้ม':'รอบันทึกสิทธิ์'}</span></div>)}</div><form onSubmit={addPlayer}><label>ชื่อเล่น/ชื่อแสดง<input value={name} onChange={e=>setName(e.target.value)} required maxLength={100}/></label><label>หมายเลขเสื้อ<input value={jersey} onChange={e=>setJersey(e.target.value)} maxLength={12} inputMode="numeric"/></label><label>ทีม<input value={team} onChange={e=>setTeam(e.target.value)} maxLength={100}/></label><button disabled={busy||!name.trim()}>เพิ่มนักฟุตบอล</button></form></section>}

@@ -9,18 +9,22 @@ const fingerprint=(eventId,f)=>[eventId,f.name,f.size,f.lastModified].join('|');
 const readResume=()=>{try{return JSON.parse(localStorage.getItem(RESUME_KEY)||'{}')}catch{return {}}};
 const writeResume=(key,value)=>{try{const all=readResume();if(value)all[key]=value;else delete all[key];localStorage.setItem(RESUME_KEY,JSON.stringify(all))}catch{}};
 
+// SHA-256 and CRC32 in one pass over the file. SHA-256 is later confirmed against storage;
+// CRC32 is what ZIP downloads need, so they can be streamed without re-reading the original.
 async function digest(file,onProgress){
- const {createSHA256}=await import('hash-wasm');
- const hasher=await createSHA256();hasher.init();
+ const {createSHA256,createCRC32}=await import('hash-wasm');
+ const sha=await createSHA256(),crc=await createCRC32();sha.init();crc.init();
  const chunk=4*1024*1024;
- for(let pos=0;pos<file.size;pos+=chunk){hasher.update(new Uint8Array(await file.slice(pos,pos+chunk).arrayBuffer()));onProgress?.(Math.min(1,(pos+chunk)/file.size))}
- return hasher.digest('hex');
+ for(let pos=0;pos<file.size;pos+=chunk){const bytes=new Uint8Array(await file.slice(pos,pos+chunk).arrayBuffer());sha.update(bytes);crc.update(bytes);onProgress?.(Math.min(1,(pos+chunk)/file.size))}
+ return {sha256:sha.digest('hex'),crc32:crc.digest('hex').padStart(8,'0')};
 }
-function put(url,body,contentType,onProgress,signal){
+// Google Drive answers 308 (Resume Incomplete) for every chunk but the last one.
+function put(url,body,contentType,onProgress,signal,headers={}){
  return new Promise((resolve,reject)=>{
   const xhr=new XMLHttpRequest();xhr.open('PUT',url);if(contentType)xhr.setRequestHeader('Content-Type',contentType);
+  for(const [k,v] of Object.entries(headers))xhr.setRequestHeader(k,v);
   xhr.upload.onprogress=e=>{if(e.lengthComputable)onProgress?.(e.loaded)};
-  xhr.onload=()=>xhr.status>=200&&xhr.status<300?resolve():reject(Error('Storage ตอบกลับ '+xhr.status));
+  xhr.onload=()=>(xhr.status>=200&&xhr.status<300)||xhr.status===308?resolve(xhr.status):reject(Error('Storage ตอบกลับ '+xhr.status));
   xhr.onerror=()=>reject(Error('การเชื่อมต่อขาดระหว่างอัปโหลด'));xhr.onabort=()=>reject(Error('ยกเลิกการอัปโหลด'));
   signal?.addEventListener('abort',()=>xhr.abort(),{once:true});
   xhr.send(body);
@@ -50,11 +54,12 @@ function videoPoster(file){
  });
 }
 async function savePreview(mediaId,blob){
- const sha256=await digest(blob);
+ const {sha256}=await digest(blob);
  const init=await post('/api/football-gallery/admin/preview',{action:'init',mediaId,bytes:blob.size,sha256});
  if(init.status===409&&init.data.exists)return;
  if(!init.ok)throw Error(init.data.message||'สร้างภาพตัวอย่างไม่สำเร็จ');
- await withRetry(()=>put(init.data.url,blob,'image/jpeg'));
+ if(init.data.mode==='drive')await withRetry(()=>put(init.data.uploadUrl,blob,null,null,null,{'Content-Range':`bytes 0-${blob.size-1}/${blob.size}`}));
+ else await withRetry(()=>put(init.data.url,blob,'image/jpeg'));
  const complete=await post('/api/football-gallery/admin/preview',{action:'complete',mediaId});
  if(!complete.ok)throw Error(complete.data.message||'ยืนยันภาพตัวอย่างไม่สำเร็จ');
 }
@@ -66,6 +71,23 @@ async function verify(fileId,onProgress){
   throw Error(r.data.message||'SHA-256 ไม่ตรงกับต้นฉบับ');
  }
  throw Error('ตรวจสอบนานเกินไป');
+}
+// Resumable upload straight to Google Drive. After any failure the server asks Google how many
+// bytes it really holds and the upload continues from there (never from a guess in the browser).
+async function driveUpload(info,f,signal,onProgress){
+ let offset=info.offset||0,url=info.uploadUrl,failures=0;
+ while(offset<f.size){
+  const end=Math.min(f.size,offset+info.chunkSize);
+  try{await put(url,f.slice(offset,end),null,n=>onProgress(offset+n),signal,{'Content-Range':`bytes ${offset}-${end-1}/${f.size}`});offset=end;failures=0;onProgress(offset)}
+  catch(e){
+   if(e.message==='ยกเลิกการอัปโหลด'||++failures>6)throw e;
+   await new Promise(r=>setTimeout(r,800*2**failures));
+   const s=await post(endpoint,{action:'drive-status',fileId:info.fileId});
+   if(!s.ok)throw Error(s.data.message||'ตรวจสถานะอัปโหลดไม่สำเร็จ');
+   if(s.data.completed)return;
+   url=s.data.uploadUrl;offset=s.data.offset;onProgress(offset);
+  }
+ }
 }
 async function exifOf(file){
  if(!/\.(jpe?g|arw|cr2|nef|dng|pef|srw|3fr|iiq|orf|rw2)$/i.test(file.name))return null;
@@ -81,18 +103,21 @@ export default function Uploader({eventId,onUploaded}){
   set(key,'กำลังตรวจ Metadata…');
   const exif=await exifOf(f);
   set(key,'คำนวณ SHA-256…');
-  const sha256=saved?.sha256||await digest(f,p=>set(key,'คำนวณ SHA-256 '+Math.floor(p*100)+'%'));
+  const sums=saved?.sha256&&saved?.crc32?saved:await digest(f,p=>set(key,'คำนวณ SHA-256 '+Math.floor(p*100)+'%'));
+  const {sha256,crc32}=sums;
   let info=null;
   if(saved?.fileId){const r=await post(endpoint,{action:'list-parts',fileId:saved.fileId});if(r.ok&&!r.data.completed)info={...r.data,resumed:true};else if(r.ok&&r.data.completed)info={fileId:saved.fileId,mediaId:r.data.mediaId,done:true};else writeResume(resumeKey,null)}
   if(!info){
    const capturedAt=exif?.capturedAt||(f.lastModified?new Date(f.lastModified).toISOString():undefined);
-   const init=await post(endpoint,{action:'init',event:eventId,filename:f.name,bytes:f.size,sha256,batch,camera,capturedAt,hasGps:typeof exif?.hasGps==='boolean'?exif.hasGps:undefined});
+   const init=await post(endpoint,{action:'init',event:eventId,filename:f.name,bytes:f.size,sha256,crc32,batch,camera,capturedAt,hasGps:typeof exif?.hasGps==='boolean'?exif.hasGps:undefined});
    if(init.status===409&&init.data.duplicate){set(key,'มีไฟล์นี้ในงานแล้ว · ข้าม');return 'duplicate'}
    if(!init.ok)throw Error(init.data.message||'เริ่มอัปโหลดไม่สำเร็จ');
-   info=init.data;writeResume(resumeKey,{fileId:info.fileId,sha256});
+   info=init.data;writeResume(resumeKey,{fileId:info.fileId,sha256,crc32});
   }
   if(!info.done){
-   if(info.mode==='single'){
+   if(info.mode==='drive'){
+    await driveUpload(info,f,signal,n=>set(key,(info.resumed?'อัปโหลดต่อ ':'อัปโหลด ')+Math.floor(n/f.size*100)+'%'));
+   }else if(info.mode==='single'){
     await withRetry(()=>put(info.url,f,info.contentType,n=>set(key,'อัปโหลด '+Math.floor(n/f.size*100)+'%'),signal));
    }else{
     const done=new Set((info.uploaded||[]).map(p=>p.number)),total=info.partCount,size=info.partSize;
@@ -148,6 +173,6 @@ export default function Uploader({eventId,onUploaded}){
   {summary&&<p role="status" className="fga-message">สำเร็จ {summary.ok} · ซ้ำ {summary.duplicate} · ผิดพลาด {summary.failed}</p>}
   {files.length>0&&<div className="fga-upload-list">{files.slice(0,200).map((f,i)=><div key={i}><span>{f.name} · {fmtBytes(f.size)}</span><small>{status[f.name+'-'+i]||'รออัปโหลด'}</small></div>)}{files.length>200&&<p>แสดงสถานะ 200 ไฟล์แรกจาก {files.length.toLocaleString('th-TH')} ไฟล์</p>}</div>}
   {errors.length>0&&<div role="alert">{errors.slice(-12).map((e,i)=><p key={i} className="fga-message">{e}</p>)}</div>}
-  <p>ต้นฉบับถูกส่งเข้า Private R2 โดยตรงแบบ byte-for-byte ไม่ย่อ ไม่บีบอัด ไม่แก้สีหรือ Metadata ไฟล์ใหญ่กว่า 64 MB แบ่งส่วนและอัปโหลดต่อจากจุดเดิมได้ ไฟล์จะยังไม่เผยแพร่จนกว่าตรวจ SHA-256 และสิทธิ์ภาพเด็กครบ</p>
+  <p>ต้นฉบับถูกส่งจากเครื่องนี้เข้าที่เก็บส่วนตัวโดยตรงแบบ byte-for-byte ไม่ย่อ ไม่บีบอัด ไม่แก้สีหรือ Metadata ไฟล์ใหญ่แบ่งส่วนและอัปโหลดต่อจากจุดเดิมได้ ไฟล์จะยังไม่เผยแพร่จนกว่าตรวจ SHA-256 และสิทธิ์ภาพเด็กครบ</p>
  </div>
 }
