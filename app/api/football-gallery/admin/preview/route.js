@@ -1,7 +1,7 @@
 import {randomUUID} from 'node:crypto';
 import {db,isUuid,storageDriver,presignUpload,verifyObject,streamPrivateObject} from '../../../../../lib/football-gallery-server';
 import {adminGuard,adminReply as reply} from '../../../../../lib/football-gallery-admin';
-import {ensureEventFolder,createUploadSession,sessionStatus,readRange,deleteFile} from '../../../../../lib/football-gallery-drive';
+import {ensurePreviewFolder,createUploadSession,sessionStatus,readRange,deleteFile} from '../../../../../lib/football-gallery-drive';
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
 const isJpeg=b=>b.length>=3&&b[0]===0xff&&b[1]===0xd8&&b[2]===0xff;
@@ -54,7 +54,7 @@ export async function POST(request){
   }catch(e){await client.query('ROLLBACK');throw e}finally{client.release()}
   if(replaced?.storage==='drive'&&!String(replaced.r2_key).startsWith('pending:'))await deleteFile(replaced.r2_key).catch(()=>{});
   if(drive){
-   const uri=await createUploadSession({name:'preview-'+d.mediaId+'.jpg',mime:'image/jpeg',size:bytes,parent:await ensureEventFolder(eventId),appProperties:{fgFileId:fileId,fgRole:'preview'},origin:request.headers.get('origin')});
+   const uri=await createUploadSession({name:'preview-'+d.mediaId+'.jpg',mime:'image/jpeg',size:bytes,parent:await ensurePreviewFolder(eventId),appProperties:{fgFileId:fileId,fgRole:'preview'},origin:request.headers.get('origin')});
    await db().query('UPDATE fg_media_files SET upload_id=$2 WHERE id=$1',[fileId,uri]);
    return reply({fileId,mode:'drive',uploadUrl:uri},201);
   }
