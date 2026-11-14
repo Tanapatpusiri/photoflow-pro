@@ -1,0 +1,23 @@
+# Football Gallery download Worker (Cloudflare Workers Free plan is enough).
+# Deploy:   cd workers/football-gallery-download && npx wrangler deploy
+# Secrets:  npx wrangler secret put FG_DOWNLOAD_SECRET          (same value as the Vercel env)
+#           npx wrangler secret put VERCEL_PROTECTION_BYPASS    (only for a protected Preview app)
+name = "football-gallery-download"
+main = "src/index.js"
+compatibility_date = "2025-09-01"
+workers_dev = true
+
+[vars]
+FG_APP_ORIGIN = "https://photoflow-pro.vercel.app"
+
+[observability]
+enabled = true
+
+# Separate Worker for testing a Vercel Preview deployment. Pass the Preview's branch URL
+# (Vercel Dashboard -> Deployment -> Domains) when deploying; it stays unconfigured otherwise:
+#   npx wrangler deploy --env preview --var FG_APP_ORIGIN:https://<preview-branch-url>
+[env.preview]
+name = "football-gallery-download-preview"
+
+[env.preview.vars]
+FG_APP_ORIGIN = ""
