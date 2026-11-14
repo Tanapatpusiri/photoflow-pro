@@ -52,7 +52,7 @@ export default function Uploader({eventId}){
      if(f.size<=100e6){
       try{const r=await fetch('/api/football-gallery/admin/verify-file',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({fileId:info.fileId})});if(!r.ok)throw Error('Checksum verification pending')}catch(e){setErrors(s=>[...s,f.name+': '+e.message])}
      }
-     if(/\\.(jpe?g)$/i.test(f.name)){try{await savePreview(info.mediaId,f)}catch(e){setErrors(s=>[...s,f.name+': '+e.message])}}
+     if(['jpg','jpeg'].includes(f.name.split('.').pop()?.toLowerCase())){try{await savePreview(info.mediaId,f)}catch(e){setErrors(s=>[...s,f.name+': '+e.message])}}
      setResults(s=>({...s,[key]:'อัปโหลดแล้ว · รออนุมัติเผยแพร่'}));
     }catch(e){setResults(s=>({...s,[key]:'ผิดพลาด'}));setErrors(s=>[...s,f.name+': '+e.message])}
    }
