@@ -1,62 +1,105 @@
-import {NextResponse} from 'next/server';
-import {db,configured,privateHeaders} from '../../../../../lib/football-gallery-server';
-import {authenticated} from '../../../../../lib/football-gallery-admin';
+import {db,isUuid} from '../../../../../lib/football-gallery-server';
+import {adminGuard,adminReply as reply,audit} from '../../../../../lib/football-gallery-admin';
 export const runtime='nodejs';
-const reply=(data,status=200)=>NextResponse.json(data,{status,headers:privateHeaders});
+export const dynamic='force-dynamic';
+
+class ReviewError extends Error{constructor(code,status=409){super(code);this.status=status}}
+const messages={
+ INVALID_INPUT:'ข้อมูลไม่ถูกต้อง',
+ EVENT_NOT_FOUND:'ไม่พบงาน',MEDIA_NOT_FOUND:'ไม่พบไฟล์',PLAYER_NOT_FOUND:'ไม่พบนักฟุตบอล',WRONG_EVENT_PLAYER:'นักฟุตบอลไม่ได้อยู่ในงานนี้',
+ RIGHTS_NOT_CONFIRMED:'ต้องกรอกฐานกฎหมาย หลักฐาน และยืนยันการตรวจสิทธิ์',
+ INTEGRITY_NOT_VERIFIED:'ไฟล์ต้นฉบับยังไม่ผ่านการตรวจ SHA-256',
+ PLAYER_RIGHTS_NOT_RECORDED:'ยังไม่ได้บันทึกฐานกฎหมายและหลักฐานของเด็กทุกคนที่แท็ก',
+ MEDIA_HIDDEN:'ไฟล์นี้ถูกซ่อนอยู่ ต้องกู้คืนเพื่อตรวจใหม่ก่อน',
+ PRIVACY_NOTICE_REQUIRED:'ต้องระบุประกาศความเป็นส่วนตัว (อย่างน้อย 40 ตัวอักษร) และวันสิ้นสุดการเก็บรักษาก่อนเผยแพร่',
+ EVENT_NOT_PUBLISHED:'งานยังไม่ได้เผยแพร่',EVENT_NOT_SUSPENDED:'งานไม่ได้อยู่ในสถานะระงับ',
+ UNKNOWN_ACTION:'คำสั่งไม่ถูกต้อง'
+};
+const text=(v,min,max)=>typeof v==='string'&&v.trim().length>=min&&v.trim().length<=max?v.trim():null;
+const retentionDate=v=>{
+ if(typeof v!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(v))return null;
+ const t=Date.parse(v+'T00:00:00Z'),today=Date.now();
+ return t>today&&t<today+5*366*86400000?v:null; // future date, at most ~5 years
+};
+
 export async function POST(request){
- if(!configured())return reply({message:'ระบบยังไม่พร้อม'},503);
- if(request.headers.get('origin')!==new URL(request.url).origin)return reply({message:'ต้นทางไม่ถูกต้อง'},403);
- const admin=await authenticated(request);if(!admin)return reply({message:'ไม่มีสิทธิ์'},401);
+ const {admin,error}=await adminGuard(request,{mutation:true});if(error)return error;
  let d;try{d=await request.json()}catch{return reply({message:'คำขอไม่ถูกต้อง'},400)}
- const action=d.action,id=d.mediaId,eventId=d.eventId;
- if(!/^[0-9a-f-]{36}$/i.test(eventId||''))return reply({message:'รหัสงานไม่ถูกต้อง'},400);
+ const action=d?.action,id=d?.mediaId,eventId=d?.eventId;
+ if(!isUuid(eventId))return reply({message:'รหัสงานไม่ถูกต้อง'},400);
  const client=await db().connect();
  try{
   await client.query('BEGIN');
-  const ev=await client.query('SELECT id,status FROM fg_events WHERE id=$1 FOR UPDATE',[eventId]);
-  if(!ev.rowCount)throw Error('EVENT_NOT_FOUND');
+  const ev=await client.query('SELECT id,status,privacy_approved_at FROM fg_events WHERE id=$1 FOR UPDATE',[eventId]);
+  if(!ev.rowCount)throw new ReviewError('EVENT_NOT_FOUND',404);
+  const media=async(lock=false)=>{
+   if(!isUuid(id))throw new ReviewError('INVALID_INPUT',400);
+   const m=await client.query(`SELECT id,status FROM fg_media WHERE id=$1 AND event_id=$2${lock?' FOR UPDATE':''}`,[id,eventId]);
+   if(!m.rowCount)throw new ReviewError('MEDIA_NOT_FOUND',404);
+   return m.rows[0];
+  };
+  let detail=null,resource=id||null;
   if(action==='hide'){
-   if(!/^[0-9a-f-]{36}$/i.test(id||''))throw Error('INVALID_MEDIA');
+   await media(true);
    await client.query("UPDATE fg_media SET status='hidden',publish_allowed=false WHERE id=$1 AND event_id=$2",[id,eventId]);
+  }else if(action==='restore'){
+   const m=await media(true);if(m.status!=='hidden')throw new ReviewError('INVALID_INPUT',400);
+   await client.query("UPDATE fg_media SET status='review',publish_allowed=false,metadata_reviewed=false WHERE id=$1",[id]);
   }else if(action==='tag'){
-   if(!/^[0-9a-f-]{36}$/i.test(id||'')||!Array.isArray(d.players)||d.players.length>100||d.players.some(x=>!/^[0-9a-f-]{36}$/i.test(x)))throw Error('INVALID_TAGS');
-   const ok=await client.query('SELECT id FROM fg_media WHERE id=$1 AND event_id=$2',[id,eventId]);if(!ok.rowCount)throw Error('MEDIA_NOT_FOUND');
+   if(!Array.isArray(d.players)||d.players.length>100||d.players.some(x=>!isUuid(x)))throw new ReviewError('INVALID_INPUT',400);
+   await media(true);
+   const players=[...new Set(d.players)];
+   if(players.length){
+    const ok=await client.query('SELECT COUNT(*)::int AS n FROM fg_players WHERE event_id=$1 AND id=ANY($2::uuid[])',[eventId,players]);
+    if(ok.rows[0].n!==players.length)throw new ReviewError('WRONG_EVENT_PLAYER');
+   }
    await client.query('DELETE FROM fg_media_players WHERE media_id=$1',[id]);
-   for(const p of [...new Set(d.players)]){
-    const q=await client.query('SELECT id FROM fg_players WHERE id=$1 AND event_id=$2',[p,eventId]);if(!q.rowCount)throw Error('WRONG_EVENT_PLAYER');
-    await client.query('INSERT INTO fg_media_players(media_id,player_id) VALUES($1,$2)',[id,p]);
-   }
+   if(players.length)await client.query('INSERT INTO fg_media_players(media_id,player_id) SELECT $1,unnest($2::uuid[])',[id,players]);
+   // Changing who appears in a published file sends it back for review.
+   await client.query("UPDATE fg_media SET status=CASE WHEN status='published' THEN 'review' ELSE status END,publish_allowed=false WHERE id=$1",[id]);
+   detail={players:players.length};
   }else if(action==='approve'){
-   const basis=typeof d.basis==='string'?d.basis.trim():'',evidence=typeof d.evidence==='string'?d.evidence.trim():'';
-   if(!/^[0-9a-f-]{36}$/i.test(id||'')||basis.length<5||evidence.length<5||evidence.length>1000||d.confirmed!==true)throw Error('RIGHTS_NOT_CONFIRMED');
-   const m=await client.query('SELECT id FROM fg_media WHERE id=$1 AND event_id=$2 FOR UPDATE',[id,eventId]);if(!m.rowCount)throw Error('MEDIA_NOT_FOUND');
+   const basis=text(d.basis,5,200),evidence=text(d.evidence,5,1000);
+   if(!basis||!evidence||d.confirmed!==true)throw new ReviewError('RIGHTS_NOT_CONFIRMED',400);
+   const m=await media(true);if(m.status==='hidden')throw new ReviewError('MEDIA_HIDDEN');
    const files=await client.query(`SELECT COUNT(*)::int AS originals,COUNT(*) FILTER(WHERE verified_hash=true)::int AS verified FROM fg_media_files WHERE media_id=$1 AND variant IN('JPEG','RAW','VIDEO_ORIGINAL')`,[id]);
-   if(!files.rows[0].originals||files.rows[0].originals!==files.rows[0].verified)throw Error('INTEGRITY_NOT_VERIFIED');
-   const players=await client.query(`SELECT p.id FROM fg_media_players mp JOIN fg_players p ON p.id=mp.player_id WHERE mp.media_id=$1 AND p.event_id=$2`,[id,eventId]);
-   for(const p of players.rows){
-    const legal=await client.query(`SELECT 1 FROM fg_privacy_records WHERE event_id=$1 AND player_id=$2 AND scope='private_gallery' AND reviewed_at IS NOT NULL AND revoked_at IS NULL LIMIT 1`,[eventId,p.id]);
-    if(!legal.rowCount)throw Error('PLAYER_RIGHTS_NOT_RECORDED');
-   }
+   if(!files.rows[0].originals||files.rows[0].originals!==files.rows[0].verified)throw new ReviewError('INTEGRITY_NOT_VERIFIED');
+   const missing=await client.query(`SELECT COUNT(*)::int AS n FROM fg_media_players mp JOIN fg_players p ON p.id=mp.player_id WHERE mp.media_id=$1 AND NOT EXISTS(SELECT 1 FROM fg_privacy_records r WHERE r.event_id=$2 AND r.player_id=p.id AND r.scope='private_gallery' AND r.reviewed_at IS NOT NULL AND r.revoked_at IS NULL)`,[id,eventId]);
+   if(missing.rows[0].n)throw new ReviewError('PLAYER_RIGHTS_NOT_RECORDED');
    await client.query(`INSERT INTO fg_privacy_records(event_id,media_id,basis,evidence_ref,scope,reviewed_at) VALUES($1,$2,$3,$4,'private_gallery',NOW())`,[eventId,id,basis,evidence]);
    await client.query(`UPDATE fg_media SET publish_allowed=true,metadata_reviewed=true,status='published' WHERE id=$1 AND event_id=$2`,[id,eventId]);
   }else if(action==='player-privacy'){
-   if(!/^[0-9a-f-]{36}$/i.test(d.playerId||'')||typeof d.basis!=='string'||d.basis.length<5||typeof d.evidence!=='string'||d.evidence.length<5||d.confirmed!==true)throw Error('PRIVACY_RECORD_INVALID');
-   const p=await client.query('SELECT id FROM fg_players WHERE id=$1 AND event_id=$2',[d.playerId,eventId]);if(!p.rowCount)throw Error('PLAYER_NOT_FOUND');
-   await client.query(`INSERT INTO fg_privacy_records(event_id,player_id,basis,evidence_ref,scope,reviewed_at) VALUES($1,$2,$3,$4,'private_gallery',NOW())`,[eventId,d.playerId,d.basis.slice(0,200),d.evidence.slice(0,1000)]);
+   const basis=text(d.basis,5,200),evidence=text(d.evidence,5,1000);
+   if(!isUuid(d.playerId)||!basis||!evidence||d.confirmed!==true)throw new ReviewError('RIGHTS_NOT_CONFIRMED',400);
+   const p=await client.query('SELECT id FROM fg_players WHERE id=$1 AND event_id=$2',[d.playerId,eventId]);if(!p.rowCount)throw new ReviewError('PLAYER_NOT_FOUND',404);
+   await client.query(`INSERT INTO fg_privacy_records(event_id,player_id,basis,evidence_ref,scope,reviewed_at) VALUES($1,$2,$3,$4,'private_gallery',NOW())`,[eventId,d.playerId,basis,evidence]);
    await client.query('UPDATE fg_players SET visible=true WHERE id=$1',[d.playerId]);
+   resource=d.playerId;
+  }else if(action==='revoke-player-privacy'){
+   // Consent withdrawn: hide the child's name and send every file showing them back to review.
+   if(!isUuid(d.playerId))throw new ReviewError('INVALID_INPUT',400);
+   const p=await client.query('SELECT id FROM fg_players WHERE id=$1 AND event_id=$2',[d.playerId,eventId]);if(!p.rowCount)throw new ReviewError('PLAYER_NOT_FOUND',404);
+   await client.query('UPDATE fg_privacy_records SET revoked_at=NOW() WHERE event_id=$1 AND player_id=$2 AND revoked_at IS NULL',[eventId,d.playerId]);
+   await client.query('UPDATE fg_players SET visible=false WHERE id=$1',[d.playerId]);
+   const affected=await client.query(`UPDATE fg_media m SET status='review',publish_allowed=false WHERE m.event_id=$1 AND m.status='published' AND EXISTS(SELECT 1 FROM fg_media_players mp WHERE mp.media_id=m.id AND mp.player_id=$2)`,[eventId,d.playerId]);
+   resource=d.playerId;detail={unpublished:affected.rowCount};
   }else if(action==='publish-event'){
-   const privacy=typeof d.notice==='string'?d.notice.trim():'';
-   if(d.confirmed!==true||privacy.length<40||privacy.length>10000)throw Error('PRIVACY_NOTICE_REQUIRED');
-   const notReady=await client.query(`SELECT 1 FROM fg_media WHERE event_id=$1 AND status='published' AND (publish_allowed=false OR metadata_reviewed=false) LIMIT 1`,[eventId]);
-   if(notReady.rowCount)throw Error('MEDIA_PENDING_REVIEW');
-   await client.query(`UPDATE fg_events SET status='published',privacy_notice=$2,privacy_approved_at=NOW(),updated_at=NOW() WHERE id=$1`,[eventId,privacy]);
-  }else throw Error('UNKNOWN_ACTION');
-  await client.query('INSERT INTO fg_audit(admin_id,event_id,action,resource_id) VALUES($1,$2,$3,$4)',[admin.id,eventId,'review.'+action,id||null]);
+   const notice=text(d.notice,40,10000),retention=retentionDate(d.retentionUntil);
+   if(d.confirmed!==true||!notice||!retention)throw new ReviewError('PRIVACY_NOTICE_REQUIRED',400);
+   await client.query(`UPDATE fg_events SET status='published',privacy_notice=$2,privacy_approved_at=NOW(),retention_until=$3,updated_at=NOW() WHERE id=$1`,[eventId,notice,retention]);
+   detail={retentionUntil:retention};
+  }else if(action==='suspend-event'){
+   if(ev.rows[0].status!=='published')throw new ReviewError('EVENT_NOT_PUBLISHED');
+   await client.query(`UPDATE fg_events SET status='suspended',updated_at=NOW() WHERE id=$1`,[eventId]);
+  }else if(action==='resume-event'){
+   if(ev.rows[0].status!=='suspended'||!ev.rows[0].privacy_approved_at)throw new ReviewError('EVENT_NOT_SUSPENDED');
+   await client.query(`UPDATE fg_events SET status='published',updated_at=NOW() WHERE id=$1`,[eventId]);
+  }else throw new ReviewError('UNKNOWN_ACTION',400);
+  await audit(client,{adminId:admin.id,eventId,action:'review.'+action,resourceId:resource,detail});
   await client.query('COMMIT');return reply({ok:true});
- }catch(e){await client.query('ROLLBACK');console.error('fg review fail',e?.message||'unknown');return reply({message:({
-  INTEGRITY_NOT_VERIFIED:'ไฟล์ต้นฉบับยังไม่ผ่านการตรวจ SHA-256',
-  PLAYER_RIGHTS_NOT_RECORDED:'ยังไม่ได้บันทึกฐานกฎหมายและหลักฐานของเด็กทุกคนที่แท็ก',
-  MEDIA_PENDING_REVIEW:'ยังมีภาพที่ยังไม่ผ่านการตรวจ',
-  PRIVACY_NOTICE_REQUIRED:'ต้องระบุประกาศความเป็นส่วนตัวก่อนเผยแพร่'
- })[e.message]||'ไม่สามารถบันทึกการตรวจภาพ'},409)}finally{client.release()}
+ }catch(e){
+  await client.query('ROLLBACK');
+  if(e instanceof ReviewError)return reply({message:messages[e.message]||'ไม่สามารถบันทึกการตรวจ',code:e.message},e.status);
+  console.error('fg review fail',e?.code||'unknown');return reply({message:'ไม่สามารถบันทึกการตรวจภาพ'},503);
+ }finally{client.release()}
 }
