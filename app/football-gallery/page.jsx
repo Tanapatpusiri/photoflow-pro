@@ -1,5 +1,5 @@
 'use client';
-import {useState} from 'react';
+import {useEffect,useState} from 'react';
 import './gallery.css';
 
 const Icon=({name,size=22})=>{
@@ -18,6 +18,7 @@ export default function FootballGallery() {
  const [busy,setBusy]=useState(false);
  const [message,setMessage]=useState('');
  const [status,setStatus]=useState('idle');
+ useEffect(()=>{if(new URLSearchParams(window.location.search).get('invite')==='invalid'){setStatus('error');setMessage('ลิงก์เชิญหมดอายุหรือถูกยกเลิก กรุณาขอลิงก์ใหม่จากผู้จัดงาน หรือกรอกรหัสอัลบั้ม')}},[]);
  async function enter(e){
   e.preventDefault();
   if(busy)return;
