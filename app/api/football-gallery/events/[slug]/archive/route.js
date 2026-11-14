@@ -1,6 +1,6 @@
 import {NextResponse} from 'next/server';
 import {db,configured,grantFor,isUuid,sameOrigin,rateLimit,privateHeaders} from '../../../../../../lib/football-gallery-server';
-import {ARCHIVE_PART_BYTES,FORMAT_VARIANTS,grantFingerprint,selectArchiveFiles,partition,partLayout,archiveName} from '../../../../../../lib/football-gallery-archive';
+import {ARCHIVE_PART_BYTES,ARCHIVE_MAX_FILES,FORMAT_VARIANTS,grantFingerprint,selectArchiveFiles,partition,partLayout,archiveName} from '../../../../../../lib/football-gallery-archive';
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
 const reply=(data,status=200)=>NextResponse.json(data,{status,headers:privateHeaders});
@@ -24,7 +24,7 @@ export async function POST(request,{params}){
   if(!await rateLimit('archive',grant.codeId+':'+grant.nonce,30,60))return reply({message:'สร้างชุดดาวน์โหลดบ่อยเกินไป กรุณารอสักครู่'},429);
   const files=await selectArchiveFiles(event.id,{scope,playerId:d.playerId,mediaIds:d.mediaIds?[...new Set(d.mediaIds)]:null,variants:formats.map(k=>FORMAT_VARIANTS[k])});
   if(!files.length)return reply({message:'ไม่มีไฟล์ต้นฉบับที่พร้อมดาวน์โหลดตามที่เลือก'},404);
-  const groups=partition(files,ARCHIVE_PART_BYTES()),fallback=event.event_date?new Date(event.event_date):new Date();
+  const groups=partition(files,ARCHIVE_PART_BYTES(),ARCHIVE_MAX_FILES(files)),fallback=event.event_date?new Date(event.event_date):new Date();
   const parts=[];
   for(let i=0;i<groups.length;i++){
    const layout=await partLayout(groups[i],fallback);
