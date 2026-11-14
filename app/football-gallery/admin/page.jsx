@@ -3,6 +3,7 @@ import {useEffect,useState} from 'react';
 import '../gallery.css';
 import './admin.css';
 import Uploader from './upload-client';
+import ReviewClient from './review-client';
 const api='/api/football-gallery/admin';
 export default function FootballAdmin(){
  const [email,setEmail]=useState(''),[password,setPassword]=useState(''),[events,setEvents]=useState([]),[authorized,setAuthorized]=useState(false),[loading,setLoading]=useState(true),[message,setMessage]=useState(''),[busy,setBusy]=useState(false);
@@ -23,7 +24,7 @@ export default function FootballAdmin(){
     <section className="fga-card"><h2>สร้างงานใหม่</h2><p>งานใหม่จะอยู่ในสถานะ Draft จนกว่าจะตรวจสิทธิ์เผยแพร่ภาพเด็ก</p><form onSubmit={createEvent}><label>ชื่องาน<input value={title} onChange={e=>setTitle(e.target.value)} required maxLength={180} placeholder="ชื่อการแข่งขัน"/></label><label>สถานที่<input value={venue} onChange={e=>setVenue(e.target.value)} maxLength={180} placeholder="สถานที่ (ไม่บังคับ)"/></label><label>วันที่งาน<input type="date" value={date} onChange={e=>setDate(e.target.value)}/></label><button disabled={busy||!title.trim()}>{busy?'กำลังบันทึก…':'สร้างอัลบั้มใหม่'}</button></form></section>
     <section className="fga-card"><h2>งานทั้งหมด</h2>{events.length===0?<p>ยังไม่มีงานที่สร้าง</p>:<div className="fga-items">{events.map(e=><button key={e.id} onClick={()=>selectEvent(e)} className={active?.id===e.id?'active':''}><strong>{e.title}</strong><span>{e.status} · {e.players||0} คน · {e.media||0} ไฟล์</span></button>)}</div>}</section>
     {active&&<section className="fga-card"><h2>นักฟุตบอล — {active.title}</h2><div className="fga-items">{players.map(p=><div key={p.id}><strong>{p.name} {p.jersey?'#'+p.jersey:''}</strong><span>{p.team||'ไม่ระบุทีม'} · {p.visible?'แสดง':'รอตรวจสิทธิ์'}</span></div>)}</div><form onSubmit={addPlayer}><label>ชื่อเล่น/ชื่อแสดง<input value={name} onChange={e=>setName(e.target.value)} required maxLength={100}/></label><label>หมายเลขเสื้อ<input value={jersey} onChange={e=>setJersey(e.target.value)} maxLength={12}/></label><label>ทีม<input value={team} onChange={e=>setTeam(e.target.value)} maxLength={100}/></label><button disabled={busy||!name.trim()}>เพิ่มนักฟุตบอล</button></form></section>}
-    <section className="fga-card"><h2>อัปโหลด JPEG / RAW / วิดีโอ</h2>{active?<Uploader eventId={active.id}/>:<p>เลือกงานที่ต้องการอัปโหลดก่อน</p>}</section>
+    <section className="fga-card"><h2>อัปโหลด JPEG / RAW / วิดีโอ</h2>{active?<Uploader eventId={active.id}/>:<p>เลือกงานที่ต้องการอัปโหลดก่อน</p>}</section>{active&&<section className="fga-card"><ReviewClient event={active} players={players} onUpdated={load}/></section>}
   </>}
  </div></main>
 }
