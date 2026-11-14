@@ -19,7 +19,7 @@ export async function POST(request){
   if(!found.rowCount)return result({message:'รหัสไม่ถูกต้องหรือหมดอายุ กรุณาติดต่อผู้จัดงาน'},403);
   const {event_id,code_id,slug}=found.rows[0];
   const response=result({redirect:'/football-gallery/'+encodeURIComponent(slug)},200);
-  response.cookies.set('fg_grant',issueGrant(event_id,code_id),{httpOnly:true,secure:true,sameSite:'lax',maxAge:43200,path:'/football-gallery'});
+  response.cookies.set('fg_grant',issueGrant(event_id,code_id),{httpOnly:true,secure:true,sameSite:'lax',maxAge:43200,path:'/'});
   return response;
  }catch(e){console.error('fg access storage unavailable',e?.code||'unknown');return result({message:'ระบบยังไม่พร้อมให้เข้าชม กรุณาติดต่อผู้ดูแล'},503)}
 }
