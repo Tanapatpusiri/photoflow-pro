@@ -16,6 +16,19 @@ function uploadR2(url,file,onProgress){
   xhr.onerror=()=>reject(Error('Upload connection interrupted'));xhr.onabort=()=>reject(Error('Upload interrupted'));xhr.send(file);
  });
 }
+async function createPreview(file){
+ const image=await createImageBitmap(file);const ratio=Math.min(1,640/Math.max(image.width,image.height));
+ const canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(image.width*ratio));canvas.height=Math.max(1,Math.round(image.height*ratio));
+ canvas.getContext('2d').drawImage(image,0,0,canvas.width,canvas.height);image.close?.();
+ return new Promise((resolve,reject)=>canvas.toBlob(b=>b?resolve(new File([b],'preview.jpg',{type:'image/jpeg'})):reject(Error('Preview encoding failed')),'image/jpeg',.78));
+}
+async function savePreview(mediaId,source){
+ const jpeg=await createPreview(source),sha256=await digest(jpeg);
+ const r=await fetch('/api/football-gallery/admin/preview',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({action:'init',mediaId,bytes:jpeg.size,sha256})}),d=await r.json();
+ if(!r.ok)throw Error(d.message||'Preview init failed');await uploadR2(d.url,jpeg,()=>{});
+ const complete=await fetch('/api/football-gallery/admin/preview',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({action:'complete',mediaId})});
+ if(!complete.ok)throw Error('Preview upload could not be verified');
+}
 export default function Uploader({eventId}){
  const [files,setFiles]=useState([]),[camera,setCamera]=useState(''),[running,setRunning]=useState(false),[errors,setErrors]=useState([]),[results,setResults]=useState({});
  async function run(){
@@ -36,7 +49,11 @@ export default function Uploader({eventId}){
      if(error)throw error;
      const complete=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'complete',fileId:info.fileId})});
      const verified=await complete.json();if(!complete.ok)throw Error(verified.message||'ยืนยันไฟล์ไม่สำเร็จ');
-     setResults(s=>({...s,[key]:'อัปโหลดสำเร็จ · รอตรวจสอบสิทธิ์เผยแพร่'}));
+     if(f.size<=100e6){
+      try{const r=await fetch('/api/football-gallery/admin/verify-file',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({fileId:info.fileId})});if(!r.ok)throw Error('Checksum verification pending')}catch(e){setErrors(s=>[...s,f.name+': '+e.message])}
+     }
+     if(/\\.(jpe?g)$/i.test(f.name)){try{await savePreview(info.mediaId,f)}catch(e){setErrors(s=>[...s,f.name+': '+e.message])}}
+     setResults(s=>({...s,[key]:'อัปโหลดแล้ว · รออนุมัติเผยแพร่'}));
     }catch(e){setResults(s=>({...s,[key]:'ผิดพลาด'}));setErrors(s=>[...s,f.name+': '+e.message])}
    }
   };
