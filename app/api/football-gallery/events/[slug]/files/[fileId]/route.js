@@ -1,5 +1,5 @@
 import {NextResponse} from 'next/server';
-import {db,configured,validateGrant,presignOriginal,privateHeaders} from '../../../../../../../lib/football-gallery-server';
+import {db,configured,validateGrant,presignOriginal,presignInline,privateHeaders} from '../../../../../../../lib/football-gallery-server';
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
 const deny=(message,status)=>NextResponse.json({message},{status,headers:privateHeaders});
@@ -12,7 +12,7 @@ export async function GET(request,{params}){
   if(!q.rowCount)return deny('ไม่พบไฟล์ที่เผยแพร่',404);
   const file=q.rows[0];
   if(!await validateGrant(request.cookies.get('fg_grant')?.value,file.event_id))return deny('ไม่มีสิทธิ์ดาวน์โหลด',403);
-  const signed=await presignOriginal(file.r2_key,file.original_filename);
+  const signed=['THUMB','PREVIEW','VIDEO_PREVIEW'].includes(file.variant)?await presignInline(file.r2_key):await presignOriginal(file.r2_key,file.original_filename);
   return NextResponse.redirect(signed,{status:302,headers:privateHeaders});
  }catch(err){console.error('fg presign',err?.code||'unknown');return deny('ไม่สามารถดาวน์โหลดไฟล์',503)}
 }
