@@ -1,5 +1,6 @@
 import {NextResponse} from 'next/server';
 import {db,configured,sha256,clientIp,rateLimit,setGrantCookie,privateHeaders} from '../../../../lib/football-gallery-server';
+import {ACTIVE_RETENTION_SQL} from '../../../../lib/football-gallery-retention';
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
 const result=(body,status)=>NextResponse.json(body,{status,headers:privateHeaders});
@@ -14,7 +15,7 @@ export async function POST(request){
  try{
   if(!await rateLimit('event-code',clientIp(request),8,15))return result({message:'ลองใหม่อีกครั้งในภายหลัง'},429);
   const hash=sha256(process.env.FG_SESSION_SECRET+':code:'+code);
-  const found=await db().query(`SELECT c.id AS code_id,e.id AS event_id,e.slug FROM fg_event_codes c JOIN fg_events e ON e.id=c.event_id WHERE c.code_hash=$1 AND c.revoked_at IS NULL AND c.expires_at>NOW() AND e.status='published' AND e.privacy_approved_at IS NOT NULL AND (e.retention_until IS NULL OR e.retention_until>=CURRENT_DATE) LIMIT 1`,[hash]);
+  const found=await db().query(`SELECT c.id AS code_id,e.id AS event_id,e.slug FROM fg_event_codes c JOIN fg_events e ON e.id=c.event_id WHERE c.code_hash=$1 AND c.revoked_at IS NULL AND c.expires_at>NOW() AND e.status='published' AND e.privacy_approved_at IS NOT NULL AND ${ACTIVE_RETENTION_SQL} LIMIT 1`,[hash]);
   if(!found.rowCount)return result({message:'รหัสไม่ถูกต้องหรือหมดอายุ กรุณาติดต่อผู้จัดงาน'},403);
   const {event_id,code_id,slug}=found.rows[0];
   return setGrantCookie(result({redirect:'/football-gallery/'+encodeURIComponent(slug)},200),event_id,code_id);
