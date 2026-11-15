@@ -6,6 +6,7 @@ const client={async query(sql,args){
  if(['BEGIN','COMMIT','ROLLBACK'].includes(sql))return {rowCount:0,rows:[]};
  if(sql.startsWith('SELECT id,event_date::text'))return scenario.eligible===false?{rowCount:0,rows:[]}:{rowCount:1,rows:[{id:'event',event_date:'2024-01-01',retention_until:'2025-01-01'}]};
  if(sql.startsWith('SELECT id FROM fg_retention_deletion_reviews'))return {rowCount:scenario.existing?1:0,rows:scenario.existing?[{id:'existing'}]:[]};
+ if(sql.startsWith('UPDATE fg_retention_deletion_reviews'))return {rowCount:1,rows:[]};
  if(sql.startsWith('SELECT COUNT(f.id)'))return {rowCount:1,rows:[{files:2,originals:1,previews:1,pending:0,drive_files:2,other_files:0}]};
  if(sql.startsWith('INSERT INTO fg_retention_deletion_reviews'))return {rowCount:1,rows:[{id:'review'}]};
  throw Error('Unexpected query: '+sql);
@@ -20,5 +21,7 @@ role='owner';scenario={eligible:false};result=await route.POST(req);assert.equal
 const eligibility=calls.find(x=>x.sql.startsWith('SELECT id,event_date::text')).sql;assert.match(eligibility,/retention_until<CURRENT_DATE/);assert.match(eligibility,/\(event_date\+INTERVAL '1 year'\)::date<CURRENT_DATE/);
 calls=[];scenario={existing:true};result=await route.POST(req);assert.equal(result.status,409);assert.ok(!calls.some(x=>x.sql.startsWith('INSERT')));
 calls=[];scenario={};result=await route.POST(req);assert.equal(result.status,201);assert.equal(result.body.snapshot.originals,1);assert.equal(audits[0].action,'retention.review_prepared');assert.ok(calls.some(x=>x.sql==='COMMIT'));assert.ok(!calls.some(x=>/\bDELETE\b|\bUPDATE\b/i.test(x.sql.replace('FOR UPDATE',''))));
+calls=[];audits=[];scenario={existing:true};result=await route.POST({json:async()=>({event:'event',action:'refresh'})});assert.equal(result.status,201);assert.ok(calls.some(x=>x.sql.startsWith('UPDATE fg_retention_deletion_reviews')));assert.equal(audits[0].action,'retention.review_refreshed');assert.ok(calls.some(x=>x.sql==='COMMIT'));
+calls=[];scenario={};result=await route.POST({json:async()=>({event:'event',action:'refresh'})});assert.equal(result.status,409);assert.ok(!calls.some(x=>x.sql.startsWith('UPDATE fg_retention_deletion_reviews')));
 calls=[];role='admin';result=await route.GET({nextUrl:new URL('https://example.test/?event=event')});assert.equal(result.status,403);assert.equal(calls.length,0);
 console.log('PASS: owner-only, expired and one-year eligibility, idempotency, and non-destructive preparation');
