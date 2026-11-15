@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {execFileSync} from 'node:child_process';
 const source=await readFile('lib/football-gallery-deletion-eligibility.js','utf8');
-const {DELETION_ELIGIBLE_SQL}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
-const rule=DELETION_ELIGIBLE_SQL.replaceAll('CURRENT_DATE',"DATE '2025-09-01'");
+const {DELETION_ELIGIBLE_SQL,TODAY_SQL}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
+const rule=DELETION_ELIGIBLE_SQL.replaceAll(TODAY_SQL,"DATE '2025-09-01'");
 const sql=`SELECT label FROM (VALUES
  ('six-month-expired',DATE '2024-12-01',DATE '2025-06-01',DATE '2025-06-01',true),
  ('access-shorter-but-wait',DATE '2024-12-01',DATE '2025-03-01',DATE '2025-12-01',false),

@@ -38,7 +38,10 @@ export async function POST(request){
  const {admin,error}=await adminGuard(request,{mutation:true});if(error)return error;
  let d;try{d=await request.json()}catch{return send({message:'ข้อมูลไม่ถูกต้อง'},400)}
  const title=typeof d?.title==='string'?d.title.trim():'';const venue=typeof d?.venue==='string'&&d.venue.trim()?d.venue.trim():null;
- const date=typeof d?.date==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(d.date)&&!Number.isNaN(Date.parse(d.date))?d.date:null;
+ // Date.parse accepts impossible dates such as 2025-02-30, which PostgreSQL then rejects with a 503.
+ const rawDate=typeof d?.date==='string'?d.date.trim():'';
+ if(rawDate&&(!/^\d{4}-\d{2}-\d{2}$/.test(rawDate)||!oneYearAfterEvent(rawDate)))return send({message:'วันจัดงานไม่ถูกต้อง'},400);
+ const date=rawDate||null;
  if(!title||title.length>180||(venue&&venue.length>180))return send({message:'กรุณากรอกชื่องาน'},400);
  const slug='event-'+randomBytes(10).toString('hex');
  const client=await db().connect();

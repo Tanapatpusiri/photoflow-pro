@@ -3,9 +3,9 @@ import {readFile} from 'node:fs/promises';
 import {execFileSync} from 'node:child_process';
 
 const source=await readFile('lib/football-gallery-retention.js','utf8');
-const {ACTIVE_RETENTION_SQL}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
+const {ACTIVE_RETENTION_SQL,TODAY_SQL}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
 // Use fixed today values and PostgreSQL itself, without modifying any database data.
-const expression=ACTIVE_RETENTION_SQL.replaceAll('CURRENT_DATE',"DATE '2025-02-28'");
+const expression=ACTIVE_RETENTION_SQL.replaceAll(TODAY_SQL,"DATE '2025-02-28'");
 const sql=`SELECT label FROM (VALUES
  ('valid', DATE '2024-02-29', DATE '2025-02-28', true),
  ('leap-day-too-late', DATE '2024-02-29', DATE '2025-03-01', false),

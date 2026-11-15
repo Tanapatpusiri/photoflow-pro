@@ -1,6 +1,6 @@
 import {db,isUuid} from '../../../../../lib/football-gallery-server';
 import {adminGuard,adminReply as reply,audit} from '../../../../../lib/football-gallery-admin';
-import {addRetentionMonths,validRetentionDate} from '../../../../../lib/football-gallery-retention';
+import {addRetentionMonths,validRetentionDate,TODAY_SQL} from '../../../../../lib/football-gallery-retention';
 import {RETENTION_SETTINGS_LOCK,readRetentionMonths} from '../../../../../lib/football-gallery-retention-settings';
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
@@ -31,7 +31,7 @@ export async function POST(request){
  const client=await db().connect();
  try{
   await client.query('BEGIN');
-  const ev=await client.query('SELECT id,status,privacy_approved_at,event_date::text AS event_date,CURRENT_DATE::text AS today FROM fg_events WHERE id=$1 FOR UPDATE',[eventId]);
+  const ev=await client.query(`SELECT id,status,privacy_approved_at,event_date::text AS event_date,${TODAY_SQL}::text AS today FROM fg_events WHERE id=$1 FOR UPDATE`,[eventId]);
   if(!ev.rowCount)throw new ReviewError('EVENT_NOT_FOUND',404);
   const media=async(lock=false)=>{
    if(!isUuid(id))throw new ReviewError('INVALID_INPUT',400);

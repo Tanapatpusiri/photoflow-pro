@@ -23,7 +23,7 @@ const load=async(path)=>{
  s=s.replace(/import \{db(?:,isUuid)?\} from '[^']+';/,"const db=globalThis.__retentionDb; const isUuid=(x)=>x==='test-event';");
  s=s.replace(/import \{adminGuard,adminReply as (\w+),audit\} from '[^']+';/,(_,name)=>`const {adminGuard,adminReply: ${name},audit}=globalThis.__retentionAdmin;`);
  s=s.replace(/import \{(validRetentionDate|oneYearAfterEvent)\} from '[^']+';/,(_,name)=>`const {${name}}=globalThis.__retentionTest;`);
- s=s.replace(/import \{addRetentionMonths,validRetentionDate\} from '[^']+';/,'const {addRetentionMonths,validRetentionDate}=globalThis.__retentionTest;');
+ s=s.replace(/import \{addRetentionMonths,validRetentionDate,TODAY_SQL\} from '[^']+';/,'const {addRetentionMonths,validRetentionDate,TODAY_SQL}=globalThis.__retentionTest;');
  s=s.replace(/import \{RETENTION_SETTINGS_LOCK,readRetentionMonths\} from '[^']+';/,"const RETENTION_SETTINGS_LOCK='RETENTION_LOCK'; const readRetentionMonths=async()=>globalThis.__retentionMonths;");
  return import('data:text/javascript;base64,'+Buffer.from(s).toString('base64'));
 };

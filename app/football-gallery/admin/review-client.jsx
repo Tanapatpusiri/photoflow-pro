@@ -7,7 +7,8 @@ async function post(path,body){const r=await fetch(api+path,{method:'POST',heade
 async function get(path){const r=await fetch(api+path,{cache:'no-store'});const d=await r.json();if(!r.ok)throw Error(d.message||'โหลดข้อมูลไม่สำเร็จ');return d}
 const STATUS={uploading:'กำลังอัปโหลด',review:'รอตรวจ',published:'เผยแพร่แล้ว',hidden:'ซ่อน'};
 const fmtDate=v=>v?new Date(v).toLocaleString('th-TH',{dateStyle:'medium',timeStyle:'short'}):'';
-const inDays=n=>new Date(Date.now()+n*86400000).toISOString().slice(0,10);
+// Calendar dates follow Thailand, matching the server's Bangkok "today".
+const inDays=n=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Bangkok'}).format(new Date(Date.now()+n*86400000));
 
 export default function ReviewClient({event,players,retentionMonths,uploadKey=0,onUpdated,onPlayersChanged}){
  const [items,setItems]=useState([]),[active,setActive]=useState(null),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false),[error,setError]=useState(''),[info,setInfo]=useState(''),[page,setPage]=useState(1),[hasMore,setHasMore]=useState(false),[filter,setFilter]=useState('');

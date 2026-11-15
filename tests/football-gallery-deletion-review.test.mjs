@@ -20,7 +20,7 @@ const route=await import('data:text/javascript;base64,'+Buffer.from(source).toSt
 const req={json:async()=>({event:'event'})};
 role='admin';let result=await route.POST(req);assert.equal(result.status,403);assert.equal(calls.length,0);
 role='owner';scenario={eligible:false};result=await route.POST(req);assert.equal(result.status,409);assert.ok(calls.some(x=>x.sql==='ROLLBACK'));assert.ok(!calls.some(x=>x.sql.startsWith('INSERT')));
-const eligibility=calls.find(x=>x.sql.startsWith('SELECT e.id,e.event_date::text')).sql;assert.match(eligibility,/retention_until<CURRENT_DATE/);assert.match(eligibility,/COALESCE\(e.deletion_after/);
+const eligibility=calls.find(x=>x.sql.startsWith('SELECT e.id,e.event_date::text')).sql;assert.ok(eligibility.includes("retention_until<(NOW() AT TIME ZONE 'Asia/Bangkok')::date"));assert.match(eligibility,/COALESCE\(e.deletion_after/);
 calls=[];scenario={existing:true};result=await route.POST(req);assert.equal(result.status,409);assert.ok(!calls.some(x=>x.sql.startsWith('INSERT')));
 calls=[];scenario={};result=await route.POST(req);assert.equal(result.status,201);assert.equal(result.body.snapshot.originals,1);assert.equal(audits[0].action,'retention.review_prepared');assert.ok(calls.some(x=>x.sql==='COMMIT'));assert.ok(!calls.some(x=>/\bDELETE\b|\bUPDATE\b/i.test(x.sql.replace('FOR UPDATE',''))));
 calls=[];audits=[];scenario={existing:true};result=await route.POST({json:async()=>({event:'event',action:'refresh'})});assert.equal(result.status,201);assert.ok(calls.some(x=>x.sql.startsWith('UPDATE fg_retention_deletion_reviews')));assert.equal(audits[0].action,'retention.review_refreshed');assert.ok(calls.some(x=>x.sql==='COMMIT'));

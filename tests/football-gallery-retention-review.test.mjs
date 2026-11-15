@@ -3,8 +3,8 @@ import {readFile} from 'node:fs/promises';
 import {execFileSync} from 'node:child_process';
 
 const source=await readFile('lib/football-gallery-retention-review.js','utf8');
-const {RETENTION_REVIEW_REASON_SQL}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
-const reason=RETENTION_REVIEW_REASON_SQL.replaceAll('CURRENT_DATE',"DATE '2025-02-28'");
+const {RETENTION_REVIEW_REASON_SQL,TODAY_SQL}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
+const reason=RETENTION_REVIEW_REASON_SQL.replaceAll(TODAY_SQL,"DATE '2025-02-28'");
 const sql=`SELECT label FROM (VALUES
  ('missing-date','draft',NULL::date,NULL::date,'missing_event_date'),
  ('missing-retention','published',DATE '2025-02-28',NULL::date,'missing_retention'),

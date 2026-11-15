@@ -18,11 +18,11 @@ const client={async query(sql,args){
 },release(){}};
 globalThis.__privacyDb=()=>({connect:async()=>client});
 globalThis.__privacyAdmin={adminGuard:async()=>({admin:{id:'admin'}}),adminReply:(body,status=200)=>({body,status}),audit:async(_c,a)=>audits.push(a)};
-globalThis.__privacyRetention={validRetentionDate:()=>true};
+globalThis.__privacyRetention={validRetentionDate:()=>true,TODAY_SQL:"(NOW() AT TIME ZONE 'Asia/Bangkok')::date"};
 async function load(path){let s=await readFile(path,'utf8');
  s=s.replace(/import \{db,isUuid\} from '[^']+';/,"const db=globalThis.__privacyDb; const isUuid=(x)=>['event','media','request'].includes(x);");
  s=s.replace(/import \{adminGuard,adminReply as reply,audit\} from '[^']+';/,'const {adminGuard,adminReply:reply,audit}=globalThis.__privacyAdmin;');
- s=s.replace(/import \{addRetentionMonths,validRetentionDate\} from '[^']+';/,'const {addRetentionMonths,validRetentionDate}=globalThis.__privacyRetention;');
+ s=s.replace(/import \{addRetentionMonths,validRetentionDate,TODAY_SQL\} from '[^']+';/,'const {addRetentionMonths,validRetentionDate,TODAY_SQL}=globalThis.__privacyRetention;');
  s=s.replace(/import \{RETENTION_SETTINGS_LOCK,readRetentionMonths\} from '[^']+';/,"const RETENTION_SETTINGS_LOCK='RETENTION_LOCK'; const readRetentionMonths=async()=>12;");
  return import('data:text/javascript;base64,'+Buffer.from(s).toString('base64'));
 }
