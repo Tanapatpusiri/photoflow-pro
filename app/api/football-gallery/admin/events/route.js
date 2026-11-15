@@ -11,6 +11,7 @@ export async function GET(request){
  try{
   // Correlated counts instead of joining players x media, which multiplied rows per event.
   const q=await db().query(`SELECT e.id,e.title,e.slug,e.venue,e.event_date,e.status,e.privacy_approved_at,e.retention_until,e.deletion_after,
+   EXISTS(SELECT 1 FROM fg_settings s JOIN fg_event_codes c ON c.id::text=s.value AND c.event_id=e.id AND c.revoked_at IS NULL AND c.expires_at>NOW() WHERE s.key='album.public.'||e.id::text) AS is_public,
    (SELECT COUNT(*)::int FROM fg_players p WHERE p.event_id=e.id) AS players,
    (SELECT COUNT(*)::int FROM fg_media m WHERE m.event_id=e.id AND m.status<>'hidden') AS media,
    (SELECT COUNT(*)::int FROM fg_media m WHERE m.event_id=e.id AND m.status='published') AS published,

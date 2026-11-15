@@ -17,7 +17,7 @@ export async function GET(request){
  try{
   // Only metadata is listed: tokens and codes are stored as hashes and can never be shown again.
   const q=await db().query(`SELECT id,'invite' AS type,label,created_at,expires_at,revoked_at FROM fg_invites WHERE event_id=$1
-   UNION ALL SELECT id,'code',label,created_at,expires_at,revoked_at FROM fg_event_codes WHERE event_id=$1 ORDER BY created_at DESC LIMIT 200`,[event]);
+   UNION ALL SELECT id,'code',label,created_at,expires_at,revoked_at FROM fg_event_codes WHERE event_id=$1 AND label IS DISTINCT FROM 'สิทธิ์อัลบั้มสาธารณะ' ORDER BY created_at DESC LIMIT 200`,[event]);
   return reply({grants:q.rows.map(g=>({...g,active:!g.revoked_at&&new Date(g.expires_at)>new Date()}))});
  }catch(e){console.error('fg grant list',e?.code||'unknown');return reply({message:'โหลดลิงก์เข้าชมไม่สำเร็จ'},503)}
 }

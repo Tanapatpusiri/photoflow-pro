@@ -18,7 +18,7 @@ globalThis.__suspendTest={
  ACTIVE_RETENTION_SQL:'TRUE',
  NextResponse:{json:(body,{status=200}={})=>({body,status})},
  dbStub:{query:async(sql,args)=>{
-  if(sql.includes('FROM fg_events WHERE slug=$1'))return status?{rowCount:1,rows:[{id:event,slug:'s',status}]}:{rowCount:0,rows:[]};
+  if(sql.includes('FROM fg_events e WHERE e.slug=$1'))return status?{rowCount:1,rows:[{id:event,slug:'s',status}]}:{rowCount:0,rows:[]};
   if(sql.includes('e.status=$3')){lastStatus=args[2];return {rowCount:grantStillValid&&args[0]===event&&args[1]===grant&&args[2]===status?1:0,rows:[]}}
   throw Error('Unexpected query: '+sql);
  }}

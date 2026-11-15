@@ -62,6 +62,9 @@ export async function POST(request){
   let replaced=null;
   try{
    await client.query('BEGIN');
+   // Serialize preview replacement with deletion and recheck after acquiring the lock.
+   const locked=await client.query("SELECT id FROM fg_media WHERE id=$1 AND event_id=$2 AND status<>'hidden' FOR UPDATE",[d.mediaId,eventId]);
+   if(!locked.rowCount){await client.query('ROLLBACK');return reply({message:'ภาพนี้ถูกซ่อนหรือกำลังลบ'},409)}
    // Retrying a failed preview replaces the earlier unverified row instead of hitting UNIQUE(media_id,variant).
    const existing=await client.query(`SELECT id,verified_bytes,storage,r2_key FROM fg_media_files WHERE media_id=$1 AND variant='THUMB' FOR UPDATE`,[d.mediaId]);
    if(existing.rowCount&&existing.rows[0].verified_bytes&&d.replace!==true){await client.query('ROLLBACK');return reply({message:'มีภาพตัวอย่างแล้ว',exists:true},409)}
