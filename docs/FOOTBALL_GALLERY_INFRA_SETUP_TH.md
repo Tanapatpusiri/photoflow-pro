@@ -65,7 +65,7 @@ Settings → Functions → Function Region: เลือก `sin1` (Singapore) �
 DATABASE_URL='...' node scripts/migrate-football-gallery.mjs
 FG_ADMIN_EMAIL='owner@...' FG_ADMIN_PASSWORD='อย่างน้อย 14 ตัวอักษร' DATABASE_URL='...' node scripts/bootstrap-football-admin.mjs
 ```
-- migration รัน `db/football_gallery_schema.sql`, `..._ingestion_extension.sql`, `..._003_production.sql`, `..._004_google_drive.sql` ตามลำดับ รันซ้ำได้อย่างปลอดภัย
+- migration รัน `db/football_gallery_schema.sql`, `..._ingestion_extension.sql`, `..._003_production.sql`, `..._004_google_drive.sql`, `..._005_retention_deletion.sql` ตามลำดับ รันซ้ำได้อย่างปลอดภัย (005 จำเป็นสำหรับการตั้งระยะเวลาเก็บและการตรวจลบ)
 - ลบรหัสผ่านออกจาก shell history หลัง bootstrap
 
 ## 3. การตรวจความครบถ้วนของไฟล์ในโหมด Drive
