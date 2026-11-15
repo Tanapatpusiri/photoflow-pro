@@ -1,5 +1,6 @@
 import {db,isUuid} from '../../../../../lib/football-gallery-server';
 import {adminGuard,adminReply as reply,audit} from '../../../../../lib/football-gallery-admin';
+import {validRetentionDate} from '../../../../../lib/football-gallery-retention';
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
 
@@ -12,15 +13,12 @@ const messages={
  PLAYER_RIGHTS_NOT_RECORDED:'ยังไม่ได้บันทึกฐานกฎหมายและหลักฐานของเด็กทุกคนที่แท็ก',
  MEDIA_HIDDEN:'ไฟล์นี้ถูกซ่อนอยู่ ต้องกู้คืนเพื่อตรวจใหม่ก่อน',
  PRIVACY_NOTICE_REQUIRED:'ต้องระบุประกาศความเป็นส่วนตัว (อย่างน้อย 40 ตัวอักษร) และวันสิ้นสุดการเก็บรักษาก่อนเผยแพร่',
+ EVENT_DATE_REQUIRED:'ต้องระบุวันจัดงานก่อนเผยแพร่เพื่อกำหนดระยะเวลาเก็บภาพ',
+ RETENTION_OUT_OF_RANGE:'วันสิ้นสุดการเข้าถึงต้องอยู่ในอนาคตและไม่เกิน 1 ปีหลังวันจัดงาน',
  EVENT_NOT_PUBLISHED:'งานยังไม่ได้เผยแพร่',EVENT_NOT_SUSPENDED:'งานไม่ได้อยู่ในสถานะระงับ',
  UNKNOWN_ACTION:'คำสั่งไม่ถูกต้อง'
 };
 const text=(v,min,max)=>typeof v==='string'&&v.trim().length>=min&&v.trim().length<=max?v.trim():null;
-const retentionDate=v=>{
- if(typeof v!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(v))return null;
- const t=Date.parse(v+'T00:00:00Z'),today=Date.now();
- return t>today&&t<today+5*366*86400000?v:null; // future date, at most ~5 years
-};
 
 export async function POST(request){
  const {admin,error}=await adminGuard(request,{mutation:true});if(error)return error;
@@ -30,7 +28,7 @@ export async function POST(request){
  const client=await db().connect();
  try{
   await client.query('BEGIN');
-  const ev=await client.query('SELECT id,status,privacy_approved_at FROM fg_events WHERE id=$1 FOR UPDATE',[eventId]);
+  const ev=await client.query('SELECT id,status,privacy_approved_at,event_date::text AS event_date,CURRENT_DATE::text AS today FROM fg_events WHERE id=$1 FOR UPDATE',[eventId]);
   if(!ev.rowCount)throw new ReviewError('EVENT_NOT_FOUND',404);
   const media=async(lock=false)=>{
    if(!isUuid(id))throw new ReviewError('INVALID_INPUT',400);
@@ -84,8 +82,10 @@ export async function POST(request){
    const affected=await client.query(`UPDATE fg_media m SET status='review',publish_allowed=false WHERE m.event_id=$1 AND m.status='published' AND EXISTS(SELECT 1 FROM fg_media_players mp WHERE mp.media_id=m.id AND mp.player_id=$2)`,[eventId,d.playerId]);
    resource=d.playerId;detail={unpublished:affected.rowCount};
   }else if(action==='publish-event'){
-   const notice=text(d.notice,40,10000),retention=retentionDate(d.retentionUntil);
+   const notice=text(d.notice,40,10000),retention=d.retentionUntil;
    if(d.confirmed!==true||!notice||!retention)throw new ReviewError('PRIVACY_NOTICE_REQUIRED',400);
+   if(!ev.rows[0].event_date)throw new ReviewError('EVENT_DATE_REQUIRED',400);
+   if(!validRetentionDate(ev.rows[0].event_date,retention,ev.rows[0].today))throw new ReviewError('RETENTION_OUT_OF_RANGE',400);
    await client.query(`UPDATE fg_events SET status='published',privacy_notice=$2,privacy_approved_at=NOW(),retention_until=$3,updated_at=NOW() WHERE id=$1`,[eventId,notice,retention]);
    detail={retentionUntil:retention};
   }else if(action==='suspend-event'){

@@ -145,7 +145,8 @@ check('CSRF: mutation from foreign Origin -> 403',(await admin.req('/api/footbal
 check('CSRF: Origin "null" -> 403 (not a 500)',(await admin.req('/api/football-gallery/admin/events',{method:'POST',json:{title:'x'},origin:'null'})).status===403);
 
 // ================= 2. event + players
-const evA=(await admin.req('/api/football-gallery/admin/events',{method:'POST',json:{title:'U10 Bangkok Cup 2026',venue:'สนามกีฬากลาง',date:'2026-11-08'}})).body.event;
+const testEventDate=new Date().toISOString().slice(0,10);
+const evA=(await admin.req('/api/football-gallery/admin/events',{method:'POST',json:{title:'U10 Bangkok Cup 2026',venue:'สนามกีฬากลาง',date:testEventDate}})).body.event;
 check('create event (draft)',evA?.status==='draft',JSON.stringify(evA));
 const players={};
 for(const [name,jersey] of [['น้องเอ','7'],['น้องบี','10'],['น้องซี','3']]){const r=await admin.req('/api/football-gallery/admin/players',{method:'POST',json:{event:evA.id,name,jersey,team:'Tigers'}});players[name]=r.body.player}
@@ -215,6 +216,16 @@ check('LINE link cannot be created before PDPA publish (409)',(await admin.req('
 const notice='ผู้ควบคุมข้อมูล: ทีม Tigers ใช้ภาพเพื่อแจกจ่ายให้ผู้ปกครองนักกีฬาในงานนี้เท่านั้น ขอถอดภาพได้ทุกเมื่อผ่านปุ่มในอัลบั้ม';
 check('publish without retention date -> 400',(await review({action:'publish-event',eventId:evA.id,notice,confirmed:true})).status===400);
 const retention=new Date(Date.now()+180*86400000).toISOString().slice(0,10);
+const tooLate=new Date(Date.now()+730*86400000).toISOString().slice(0,10);
+const longRetention=await review({action:'publish-event',eventId:evA.id,notice,retentionUntil:tooLate,confirmed:true});
+check('server rejects retention over one year',longRetention.status===400&&longRetention.body.code==='RETENTION_OUT_OF_RANGE');
+const undated=(await admin.req('/api/football-gallery/admin/events',{method:'POST',json:{title:'Undated retention test'}})).body.event;
+const missingDate=await review({action:'publish-event',eventId:undated.id,notice,retentionUntil:retention,confirmed:true});
+check('server requires an event date before publication',missingDate.status===400&&missingDate.body.code==='EVENT_DATE_REQUIRED');
+const setDate=await admin.req('/api/football-gallery/admin/events',{method:'PATCH',json:{event:undated.id,date:testEventDate}});
+check('admin can set a missing draft date',ok(setDate));
+const replaceDate=await admin.req('/api/football-gallery/admin/events',{method:'PATCH',json:{event:undated.id,date:testEventDate}});
+check('existing event date cannot be overwritten',replaceDate.status===409);
 check('publish event with Privacy Notice + retention date',ok(await review({action:'publish-event',eventId:evA.id,notice,retentionUntil:retention,confirmed:true})));
 const invite=await admin.req('/api/football-gallery/admin/grants',{method:'POST',json:{event:evA.id,type:'invite',label:'กลุ่ม LINE ผู้ปกครอง U10',days:14}});
 check('create LINE invite link (+ openExternalBrowser variant)',invite.status===201&&invite.body.url.includes('/football-gallery/invite/')&&invite.body.externalUrl.includes('openExternalBrowser=1'));
@@ -325,7 +336,7 @@ for(let i=0;i<10;i++){const r=await guesser.req('/api/football-gallery/access',{
 check('event code guessing is rate limited (429)',limited>0,`429 count ${limited}`);
 
 // ================= 10. second event keeps first access
-const evB=(await admin.req('/api/football-gallery/admin/events',{method:'POST',json:{title:'U12 Friendly',date:'2026-11-09'}})).body.event;
+const evB=(await admin.req('/api/football-gallery/admin/events',{method:'POST',json:{title:'U12 Friendly',date:testEventDate}})).body.event;
 const upB=await upload(evB.id,'IMG_9001.jpg',{batch:randomUUID()});
 check('same file in a different event is allowed (not a duplicate)',upB.verify?.status===200);
 await review({action:'approve',eventId:evB.id,mediaId:upB.info.mediaId,...evidence});

@@ -1,6 +1,7 @@
 import {randomBytes} from 'node:crypto';
-import {db} from '../../../../../lib/football-gallery-server';
+import {db,isUuid} from '../../../../../lib/football-gallery-server';
 import {adminGuard,adminReply as send,audit} from '../../../../../lib/football-gallery-admin';
+import {oneYearAfterEvent} from '../../../../../lib/football-gallery-retention';
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
 export async function GET(request){
@@ -15,6 +16,20 @@ export async function GET(request){
    FROM fg_events e ORDER BY e.created_at DESC LIMIT 100`);
   return send({events:q.rows});
  }catch(e){console.error('fg admin events',e?.code||'unknown');return send({message:'ไม่สามารถอ่านข้อมูล'},503)}
+}
+// Fill a missing event date only while the event is still a draft.
+export async function PATCH(request){
+ const {admin,error}=await adminGuard(request,{mutation:true});if(error)return error;
+ let d;try{d=await request.json()}catch{return send({message:'ข้อมูลไม่ถูกต้อง'},400)}
+ if(!isUuid(d?.event)||typeof d.date!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(d.date)||!oneYearAfterEvent(d.date))return send({message:'วันจัดงานไม่ถูกต้อง'},400);
+ const client=await db().connect();
+ try{
+  await client.query('BEGIN');
+  const q=await client.query("UPDATE fg_events SET event_date=$2,updated_at=NOW() WHERE id=$1 AND status='draft' AND event_date IS NULL RETURNING id",[d.event,d.date]);
+  if(!q.rowCount){await client.query('ROLLBACK');return send({message:'กำหนดวันได้เฉพาะงาน Draft ที่ยังไม่มีวันจัดงาน'},409)}
+  await audit(client,{adminId:admin.id,eventId:d.event,action:'event.set_date'});
+  await client.query('COMMIT');return send({ok:true});
+ }catch(e){await client.query('ROLLBACK');console.error('fg event date',e?.code||'unknown');return send({message:'บันทึกวันจัดงานไม่สำเร็จ'},503)}finally{client.release()}
 }
 export async function POST(request){
  const {admin,error}=await adminGuard(request,{mutation:true});if(error)return error;

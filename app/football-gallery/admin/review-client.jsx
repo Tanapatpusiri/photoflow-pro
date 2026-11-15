@@ -17,7 +17,7 @@ export default function ReviewClient({event,players,onUpdated,onPlayersChanged})
  const [removals,setRemovals]=useState([]),[auditLog,setAuditLog]=useState([]),[verifying,setVerifying]=useState({});
  const load=async(p=1,f=filter)=>{setLoading(true);try{const d=await get('/media?event='+encodeURIComponent(event.id)+'&page='+p+(f?'&status='+f:''));setItems(old=>p===1?d.items:[...old,...d.items]);setHasMore(d.hasMore);setPage(p);setError('')}catch(e){setError(e.message)}finally{setLoading(false)}};
  const loadSide=async()=>{try{const [g,r,a]=await Promise.all([get('/grants?event='+event.id),get('/removals?event='+event.id),get('/audit?event='+event.id)]);setGrants(g.grants);setRemovals(r.requests);setAuditLog(a.entries.slice(0,20))}catch(e){setError(e.message)}};
- useEffect(()=>{setActive(null);setItems([]);setPage(1);setIssued(null);setPublish({notice:'',retention:oneYearAfterEvent(event.event_date),attest:false});load(1);loadSide()},[event.id]);
+ useEffect(()=>{setActive(null);setItems([]);setPage(1);setIssued(null);setPublish({notice:'',retention:oneYearAfterEvent(event.event_date),attest:false});load(1);loadSide()},[event.id,event.event_date]);
  const select=item=>{setActive(item);setTags(item.players||[]);setApproval({basis:'',evidence:'',attest:false});setError('');setInfo('')};
  const run=async(task,ok)=>{if(busy)return;setBusy(true);setError('');setInfo('');try{await task();if(ok)setInfo(ok)}catch(e){setError(e.message)}finally{setBusy(false)}};
  const review=(action,data={},ok)=>run(async()=>{await post('/review',{action,eventId:event.id,mediaId:active?.id,...data});await load(1);setActive(null);await onUpdated?.();await loadSide()},ok);
@@ -74,10 +74,10 @@ export default function ReviewClient({event,players,onUpdated,onPlayersChanged})
    :event.status==='suspended'?<><p>งานนี้ถูกระงับอยู่ ผู้ปกครองเข้าไม่ได้</p><button disabled={busy} onClick={()=>review('resume-event',{},'เปิดการเผยแพร่อีกครั้งแล้ว')}>เปิดการเผยแพร่อีกครั้ง</button></>
    :<><p>ใส่ Privacy Notice ที่ใช้กับงานนี้จริง และวันสิ้นสุดการเก็บรักษา หลังวันดังกล่าวลิงก์และรหัสทั้งหมดจะใช้ไม่ได้ หากยังไม่ได้รับความยินยอม/ฐานกฎหมาย ไม่ควรเผยแพร่</p>
     <textarea rows={5} value={publish.notice} onChange={e=>setPublish(p=>({...p,notice:e.target.value}))} placeholder="ผู้ควบคุมข้อมูล วัตถุประสงค์ สิทธิ์ ระยะเก็บและช่องทางขอถอดรูป"/>
-    <label>เปิดให้เข้าถึงถึงวันที่<input type="date" value={publish.retention} min={inDays(1)} onChange={e=>setPublish(p=>({...p,retention:e.target.value}))}/></label>
-    <p>{event.event_date?'ค่าเริ่มต้นคือ 1 ปีหลังวันจัดงาน':'งานนี้ไม่มีวันจัดงาน กรุณากำหนดวันสิ้นสุดด้วยตนเอง'} เมื่อครบกำหนดระบบจะปิดการเข้าถึง แต่ไฟล์ยังอยู่ในที่เก็บจนกว่าเจ้าของจะยืนยันและดำเนินการลบ</p>
+    <label>เปิดให้เข้าถึงถึงวันที่<input type="date" value={publish.retention} min={inDays(1)} max={oneYearAfterEvent(event.event_date)||undefined} onChange={e=>setPublish(p=>({...p,retention:e.target.value}))}/></label>
+    <p>{event.event_date?'เข้าถึงได้ไม่เกิน 1 ปีหลังวันจัดงาน':'กรุณาบันทึกวันจัดงานก่อนเผยแพร่'} เมื่อครบกำหนดระบบจะปิดการเข้าถึง แต่ไฟล์ยังอยู่ในที่เก็บจนกว่าเจ้าของจะยืนยันและดำเนินการลบ</p>
     <label className="fga-check"><input type="checkbox" checked={publish.attest} onChange={e=>setPublish(p=>({...p,attest:e.target.checked}))}/>ยืนยันว่าภาพที่อนุมัติมีฐานกฎหมายครบ และ Privacy Notice ถูกต้อง</label>
-    <button disabled={busy||publish.notice.trim().length<40||!publish.retention||!publish.attest} onClick={()=>review('publish-event',{notice:publish.notice,retentionUntil:publish.retention,confirmed:publish.attest},'เผยแพร่อัลบั้มส่วนตัวแล้ว')}>เผยแพร่อัลบั้มส่วนตัว</button></>}
+    <button disabled={busy||publish.notice.trim().length<40||!event.event_date||!publish.retention||!publish.attest} onClick={()=>review('publish-event',{notice:publish.notice,retentionUntil:publish.retention,confirmed:publish.attest},'เผยแพร่อัลบั้มส่วนตัวแล้ว')}>เผยแพร่อัลบั้มส่วนตัว</button></>}
   </div>
 
   {event.status==='published'&&<div className="fga-review-policy"><h3>ส่งลิงก์ผู้ปกครอง</h3>
