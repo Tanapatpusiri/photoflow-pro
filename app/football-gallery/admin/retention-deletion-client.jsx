@@ -1,7 +1,7 @@
 'use client';
 import {useEffect,useState} from 'react';
 const STATUS={matched:'พบและข้อมูลตรง',pending:'อัปโหลดค้าง',other_storage:'ที่เก็บอื่น ยังไม่ได้ตรวจ',folder_unknown:'ไม่มีข้อมูลโฟลเดอร์สำหรับตรวจ',identity_mismatch:'ข้อมูลไฟล์ไม่ตรง',folder_mismatch:'ไฟล์อยู่นอกโฟลเดอร์ที่บันทึก',size_mismatch:'ขนาดไฟล์ไม่ตรง',hash_unavailable:'ยังไม่มี SHA-256 จาก Drive',hash_mismatch:'SHA-256 ไม่ตรง',unavailable:'ไม่พบไฟล์หรือไม่มีสิทธิ์ตรวจ',check_failed:'ตรวจไม่สำเร็จ'};
-const FOLDER_STATUS={recorded:'มีรายการในระบบ',untracked:'ไม่มีรายการไฟล์ในระบบ',identity_mismatch:'รหัสไฟล์ไม่ตรงกับรายการ',preview_folder:'โฟลเดอร์ภาพตัวอย่าง',other_folder:'โฟลเดอร์อื่น ต้องตรวจแยก'};
+const FOLDER_STATUS={recorded:'มีรายการในงานนี้',pending_record:'มีรายการอัปโหลดค้างในงานนี้',untracked:'ไม่มีรายการไฟล์ในงานนี้',identity_mismatch:'รหัสไฟล์ไม่ตรงกับรายการ',preview_folder:'โฟลเดอร์ภาพตัวอย่าง',other_folder:'โฟลเดอร์อื่น ต้องตรวจแยก'};
 export default function RetentionDeletionReview({event}){
  const [reviews,setReviews]=useState([]),[error,setError]=useState(''),[busy,setBusy]=useState(false),[loading,setLoading]=useState(true),[loaded,setLoaded]=useState(false);
  const [inventory,setInventory]=useState(null),[inventoryError,setInventoryError]=useState(''),[folderResult,setFolderResult]=useState(null),[folderError,setFolderError]=useState('');

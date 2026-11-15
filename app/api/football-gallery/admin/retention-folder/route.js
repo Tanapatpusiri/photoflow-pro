@@ -18,9 +18,11 @@ export async function GET(request){
   const data=await listFolderPage(folder,token);
   const entries=Array.isArray(data?.files)?data.files:[];
   const ids=entries.filter(x=>x.mimeType!==FOLDER&&typeof x.id==='string').map(x=>x.id);
-  const records=ids.length?await db().query(`SELECT f.id,f.r2_key FROM fg_media_files f JOIN fg_media m ON m.id=f.media_id WHERE m.event_id=$1 AND f.storage='drive' AND f.r2_key=ANY($2::text[])`,[event,ids]):{rows:[]};
+  const appIds=entries.map(x=>x.appProperties?.fgFileId).filter(isUuid);
+  const records=ids.length?await db().query(`SELECT f.id,f.r2_key FROM fg_media_files f JOIN fg_media m ON m.id=f.media_id WHERE m.event_id=$1 AND f.storage='drive' AND (f.r2_key=ANY($2::text[]) OR f.id=ANY($3::uuid[]))`,[event,ids,appIds]):{rows:[]};
   const known=new Map(records.rows.map(x=>[x.r2_key,x.id]));
-  const items=entries.map(x=>({name:x.name||'(ไม่มีชื่อ)',trashed:x.trashed===true,status:x.mimeType===FOLDER?(x.id===previewFolder?'preview_folder':'other_folder'):!known.has(x.id)?'untracked':known.get(x.id)===x.appProperties?.fgFileId?'recorded':'identity_mismatch'}));
+  const byId=new Map(records.rows.map(x=>[x.id,x.r2_key]));
+  const items=entries.map(x=>{const appId=x.appProperties?.fgFileId;let status;if(x.mimeType===FOLDER)status=x.id===previewFolder?'preview_folder':'other_folder';else if(known.has(x.id))status=known.get(x.id)===appId?'recorded':'identity_mismatch';else if(byId.has(appId))status=String(byId.get(appId)).startsWith('pending:')?'pending_record':'identity_mismatch';else status='untracked';return {name:x.name||'(ไม่มีชื่อ)',trashed:x.trashed===true,status}});
   return reply({items,nextToken:typeof data?.nextPageToken==='string'?data.nextPageToken:null,incomplete:data?.incompleteSearch===true,scope});
  }catch(e){console.error('fg retention folder',e?.code||'unknown');return reply({message:'ตรวจโฟลเดอร์ไม่สำเร็จ กรุณาลองใหม่'},503)}
 }
