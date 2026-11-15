@@ -47,3 +47,34 @@
  .fga-tabs:not(.fga-tabs-main) button{justify-content:center;padding:9px 4px;font-size:13px;white-space:normal;text-align:center;border-radius:14px;line-height:1.25}
  .fga-next-step .fga-actions>button{flex:1 1 140px}
 }
+.fga-hint{display:block;font-size:12px;font-weight:400;color:#77777d;line-height:1.5}
+.fga-review-detail p.fga-hint{margin:-4px 0 0}
+.fga-gps{background:#f6f7f9;border-radius:14px;padding:12px 14px;display:grid;gap:6px;font-size:13px}
+.fga-gps-found{background:#fff8ec;border:1px solid #f3dcb5;color:#6b4a1e}
+.fga-gps p{margin:0}
+.fga-gps summary{cursor:pointer;font-weight:600}
+.fga-gps ol{margin:8px 0 0;padding-left:18px;display:grid;gap:6px;line-height:1.5}
+.fga-files summary{cursor:pointer;font-size:13px;color:#555;padding:4px 0}
+.fga-approve-bar{display:grid;grid-template-columns:1fr auto;gap:8px}
+.fga-steps{list-style:none;margin:0 0 16px;padding:0;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;counter-reset:step}
+.fga-steps li{display:grid;justify-items:center;text-align:center;gap:3px;font-size:12px;color:#9a9aa0}
+.fga-steps li span{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:#f0f0f2;font-weight:650}
+.fga-steps li strong{font-size:12px;font-weight:600}
+.fga-steps li small{font-size:11px;line-height:1.3}
+.fga-steps li.now{color:#202024}.fga-steps li.now span{background:#303033;color:#fff}
+.fga-steps li.done{color:#2f6b3c}.fga-steps li.done span{background:#e3f1e6;color:#2f6b3c}
+.fga-progress{height:8px;border-radius:999px;background:#eff0f2;overflow:hidden;margin:10px 0}
+.fga-progress i{display:block;height:100%;background:#303033;transition:width .3s}
+.fga-summary{display:grid;gap:10px;background:#f7f7f8;border-radius:18px;padding:16px;margin:12px 0}
+.fga-summary dl{margin:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(76px,1fr));gap:8px}
+.fga-summary dl>div{background:#fff;border-radius:12px;padding:10px}
+.fga-summary dt{font-size:12px;color:#77777d}
+.fga-summary dd{margin:2px 0 0;font-size:22px;font-weight:700}
+.fga-summary .bad dd{color:#9a3a2c}
+.fga-summary p{margin:0;font-size:13px}
+.fga-summary .fga-primary{justify-self:start}
+@media(max-width:560px){
+ .fga-review-photo{max-height:42vh}
+ .fga-approve-bar{position:sticky;bottom:0;z-index:2;background:#fff;padding:10px 0 calc(env(safe-area-inset-bottom) + 10px);box-shadow:0 -10px 14px #fff}
+ .fga-summary .fga-primary{justify-self:stretch}
+}

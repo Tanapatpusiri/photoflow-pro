@@ -34,6 +34,22 @@ assert.match(page,/\+ อัปโหลดรูป<\/button>/);
 // Step tabs fit a phone screen without sideways scrolling.
 const css=await readFile('app/football-gallery/admin/admin.css','utf8');
 assert.match(css,/@media\(max-width:560px\)\{\s*\.fga-tabs:not\(\.fga-tabs-main\)\{display:grid;grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/);
+// Permission fields explain what to write, and the GPS note says who sees the location and how to check it.
+for(const part of ['BASIS_HINT','EVIDENCE_HINT','aria-describedby="fga-basis-hint"','aria-describedby="fga-evidence-hint"'])assert.ok(review.includes(part),part);
+assert.match(review,/กดดาวน์โหลดไฟล์ต้นฉบับ/);
+assert.match(review,/<summary>วิธีตรวจและตัดสินใจ<\/summary>/);
+// Review on a phone: verified files fold away and the approve buttons stay pinned near the bottom.
+assert.match(review,/className="fga-files"/);
+assert.match(review,/<div className="fga-approve-bar">/);
+assert.match(css,/\.fga-approve-bar\{position:sticky;bottom:0/);
+// Upload shows the album flow, live progress and a result summary with a way on to review.
+const upload=await readFile('app/football-gallery/admin/upload-client.jsx','utf8');
+assert.ok(upload.includes("['เลือกไฟล์','อัปโหลด','ตรวจภาพ','เผยแพร่']"),'upload steps');
+assert.match(upload,/const current=done\.indexOf\(false\)/);
+assert.match(upload,/role="progressbar"/);
+for(const label of ['สำเร็จ','มีอยู่แล้ว (ข้าม)','ไม่สำเร็จ'])assert.ok(upload.includes('<dt>'+label+'</dt>'),label);
+assert.match(upload,/onClick=\{onReview\}/);
+assert.match(page,/<Uploader eventId=\{active\.id\} album=\{\{/);
 // The site root opens Football Gallery; the old PhotoFlow demo is no longer the front page.
 const root=await readFile('app/page.js','utf8');
 assert.match(root,/redirect\('\/football-gallery'\)/);

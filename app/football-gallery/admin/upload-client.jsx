@@ -94,8 +94,19 @@ async function exifOf(file){
  try{return probeExif(new Uint8Array(await file.slice(0,262144).arrayBuffer()))}catch{return null}
 }
 
-export default function Uploader({eventId,onUploaded}){
- const [files,setFiles]=useState([]),[camera,setCamera]=useState(''),[running,setRunning]=useState(false),[errors,setErrors]=useState([]),[status,setStatus]=useState({}),[summary,setSummary]=useState(null);
+// Where the album stands in the whole flow: choose files → upload → review → publish.
+function Steps({files,running,progress,summary,album}){
+ const uploaded=summary?summary.failed===0:!running&&files===0&&album.media>0;
+ const done=[files>0||!!summary||album.media>0,uploaded,album.media>0&&album.pending===0&&uploaded,album.live];
+ // Only the first unfinished step is the current one.
+ const current=done.indexOf(false);
+ const notes=[files>0?files.toLocaleString('th-TH')+' ไฟล์':'',running?`${progress.toLocaleString('th-TH')}/${files.toLocaleString('th-TH')} ไฟล์`:summary&&summary.failed?`ไม่สำเร็จ ${summary.failed} ไฟล์`:'',album.pending>0?`รอตรวจ ${album.pending.toLocaleString('th-TH')}`:'',''];
+ const steps=['เลือกไฟล์','อัปโหลด','ตรวจภาพ','เผยแพร่'].map((label,i)=>[label,done[i]&&(current===-1||i<current)?'done':i===current?'now':'todo',notes[i]]);
+ return <ol className="fga-steps" aria-label="ขั้นตอนของอัลบั้ม">{steps.map(([label,state,note],i)=><li key={label} className={state} aria-current={state==='now'?'step':undefined}><span>{state==='done'?'✓':i+1}</span><strong>{label}</strong>{note&&<small>{note}</small>}</li>)}</ol>;
+}
+
+export default function Uploader({eventId,album={media:0,pending:0,live:false},onUploaded,onReview,onPublish}){
+ const [files,setFiles]=useState([]),[camera,setCamera]=useState(''),[running,setRunning]=useState(false),[errors,setErrors]=useState([]),[status,setStatus]=useState({}),[summary,setSummary]=useState(null),[progress,setProgress]=useState(0),[failedNames,setFailedNames]=useState([]);
  const controller=useRef(null);
  const set=(key,value)=>setStatus(s=>({...s,[key]:value}));
  async function uploadOne(f,key,batch,signal){
@@ -157,7 +168,7 @@ export default function Uploader({eventId,onUploaded}){
  }
  async function run(){
   if(!eventId||files.length===0||running)return;
-  setRunning(true);setErrors([]);setSummary(null);
+  setRunning(true);setErrors([]);setSummary(null);setProgress(0);setFailedNames([]);
   controller.current=new AbortController();
   // JPEG and RAW of the same frame must be in the same batch to be paired into one item.
   const batch=crypto.randomUUID();let cursor=0;const counts={ok:0,duplicate:0,failed:0};
@@ -165,19 +176,29 @@ export default function Uploader({eventId,onUploaded}){
    while(cursor<files.length&&!controller.current.signal.aborted){
     const index=cursor++,f=files[index],key=f.name+'-'+index;
     try{counts[await uploadOne(f,key,batch,controller.current.signal)]++}
-    catch(e){counts.failed++;set(key,'ผิดพลาด · กดเริ่มอีกครั้งเพื่ออัปโหลดต่อ');setErrors(s=>[...s,f.name+': '+e.message])}
+    catch(e){counts.failed++;setFailedNames(s=>[...s,f.name]);set(key,'ผิดพลาด · กดเริ่มอีกครั้งเพื่ออัปโหลดต่อ');setErrors(s=>[...s,f.name+': '+e.message])}
+    setProgress(n=>n+1);
    }
   };
   await Promise.all([worker(),worker(),worker()]);
-  setRunning(false);setSummary(counts);onUploaded?.();
+  const stopped=controller.current.signal.aborted;setRunning(false);setSummary({...counts,skipped:files.length-counts.ok-counts.duplicate-counts.failed,stopped});onUploaded?.();
  }
  const total=files.reduce((n,f)=>n+f.size,0);
  return <div className="fga-uploader">
+  <Steps files={files.length} running={running} progress={progress} summary={summary} album={album}/>
   <label>ชื่อกล้อง (ไม่บังคับ)<input value={camera} onChange={e=>setCamera(e.target.value)} placeholder="เช่น Canon R6 กล้อง 1" disabled={running}/></label>
   <label>เลือกรูปหรือวิดีโอ (เลือกได้หลายไฟล์พร้อมกัน)<input type="file" multiple disabled={running} accept=".jpg,.jpeg,.arw,.cr2,.cr3,.nef,.raf,.dng,.orf,.rw2,.pef,.srw,.3fr,.iiq,.mov,.mp4,.m4v" onChange={e=>{setFiles(Array.from(e.target.files||[]));setStatus({});setErrors([]);setSummary(null)}}/></label>
   <p>เลือกแล้ว {files.length.toLocaleString('th-TH')} ไฟล์ · {fmtBytes(total)} · ถ้ามีไฟล์ JPEG และ RAW ของรูปเดียวกัน ให้เลือกพร้อมกัน ระบบจะรวมเป็นรูปเดียว</p>
   {running?<button onClick={()=>controller.current?.abort()} className="fga-quiet-btn">หยุดชั่วคราว (อัปโหลดต่อได้ภายหลัง)</button>:<button disabled={files.length===0} onClick={run}>{Object.keys(status).length?'อัปโหลดต่อ / ลองใหม่':'เริ่มอัปโหลด'}</button>}
-  {summary&&<p role="status" className="fga-message">อัปโหลดสำเร็จ {summary.ok} · มีอยู่แล้ว {summary.duplicate} · ไม่สำเร็จ {summary.failed}</p>}
+  {running&&<div className="fga-progress" role="progressbar" aria-valuemin={0} aria-valuemax={files.length} aria-valuenow={progress} aria-label="ความคืบหน้าการอัปโหลด"><i style={{width:(files.length?progress/files.length*100:0)+'%'}}/></div>}
+  {summary&&<div role="status" className="fga-summary">
+   <strong>{summary.stopped?'หยุดอัปโหลดไว้ชั่วคราว':summary.failed?'อัปโหลดเสร็จ แต่มีบางไฟล์ไม่สำเร็จ':'อัปโหลดเสร็จแล้ว'}</strong>
+   <dl><div><dt>สำเร็จ</dt><dd>{summary.ok.toLocaleString('th-TH')}</dd></div><div><dt>มีอยู่แล้ว (ข้าม)</dt><dd>{summary.duplicate.toLocaleString('th-TH')}</dd></div><div className={summary.failed?'bad':''}><dt>ไม่สำเร็จ</dt><dd>{summary.failed.toLocaleString('th-TH')}</dd></div>{summary.skipped>0&&<div><dt>ยังไม่ได้เริ่ม</dt><dd>{summary.skipped.toLocaleString('th-TH')}</dd></div>}</dl>
+   {failedNames.length>0&&<p>ไฟล์ที่ไม่สำเร็จ: {failedNames.slice(0,10).join(', ')}{failedNames.length>10?` และอีก ${failedNames.length-10} ไฟล์`:''} · กด "อัปโหลดต่อ / ลองใหม่" ระบบจะอัปโหลดเฉพาะไฟล์ที่ยังไม่ครบ ไฟล์ที่สำเร็จแล้วจะถูกข้าม</p>}
+   {summary.duplicate>0&&<p>ไฟล์ที่ "มีอยู่แล้ว" คือไฟล์เดียวกันที่เคยอัปโหลดเข้าอัลบั้มนี้ ระบบไม่เก็บซ้ำ</p>}
+   {(summary.ok>0||album.pending>0)&&onReview&&<button className="fga-primary" onClick={onReview}>ไปตรวจภาพ{album.pending>0?` (รอตรวจ ${album.pending.toLocaleString('th-TH')})`:''} ›</button>}
+  </div>}
+  {!summary&&!running&&files.length===0&&album.media>0&&album.pending===0&&!album.live&&onPublish&&<button className="fga-quiet-btn" onClick={onPublish}>ตรวจครบแล้ว ไปเผยแพร่ ›</button>}
   {files.length>0&&<div className="fga-upload-list">{files.slice(0,200).map((f,i)=><div key={i}><span>{f.name} · {fmtBytes(f.size)}</span><small>{status[f.name+'-'+i]||'รออัปโหลด'}</small></div>)}{files.length>200&&<p>แสดงสถานะ 200 ไฟล์แรกจาก {files.length.toLocaleString('th-TH')} ไฟล์</p>}</div>}
   {errors.length>0&&<div role="alert">{errors.slice(-12).map((e,i)=><p key={i} className="fga-message">{e}</p>)}</div>}
   <p>ระบบเก็บไฟล์ต้นฉบับตามจริง ไม่ย่อขนาดและไม่แก้ไขรูป ถ้าอัปโหลดค้างหรือหยุดไว้ กลับมากดอัปโหลดต่อได้ ผู้ปกครองจะยังมองไม่เห็นรูปจนกว่าคุณจะตรวจภาพและกดเผยแพร่</p>

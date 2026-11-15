@@ -19,6 +19,6 @@ assert.match(review,/ถ่ายเมื่อ '\+formatCaptureTime\(active\.c
 assert.doesNotMatch(review,/\/1e6\)\.toFixed\(1\)\} MB/);
 assert.match(review,/useEffect\(\(\)=>\{if\(uploadKey\)load\(1\)\},\[uploadKey\]\)/);
 const page=await readFile('app/football-gallery/admin/page.jsx','utf8');
-assert.match(page,/onUploaded=\{\(\)=>\{setUploadKey\(n=>n\+1\);setUploadedAlbum\(active\.id\);return load\(\)\}\}/);
+assert.match(page,/onUploaded=\{\(\)=>\{setUploadKey\(n=>n\+1\);return load\(\)\}\}/);
 assert.match(page,/uploadKey=\{uploadKey\}/);
 console.log('PASS: sizes under 1 MB show in KB, capture times keep camera time, review list reloads after uploads');
