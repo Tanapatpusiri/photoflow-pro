@@ -19,7 +19,7 @@ const inDays=n=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Bangkok'}).forma
 export default function ReviewClient({event,players,retentionMonths,uploadKey=0,onUpdated,onPlayersChanged,view='all',onNavigate}){
  const show=part=>view==='all'||view===part;
  const [items,setItems]=useState([]),[active,setActive]=useState(null),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false),[error,setError]=useState(''),[info,setInfo]=useState(''),[page,setPage]=useState(1),[hasMore,setHasMore]=useState(false),[filter,setFilter]=useState('');
- const [tags,setTags]=useState([]),[approval,setApproval]=useState({basis:'',evidence:'',attest:false,gps:false,noChildren:false});
+ const [tags,setTags]=useState([]),[approval,setApproval]=useState({noChildren:false}),[newName,setNewName]=useState('');
  const [privacy,setPrivacy]=useState({player:'',basis:'',evidence:'',attest:false});
  const [publish,setPublish]=useState({notice:'',edited:false,retention:addRetentionMonths(event.event_date,retentionMonths),attest:false});
  const [grants,setGrants]=useState([]),[grantLabel,setGrantLabel]=useState(''),[grantDays,setGrantDays]=useState(14),[issued,setIssued]=useState(null);
@@ -31,31 +31,29 @@ export default function ReviewClient({event,players,retentionMonths,uploadKey=0,
  useEffect(()=>{if(uploadKey)load(1)},[uploadKey]);
  useEffect(()=>{if(retentionMonths)setPublish(p=>p.retention?p:{...p,retention:addRetentionMonths(event.event_date,retentionMonths)})},[retentionMonths,event.event_date]);
  // Basis and evidence usually apply to the whole match, so they are kept between photos; the confirmations are per photo.
- const select=item=>{setActive(item);setTags(item.players||[]);setApproval(a=>({basis:a.basis,evidence:a.evidence,carried:!!(a.basis.trim()||a.evidence.trim()),attest:false,gps:false,noChildren:false}));setError('');setInfo('')};
+ const select=item=>{setActive(item);setTags(item.players||[]);setApproval({noChildren:false});setNewName('');setError('');setInfo('')};
  const run=async(task,ok)=>{if(busy)return;setBusy(true);setError('');setInfo('');try{await task();if(ok)setInfo(ok)}catch(e){setError(e.message)}finally{setBusy(false)}};
  const review=(action,data={},ok)=>run(async()=>{await post('/review',{action,eventId:event.id,mediaId:active?.id,...data});await load(1);setActive(null);await onUpdated?.();await loadSide()},ok);
  const savedTags=active?.players||[];
  const tagsDirty=!!active&&(tags.length!==savedTags.length||tags.some(t=>!savedTags.includes(t)));
+ // Typing a name that is not in the list adds the child to the album and selects them. "Name #10" also stores the shirt number.
+ const addName=e=>{e.preventDefault();const raw=newName.trim();if(!raw||busy)return;const m=/^(.*?)\s*#\s*([0-9A-Za-z-]{1,12})$/.exec(raw);const name=(m?m[1]:raw).trim().slice(0,100);if(!name)return;
+  run(async()=>{const r=await fetch(api+'/players',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({event:event.id,name,jersey:m?m[2]:''})});const d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d.message||'เพิ่มชื่อไม่สำเร็จ');await onPlayersChanged?.();setTags(t=>[...t,d.player.id]);setApproval({noChildren:false});setNewName('')},'เพิ่มชื่อแล้ว')};
  const approve=()=>run(async()=>{
   if(tagsDirty){await post('/review',{action:'tag',eventId:event.id,mediaId:active.id,players:tags});setActive(a=>a&&{...a,players:[...tags]})}
-  await post('/review',{action:'approve',eventId:event.id,mediaId:active.id,basis:approval.basis,evidence:approval.evidence,confirmed:approval.attest,gpsConfirmed:approval.gps,noChildrenConfirmed:tags.length===0&&approval.noChildren});
+  await post('/review',{action:'approve',eventId:event.id,mediaId:active.id,noChildrenConfirmed:tags.length===0&&approval.noChildren});
   await load(1);setActive(null);await onUpdated?.();await loadSide();
  },'อนุมัติแล้ว');
  // Plain-language list of what still blocks each action, shown next to its button.
  const approveMissing=!active?[]:[
   active.files.some(f=>f.pending)&&'ไฟล์ยังอัปโหลดไม่ครบ',
   active.files.some(f=>['JPEG','RAW','VIDEO_ORIGINAL'].includes(f.variant)&&!f.pending&&!f.verifiedHash)&&'ตรวจความครบถ้วนของไฟล์ต้นฉบับ (กดปุ่มด้านบน)',
-  ...players.filter(p=>tags.includes(p.id)&&!p.privacy_recorded).map(p=>'ข้อ 1: บันทึกสิทธิ์ของ '+p.name+' ในแท็บ "นักฟุตบอล" ก่อน'),
-  approval.basis.trim().length<5&&'ข้อ 2: กรอกฐานทางกฎหมาย (อย่างน้อย 5 ตัวอักษร)',
-  approval.evidence.trim().length<5&&'ข้อ 2: กรอกหลักฐานการอนุญาต (อย่างน้อย 5 ตัวอักษร)',
-  !approval.attest&&'ข้อ 2: ติ๊กว่าเด็กทุกคนในภาพได้รับอนุญาต',
-  !approval.gps&&'ข้อ 3: ติ๊กว่าตรวจตำแหน่ง GPS แล้ว',
-  tags.length===0&&!approval.noChildren&&'ข้อ 1: ติ๊กชื่อเด็กในภาพ หรือติ๊กว่าไม่มีเด็กที่จำหน้าได้'
+  tags.length===0&&!approval.noChildren&&'เลือกว่าใครอยู่ในภาพ หรือเลือก "ไม่มีเด็กที่จำหน้าได้"'
  ].filter(Boolean);
  const privacyMissing=[!privacy.player&&'เลือกนักฟุตบอล',privacy.basis.trim().length<5&&'กรอกฐานการอนุญาต (อย่างน้อย 5 ตัวอักษร)',privacy.evidence.trim().length<5&&'กรอกหลักฐานอ้างอิง (อย่างน้อย 5 ตัวอักษร)',!privacy.attest&&'ติ๊กยืนยันการตรวจฐานกฎหมาย'].filter(Boolean);
  const notice=publish.edited?publish.notice:defaultNotice(event.title,publish.retention);
  const publishMax=addRetentionMonths(event.event_date,retentionMonths);
- const publishMissing=[notice.trim().length<40&&`ข้อความแจ้งผู้ปกครองสั้นเกินไป (อย่างน้อย 40 ตัวอักษร ตอนนี้ ${notice.trim().length})`,!event.event_date&&'บันทึกวันจัดงานก่อน (ด้านบนของหน้า)',event.event_date&&!retentionMonths&&'รอโหลดระยะเวลาเก็บภาพ',!publish.retention&&'เลือกวันสิ้นสุดการเข้าถึง',publish.retention&&publishMax&&publish.retention>publishMax&&'วันสิ้นสุดต้องไม่เกิน '+publishMax,publish.retention&&event.event_date&&publish.retention<=event.event_date.slice(0,10)&&'วันสิ้นสุดต้องหลังวันจัดงาน',!publish.attest&&'ติ๊กยืนยันว่าภาพที่อนุมัติได้รับอนุญาตแล้ว'].filter(Boolean);
+ const publishMissing=[notice.trim().length<40&&`ข้อความแจ้งผู้ปกครองสั้นเกินไป (อย่างน้อย 40 ตัวอักษร ตอนนี้ ${notice.trim().length})`,!event.event_date&&'บันทึกวันจัดงานก่อน (ด้านบนของหน้า)',event.event_date&&!retentionMonths&&'รอโหลดระยะเวลาเก็บภาพ',!publish.retention&&'เลือกวันสิ้นสุดการเข้าถึง',publish.retention&&publishMax&&publish.retention>publishMax&&'วันสิ้นสุดต้องไม่เกิน '+publishMax,publish.retention&&event.event_date&&publish.retention<=event.event_date.slice(0,10)&&'วันสิ้นสุดต้องหลังวันจัดงาน',!publish.attest&&'ติ๊กยืนยันว่าผู้ปกครองอนุญาตแล้ว'].filter(Boolean);
  const Missing=({items})=>items.length?<div className="fga-missing" role="note"><strong>ยังกดไม่ได้ เพราะยังขาด:</strong><ul>{items.map(m=><li key={m}>{m}</li>)}</ul></div>:null;
  const verify=file=>run(async()=>{
   for(let i=0;i<5000;i++){const r=await post('/verify-file',{fileId:file.id});if(r.status===202){setVerifying(v=>({...v,[file.id]:Math.floor(r.offset/r.bytes*100)}));continue}break}
@@ -88,34 +86,14 @@ export default function ReviewClient({event,players,retentionMonths,uploadKey=0,
     <div className="fga-review-form">
     {active.status==='hidden'?<button className="fga-quiet" disabled={busy} onClick={()=>review('restore',{},'กู้คืนแล้ว ต้องตรวจใหม่ก่อนเผยแพร่')}>กู้คืนเพื่อตรวจใหม่</button>:<>
     <section className="fga-step-card">
-     <h3><span>1</span>เด็กในภาพ</h3>
-     <p className="fga-hint">ติ๊กชื่อเด็กทุกคนที่เห็นหน้าในภาพ ถ้าไม่มีเด็กที่จำหน้าได้ ให้ติ๊กช่องสุดท้าย</p>
-     <div className="fga-checkboxes">{players.map(p=><label key={p.id}><input type="checkbox" checked={tags.includes(p.id)} onChange={e=>setTags(s=>e.target.checked?[...s,p.id]:s.filter(x=>x!==p.id))}/>{p.name} {p.jersey&&'#'+p.jersey}{!p.privacy_recorded&&' (ยังไม่บันทึกสิทธิ์)'}</label>)}</div>
-     {players.some(p=>tags.includes(p.id)&&!p.privacy_recorded)&&onNavigate&&<button className="fga-link" onClick={()=>onNavigate('players')}>บันทึกสิทธิ์ของเด็กที่ยังไม่บันทึก ในแท็บ "นักฟุตบอล" ›</button>}
-     {tags.length===0&&<label className="fga-check"><input type="checkbox" checked={approval.noChildren} onChange={e=>setApproval(a=>({...a,noChildren:e.target.checked}))}/>ไม่มีเด็กที่จำหน้าได้ในภาพนี้</label>}
-     {tagsDirty&&<p className="fga-hint" role="status">แท็กยังไม่ได้บันทึก ระบบจะบันทึกให้ตอนกดอนุมัติ หรือ <button className="fga-link fga-inline" disabled={busy} onClick={()=>review('tag',{players:tags},'บันทึกแท็กแล้ว')}>บันทึกแท็กตอนนี้</button></p>}
-    </section>
-    <section className="fga-step-card">
-     <h3><span>2</span>การอนุญาต</h3>
-   <label>ฐานทางกฎหมาย / ขอบเขตการอนุญาต<input value={approval.basis} onChange={e=>setApproval(a=>({...a,basis:e.target.value}))} placeholder="เช่น ผู้ปกครองยินยอมให้เผยแพร่ในอัลบั้มส่วนตัวของงานนี้" aria-describedby="fga-basis-hint"/><small id="fga-basis-hint" className="fga-hint">{BASIS_HINT}</small></label>
-   <label>หลักฐานการอนุญาต / อ้างอิง<input value={approval.evidence} onChange={e=>setApproval(a=>({...a,evidence:e.target.value}))} placeholder="เช่น แบบฟอร์มยินยอม เลขที่ 2569-014" aria-describedby="fga-evidence-hint"/><small id="fga-evidence-hint" className="fga-hint">{EVIDENCE_HINT}</small></label>
-   {approval.carried?<div className="fga-message" role="note"><strong>ตรวจก่อนใช้ค่าเดิมต่อ</strong> ระบบคงข้อความสองช่องนี้ไว้จากภาพก่อนหน้า เพื่อไม่ต้องพิมพ์ซ้ำ แต่ไม่ได้ตรวจแทนคุณ ก่อนอนุมัติภาพนี้ให้ตรวจว่าหลักฐานนี้ครอบคลุม<strong>เด็กทุกคนที่อยู่ในภาพนี้</strong>{tags.length>0?' ('+players.filter(p=>tags.includes(p.id)).map(p=>p.name).join(', ')+')':''} และการใช้ภาพนี้จริง ถ้าเด็กบางคนมีเงื่อนไขต่างกัน เช่น ยินยอมเฉพาะบางงาน หรือใช้แบบฟอร์มคนละฉบับ ให้แก้สองช่องนี้ให้ตรงกับภาพนี้ก่อน</div>:<p className="fga-hint">ข้อความในสองช่องนี้จะคงไว้ให้ภาพถัดไป แต่ต้องตรวจทุกครั้งว่ายังตรงกับเด็กในภาพนั้น</p>}
-     <label className="fga-check"><input type="checkbox" checked={approval.attest} onChange={e=>setApproval(a=>({...a,attest:e.target.checked}))}/>ตรวจแล้วว่าเด็กทุกคนในภาพได้รับอนุญาต</label>
-    </section>
-    <section className="fga-step-card">
-     <h3><span>3</span>ตำแหน่งที่ถ่าย (GPS)</h3>
-   <div className={active.has_gps?'fga-gps fga-gps-found':'fga-gps'} role="note">
-    <strong>{active.has_gps?'ไฟล์นี้มีตำแหน่งที่ถ่าย (GPS) ติดมาด้วย':'ไม่พบตำแหน่งที่ถ่ายในไฟล์นี้'}</strong>
-    <p>{active.has_gps?'ผู้ปกครองที่เข้าอัลบั้มนี้ได้และกดดาวน์โหลดไฟล์ต้นฉบับ จะเปิดดูตำแหน่งนี้บนแผนที่ได้':'แต่ระบบตรวจได้ไม่ครบทุกชนิดไฟล์ (โดยเฉพาะ RAW และวิดีโอ)'} · ภาพตัวอย่างที่แสดงในหน้าเว็บไม่มีตำแหน่งติดไปด้วย</p>
-    <details><summary>วิธีตรวจและตัดสินใจ</summary>
-     <ol>
-      <li>เปิดไฟล์ต้นฉบับในเครื่อง: Mac ใช้แอป Preview → Tools → Show Inspector → แท็บ GPS · Windows คลิกขวาที่ไฟล์ → Properties → Details → GPS · iPhone/Android เปิดในแอปรูปภาพแล้วปัดขึ้นดูแผนที่</li>
-      <li>ถ้าตำแหน่งคือสนามแข่งหรือสถานที่จัดงาน ซึ่งผู้ปกครองรู้อยู่แล้ว ถือว่าเปิดเผยได้ ติ๊กยืนยันด้านล่าง</li>
-      <li>ถ้าตำแหน่งคือบ้าน โรงเรียน หรือที่อื่นที่บอกว่าเด็กอยู่ที่ไหน อย่าอนุมัติ ให้กด "ซ่อนภาพนี้" แล้วลบตำแหน่งออกจากไฟล์ก่อนอัปโหลดใหม่ (ปิด Location ในกล้อง หรือใช้คำสั่ง Remove Location Info ในแอป Preview)</li>
-     </ol>
-    </details>
-   </div>
-     <label className="fga-check"><input type="checkbox" checked={approval.gps} onChange={e=>setApproval(a=>({...a,gps:e.target.checked}))}/>ตรวจตำแหน่งแล้ว เปิดเผยได้</label>
+     <h3>ใครอยู่ในภาพนี้</h3>
+     <p className="fga-hint">แตะชื่อเด็กทุกคนที่เห็นหน้าในภาพ ถ้าไม่มีในรายการ พิมพ์ชื่อเพิ่มได้เลย</p>
+     <div className="fga-pick">{players.map(p=><label key={p.id} className={tags.includes(p.id)?'on':''}><input type="checkbox" checked={tags.includes(p.id)} onChange={e=>{setTags(s=>e.target.checked?[...s,p.id]:s.filter(x=>x!==p.id));if(e.target.checked)setApproval({noChildren:false})}}/>{p.name}{p.jersey?' #'+p.jersey:''}</label>)}
+      <label className={tags.length===0&&approval.noChildren?'on fga-pick-none':'fga-pick-none'}><input type="checkbox" checked={tags.length===0&&approval.noChildren} onChange={e=>{if(e.target.checked)setTags([]);setApproval({noChildren:e.target.checked})}}/>ไม่มีเด็กที่จำหน้าได้</label>
+     </div>
+     <form className="fga-add-name" onSubmit={addName}><input value={newName} onChange={e=>setNewName(e.target.value)} placeholder="พิมพ์ชื่อเด็ก เช่น น้องบอล #10" maxLength={100} aria-label="เพิ่มชื่อเด็กที่ไม่มีในรายการ"/><button className="fga-quiet" disabled={busy||!newName.trim()}>เพิ่ม</button></form>
+     {tagsDirty&&<p className="fga-hint" role="status">ระบบจะบันทึกชื่อที่เลือกให้ตอนกดอนุมัติ</p>}
+     {active.has_gps&&<p className="fga-gps-note" role="note">ไฟล์นี้มีตำแหน่งที่ถ่าย (GPS) ผู้ปกครองที่ดาวน์โหลดไฟล์ต้นฉบับจะเห็นตำแหน่งนี้ ถ้าไม่ควรเปิดเผย ให้กด "ซ่อนภาพนี้"</p>}
     </section>
     <Missing items={approveMissing}/>
     <div className="fga-approve-bar">
@@ -154,7 +132,7 @@ export default function ReviewClient({event,players,retentionMonths,uploadKey=0,
      {publish.edited&&<button className="fga-link" type="button" onClick={()=>setPublish(p=>({...p,notice:'',edited:false}))}>ใช้ข้อความมาตรฐาน</button>}
     </details>
     <p>{event.event_date&&retentionMonths?`เข้าถึงได้ไม่เกิน ${retentionMonths} เดือนหลังวันจัดงาน`:!event.event_date?'กรุณาบันทึกวันจัดงานก่อนเผยแพร่':'กำลังโหลดระยะเวลาที่เจ้าของตั้ง'} เมื่อครบกำหนดระบบจะปิดการเข้าถึง แต่ไฟล์ยังอยู่ในที่เก็บจนกว่าเจ้าของจะยืนยันและดำเนินการลบ</p>{event.event_date&&retentionMonths&&publish.retention>addRetentionMonths(event.event_date,retentionMonths)&&<p role="alert">กรุณาปรับวันสิ้นสุดให้ไม่เกินระยะเวลาที่ตั้งไว้</p>}
-    <label className="fga-check"><input type="checkbox" checked={publish.attest} onChange={e=>setPublish(p=>({...p,attest:e.target.checked}))}/>ยืนยันว่าภาพที่อนุมัติได้รับอนุญาตแล้ว และข้อความแจ้งผู้ปกครองถูกต้อง</label>
+    <label className="fga-check"><input type="checkbox" checked={publish.attest} onChange={e=>setPublish(p=>({...p,attest:e.target.checked}))}/>ยืนยันว่าผู้ปกครองของเด็กทุกคนในภาพที่อนุมัติ อนุญาตให้เผยแพร่ในอัลบั้มส่วนตัวนี้แล้ว และข้อความแจ้งผู้ปกครองถูกต้อง</label>
     {event.published===0&&<p className="fga-message" role="note">ยังไม่มีภาพที่อนุมัติ ถ้าเผยแพร่ตอนนี้ ผู้ปกครองจะเห็นอัลบั้มว่าง</p>}<Missing items={publishMissing}/>
     <button disabled={busy||publishMissing.length>0} onClick={()=>review('publish-event',{notice,retentionUntil:publish.retention,confirmed:publish.attest},'เผยแพร่อัลบั้มส่วนตัวแล้ว')}>เผยแพร่อัลบั้มส่วนตัว</button></>}
   </div>

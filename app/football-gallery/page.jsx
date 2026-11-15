@@ -38,6 +38,7 @@ export default function FootballGallery() {
    <header className="fg-header">
     <div className="fg-brand-icon"><Icon name="camera" size={29}/></div>
     <div className="fg-brand-text"><strong>Football Gallery</strong><span>Private photo albums for families</span></div>
+    <a className="fg-admin-link" href="/admin">จัดการหลังบ้าน</a>
    </header>
    <div className="fg-content">
     <section className="fg-title-section" aria-labelledby="fg-title"><p className="fg-overline">PRIVATE PHOTO GALLERY</p><h1 id="fg-title">ทุกโมเมนต์สำคัญ<br/>อยู่ในภาพถ่าย</h1><p>เลือกรูปการแข่งขันของลูกได้ง่าย ๆ ดาวน์โหลด JPEG, RAW และวิดีโอในคุณภาพต้นฉบับ</p></section>

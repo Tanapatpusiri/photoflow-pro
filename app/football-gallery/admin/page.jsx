@@ -4,6 +4,7 @@ import '../gallery.css';
 import './admin.css';
 import Uploader from './upload-client';
 import ReviewClient from './review-client';
+import ChildrenManager from './children-client';
 import StorageCard from './storage-client';
 import RetentionReview from './retention-client';
 import RetentionDeletionReview from './retention-deletion-client';
@@ -48,6 +49,7 @@ export default function FootballAdmin(){
  useEffect(()=>{
   const q=new URLSearchParams(location.search),album=q.get('album'),tab=q.get('tab');
   if(q.get('drive')||q.get('view')==='settings')setView('settings');
+  else if(q.get('view')==='children')setView('children');
   if(album){setActiveId(album);setAlbumTab(isAlbumTab(tab)?tab:'review');loadPlayers(album)}
   load(album);
  },[]);
@@ -55,6 +57,7 @@ export default function FootballAdmin(){
   if(loading||!authorized)return;
   const q=new URLSearchParams();
   if(view==='settings')q.set('view','settings');
+  else if(view==='children'){q.set('view','children');if(activeId)q.set('album',activeId)}
   else if(activeId){q.set('album',activeId);q.set('tab',albumTab)}
   const s=q.toString();history.replaceState(null,'',location.pathname+(s?'?'+s:''));
  },[view,activeId,albumTab,loading,authorized]);
@@ -75,6 +78,7 @@ export default function FootballAdmin(){
   {loading?<p>กำลังตรวจสอบสิทธิ์…</p>:!authorized?<>{message&&<div className="fga-message" role="status">{message}</div>}<section className="fga-card"><h2>เข้าสู่ระบบแอดมิน</h2><p>ต้องเป็นบัญชีที่ได้รับอนุญาตจากเจ้าของระบบ</p><form onSubmit={login}><label>อีเมล<input type="email" value={email} onChange={e=>setEmail(e.target.value)} required autoComplete="username"/></label><label>รหัสผ่าน<input type="password" value={password} onChange={e=>setPassword(e.target.value)} required autoComplete="current-password"/></label><button disabled={busy}>{busy?'กำลังตรวจสอบ…':'เข้าสู่ระบบ'}</button></form></section></>:<>
    <nav className="fga-tabs fga-tabs-main" aria-label="ส่วนของ Studio">
     <button className={view==='albums'?'active':''} aria-current={view==='albums'?'page':undefined} onClick={()=>setView('albums')}>อัลบั้ม</button>
+    <button className={view==='children'?'active':''} aria-current={view==='children'?'page':undefined} onClick={()=>setView('children')}>จัดการเด็ก</button>
     <button className={view==='settings'?'active':''} aria-current={view==='settings'?'page':undefined} onClick={()=>setView('settings')}>ตั้งค่าระบบ</button>
    </nav>
    {message&&<div className="fga-message" role="status">{message}</div>}
@@ -83,7 +87,8 @@ export default function FootballAdmin(){
     <StorageCard/>
     <RetentionSettings onChange={setRetentionMonths}/>
     <RetentionReview onSelect={selectRetentionEvent} refreshKey={retentionRefresh}/>
-   </>:!active?<>
+   </>:view==='children'?<ChildrenManager events={events} initialEvent={activeId} onChanged={id=>{if(id===activeId)loadPlayers(id);return load()}}/>
+   :!active?<>
     <div className="fga-row"><h2 className="fga-section-title">อัลบั้มทั้งหมด</h2><button className="fga-primary" onClick={()=>setShowCreate(s=>!s)} aria-expanded={showCreate}>{showCreate?'ปิด':'+ สร้างอัลบั้ม'}</button></div>
     {showCreate&&<section className="fga-card"><h2>สร้างอัลบั้มใหม่</h2><p>อัลบั้มใหม่จะเป็น Draft และผู้ปกครองยังเข้าไม่ได้ จนกว่าจะตรวจสิทธิ์และกดเผยแพร่</p><form onSubmit={createEvent}><label>ชื่องาน<input value={title} onChange={e=>setTitle(e.target.value)} required maxLength={180} placeholder="ชื่อการแข่งขัน"/></label><label>สถานที่<input value={venue} onChange={e=>setVenue(e.target.value)} maxLength={180} placeholder="สถานที่ (ไม่บังคับ)"/></label><label>วันที่งาน<input type="date" value={date} onChange={e=>setDate(e.target.value)}/></label><button disabled={busy||!title.trim()}>{busy?'กำลังบันทึก…':'สร้างอัลบั้ม'}</button></form></section>}
     {events.length===0?<section className="fga-card fga-empty"><h2>ยังไม่มีอัลบั้ม</h2><p>เริ่มจากกด "สร้างอัลบั้ม" แล้วเพิ่มนักฟุตบอลและอัปโหลดรูป</p></section>

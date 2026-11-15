@@ -12,6 +12,7 @@ const messages={
  RIGHTS_NOT_CONFIRMED:'ต้องกรอกฐานกฎหมาย หลักฐาน และยืนยันการตรวจสิทธิ์',
  INTEGRITY_NOT_VERIFIED:'ไฟล์ต้นฉบับยังไม่ผ่านการตรวจ SHA-256',
  PLAYER_RIGHTS_NOT_RECORDED:'ยังไม่ได้บันทึกฐานกฎหมายและหลักฐานของเด็กทุกคนที่แท็ก',
+ PLAYER_CONSENT_REVOKED:'มีเด็กในภาพที่ผู้ปกครองถอนความยินยอมแล้ว เอาชื่อเด็กคนนั้นออกหรือซ่อนภาพนี้',
  GPS_CONFIRMATION_REQUIRED:'กรุณายืนยันว่าได้ตรวจความเสี่ยงจากพิกัดในต้นฉบับทุกไฟล์แล้ว',
  NO_CHILDREN_CONFIRMATION_REQUIRED:'ภาพที่ไม่ได้แท็กเด็กต้องยืนยันว่าไม่มีเด็กที่ระบุตัวได้',
  MEDIA_HIDDEN:'ไฟล์นี้ถูกซ่อนอยู่ ต้องกู้คืนเพื่อตรวจใหม่ก่อน',
@@ -60,19 +61,23 @@ export async function POST(request){
    await client.query("UPDATE fg_media SET status=CASE WHEN status='published' THEN 'review' ELSE status END,publish_allowed=false WHERE id=$1",[id]);
    detail={players:players.length};
   }else if(action==='approve'){
-   const basis=text(d.basis,5,200),evidence=text(d.evidence,5,1000);
-   if(!basis||!evidence||d.confirmed!==true)throw new ReviewError('RIGHTS_NOT_CONFIRMED',400);
+   // Owner policy (2026-11-15): consent is confirmed once for the whole album when it is published,
+   // so approving a photo only records who is in it. A per-photo basis and evidence are optional.
+   // GPS is shown as a warning in the review screen and accepted by approving.
+   const basis=text(d.basis,5,200)||'ยืนยันความยินยอมระดับอัลบั้มตอนเผยแพร่',evidence=text(d.evidence,5,1000)||'ผู้ดูแลยืนยันตอนกดเผยแพร่อัลบั้ม';
    const m=await media(true);if(m.status==='hidden')throw new ReviewError('MEDIA_HIDDEN');
-   if(d.gpsConfirmed!==true)throw new ReviewError('GPS_CONFIRMATION_REQUIRED',400);
    const files=await client.query(`SELECT COUNT(*)::int AS originals,COUNT(*) FILTER(WHERE verified_hash=true)::int AS verified FROM fg_media_files WHERE media_id=$1 AND variant IN('JPEG','RAW','VIDEO_ORIGINAL')`,[id]);
    if(!files.rows[0].originals||files.rows[0].originals!==files.rows[0].verified)throw new ReviewError('INTEGRITY_NOT_VERIFIED');
-   const missing=await client.query(`SELECT COUNT(*)::int AS n FROM fg_media_players mp JOIN fg_players p ON p.id=mp.player_id WHERE mp.media_id=$1 AND NOT EXISTS(SELECT 1 FROM fg_privacy_records r WHERE r.event_id=$2 AND r.player_id=p.id AND r.scope='private_gallery' AND r.reviewed_at IS NOT NULL AND r.revoked_at IS NULL)`,[id,eventId]);
-   if(missing.rows[0].n)throw new ReviewError('PLAYER_RIGHTS_NOT_RECORDED');
+   // A child whose consent was withdrawn stays blocked until consent is recorded again.
+   const revoked=await client.query(`SELECT COUNT(*)::int AS n FROM fg_media_players mp WHERE mp.media_id=$1 AND EXISTS(SELECT 1 FROM fg_privacy_records r WHERE r.event_id=$2 AND r.player_id=mp.player_id AND r.revoked_at IS NOT NULL) AND NOT EXISTS(SELECT 1 FROM fg_privacy_records r WHERE r.event_id=$2 AND r.player_id=mp.player_id AND r.scope='private_gallery' AND r.reviewed_at IS NOT NULL AND r.revoked_at IS NULL)`,[id,eventId]);
+   if(revoked.rows[0].n)throw new ReviewError('PLAYER_CONSENT_REVOKED');
    const tagged=await client.query('SELECT COUNT(*)::int AS n FROM fg_media_players WHERE media_id=$1',[id]);
    if(!tagged.rows[0].n&&d.noChildrenConfirmed!==true)throw new ReviewError('NO_CHILDREN_CONFIRMATION_REQUIRED',400);
    await client.query(`INSERT INTO fg_privacy_records(event_id,media_id,basis,evidence_ref,scope,reviewed_at) VALUES($1,$2,$3,$4,'private_gallery',NOW())`,[eventId,id,basis,evidence]);
    await client.query(`UPDATE fg_media SET publish_allowed=true,metadata_reviewed=true,status='published' WHERE id=$1 AND event_id=$2`,[id,eventId]);
-   detail={gpsConfirmed:true,noChildrenConfirmed:!tagged.rows[0].n};
+   // Children tagged in an approved photo can be found by name in the parents' gallery.
+   await client.query(`UPDATE fg_players SET visible=true WHERE event_id=$2 AND id IN(SELECT player_id FROM fg_media_players WHERE media_id=$1)`,[id,eventId]);
+   detail={noChildrenConfirmed:!tagged.rows[0].n,consent:'album'};
   }else if(action==='player-privacy'){
    const basis=text(d.basis,5,200),evidence=text(d.evidence,5,1000);
    if(!isUuid(d.playerId)||!basis||!evidence||d.confirmed!==true)throw new ReviewError('RIGHTS_NOT_CONFIRMED',400);
@@ -84,7 +89,9 @@ export async function POST(request){
    // Consent withdrawn: hide the child's name and send every file showing them back to review.
    if(!isUuid(d.playerId))throw new ReviewError('INVALID_INPUT',400);
    const p=await client.query('SELECT id FROM fg_players WHERE id=$1 AND event_id=$2',[d.playerId,eventId]);if(!p.rowCount)throw new ReviewError('PLAYER_NOT_FOUND',404);
-   await client.query('UPDATE fg_privacy_records SET revoked_at=NOW() WHERE event_id=$1 AND player_id=$2 AND revoked_at IS NULL',[eventId,d.playerId]);
+   const withdrawn=await client.query('UPDATE fg_privacy_records SET revoked_at=NOW() WHERE event_id=$1 AND player_id=$2 AND revoked_at IS NULL',[eventId,d.playerId]);
+   // With album-level consent a child may have no record of their own; store the withdrawal so later approvals are blocked.
+   if(!withdrawn.rowCount)await client.query(`INSERT INTO fg_privacy_records(event_id,player_id,basis,evidence_ref,scope,reviewed_at,revoked_at) VALUES($1,$2,'ผู้ปกครองถอนความยินยอม',$3,'private_gallery',NOW(),NOW())`,[eventId,d.playerId,text(d.reason,0,1000)||null]);
    await client.query('UPDATE fg_players SET visible=false WHERE id=$1',[d.playerId]);
    const affected=await client.query(`UPDATE fg_media m SET status='review',publish_allowed=false WHERE m.event_id=$1 AND m.status='published' AND EXISTS(SELECT 1 FROM fg_media_players mp WHERE mp.media_id=m.id AND mp.player_id=$2)`,[eventId,d.playerId]);
    resource=d.playerId;detail={unpublished:affected.rowCount};
