@@ -101,3 +101,39 @@
  .fga-review-media{position:sticky;top:16px}
  .fga-review-photo{max-height:70vh}
 }
+.fga-pick{display:flex;flex-wrap:wrap;gap:8px}
+.fga-review-detail .fga-pick label{display:inline-flex!important;flex-direction:row!important;align-items:center;gap:6px;min-height:40px;padding:8px 14px;border:1px solid #e1e1e5;border-radius:999px;background:#fff;font-size:14px;font-weight:500;cursor:pointer;user-select:none}
+.fga-pick label input{position:absolute;opacity:0;width:1px;height:1px;pointer-events:none}
+.fga-review-detail .fga-pick label.on{background:#303033;border-color:#303033;color:#fff}
+.fga-review-detail .fga-pick label:has(input:focus-visible){outline:2px solid #303033;outline-offset:2px}
+.fga-review-detail .fga-pick .fga-pick-none{border-style:dashed;color:#606066}
+.fga-review-detail .fga-pick .fga-pick-none.on{border-style:solid;color:#fff}
+.fga-review-detail form.fga-add-name{display:flex;gap:8px;margin-top:0}
+.fga-review-detail .fga-add-name input{flex:1;min-width:0;font-size:16px;border-radius:14px;border:1px solid #ddd;padding:10px 12px;background:#fff}
+.fga-review-detail .fga-add-name button{flex-shrink:0;min-height:42px;padding:8px 18px}
+.fga-gps-note{margin:0;background:#fff8ec;border:1px solid #f3dcb5;border-radius:12px;padding:10px 12px;font-size:13px;color:#6b4a1e!important}
+.fga-children{display:grid;gap:12px}
+.fga-children-head{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:10px}
+.fga-children-head h2{margin:0}
+.fga-children-album{flex-direction:row!important;align-items:center;gap:8px!important}
+.fga-children-album select{font-size:15px;min-height:42px;border-radius:12px;border:1px solid #e4e4e7;background:#f9f9fa;padding:8px 12px;max-width:260px}
+.fga-card form.fga-children-add{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr) minmax(0,1.4fr) auto;gap:8px;margin-top:0}
+.fga-card form.fga-children-add button,.fga-card .fga-children-edit button{min-height:44px;padding:0 18px;font-size:14px}
+.fga-children-search{font-size:16px;min-height:44px;border-radius:14px;border:1px solid #e4e4e7;background:#f9f9fa;padding:10px 14px;width:100%}
+.fga-children-list{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.fga-children-list li{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;background:#f7f7f8;border-radius:16px;padding:12px 14px}
+.fga-children-list li.withdrawn{background:#fff6f4}
+.fga-children-info{display:grid;gap:2px;min-width:0}
+.fga-children-info strong{font-size:15px}
+.fga-children-info span{font-size:12px;color:#77777d}
+.fga-children-info em{font-style:normal;font-size:12px;color:#9a3a2c}
+.fga-chip-danger{color:#9a3a2c!important;background:#fff3f1!important}
+.fga-chip:disabled{opacity:.45;cursor:not-allowed}
+.fga-card form.fga-children-edit{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr) minmax(0,1.4fr) auto;gap:8px;margin-top:0;width:100%}
+@media(max-width:560px){
+ .fga-card form.fga-children-add,.fga-card form.fga-children-edit{grid-template-columns:minmax(0,2fr) minmax(0,1fr)}
+ .fga-card form.fga-children-add input:nth-child(3),.fga-card form.fga-children-edit input:nth-child(3){grid-column:1/-1}
+ .fga-card form.fga-children-add button{grid-column:1/-1}
+ .fga-children-edit .fga-actions{grid-column:1/-1}
+ .fga-children-album select{max-width:100%}
+}

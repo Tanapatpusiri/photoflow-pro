@@ -194,15 +194,16 @@ const A=players['น้องเอ'].id,B=players['น้องบี'].id,C=pl
 const ok=r=>r.status===200;
 const evidence={basis:'ความยินยอมผู้ปกครอง (แบบฟอร์ม)',evidence:'FORM-2026-U10-001',confirmed:true,gpsConfirmed:true,noChildrenConfirmed:true};
 check('tag one photo with two children (no file copies)',ok(await review({action:'tag',eventId:evA.id,mediaId:up['DSC0001.JPG'].info.mediaId,players:[A,B]})));
-const early=await review({action:'approve',eventId:evA.id,mediaId:up['DSC0001.JPG'].info.mediaId,...evidence});
-check('approval blocked until every tagged child has a privacy record',early.status===409&&early.body.code==='PLAYER_RIGHTS_NOT_RECORDED',JSON.stringify(early.body));
 check('record privacy basis for child A',ok(await review({action:'player-privacy',eventId:evA.id,playerId:A,...evidence})));
 check('record privacy basis for child B',ok(await review({action:'player-privacy',eventId:evA.id,playerId:B,...evidence})));
 check('approve DSC0001 (JPEG+RAW)',ok(await review({action:'approve',eventId:evA.id,mediaId:up['DSC0001.JPG'].info.mediaId,...evidence})));
 await review({action:'tag',eventId:evA.id,mediaId:up['DSC0002.JPG'].info.mediaId,players:[B]});
 check('approve DSC0002',ok(await review({action:'approve',eventId:evA.id,mediaId:up['DSC0002.JPG'].info.mediaId,...evidence})));
 await review({action:'tag',eventId:evA.id,mediaId:up['DSC0003.JPG'].info.mediaId,players:[C]});
-check('DSC0003 (child C, no privacy record) cannot be approved',(await review({action:'approve',eventId:evA.id,mediaId:up['DSC0003.JPG'].info.mediaId,...evidence})).status===409);
+// Consent is confirmed once at publish; only a child whose consent was withdrawn blocks approval.
+check('record then withdraw consent for child C',ok(await review({action:'player-privacy',eventId:evA.id,playerId:C,...evidence}))&&ok(await review({action:'revoke-player-privacy',eventId:evA.id,playerId:C})));
+const withdrawn=await review({action:'approve',eventId:evA.id,mediaId:up['DSC0003.JPG'].info.mediaId,...evidence});
+check('DSC0003 (child C, consent withdrawn) cannot be approved',withdrawn.status===409&&withdrawn.body.code==='PLAYER_CONSENT_REVOKED',JSON.stringify(withdrawn.body));
 await review({action:'tag',eventId:evA.id,mediaId:up['IMG_9001.jpg'].info.mediaId,players:[A]});
 check('approve IMG_9001',ok(await review({action:'approve',eventId:evA.id,mediaId:up['IMG_9001.jpg'].info.mediaId,...evidence})));
 await review({action:'tag',eventId:evA.id,mediaId:up['CLIP0001.MOV'].info.mediaId,players:[A]});

@@ -3,7 +3,7 @@ import {readFile} from 'node:fs/promises';
 const page=await readFile('app/football-gallery/admin/page.jsx','utf8');
 const review=await readFile('app/football-gallery/admin/review-client.jsx','utf8');
 // Studio is split into albums and system settings; each album has its own workflow steps.
-for(const label of ['อัลบั้ม','ตั้งค่าระบบ'])assert.ok(page.includes('>'+label+'</button>'),label);
+for(const label of ['อัลบั้ม','จัดการเด็ก','ตั้งค่าระบบ'])assert.ok(page.includes('>'+label+'</button>'),label);
 const tabs=[...page.matchAll(/\['(players|upload|review|publish|requests|retention)','([^']+)'\]/g)].map(m=>m[1]);
 assert.deepEqual(tabs,['players','upload','review','publish','requests','retention']);
 // System settings live in their own section, not above every album.
@@ -18,12 +18,16 @@ assert.equal((page.match(/<ReviewClient /g)||[]).length,1);
 assert.match(page,/<ReviewClient view=\{albumTab\}/);
 for(const part of ["show('review')","show('players')","show('publish')","show('requests')"])assert.ok(review.includes(part),part);
 // Every API action of the previous layout is still reachable.
-for(const action of ["action:'approve'","review('hide'","review('restore'","review('publish-event'","review('suspend-event'","review('resume-event'","createGrant('invite')","createGrant('code')","revokeGrant(g)","resolveRemoval(r,'done')","savePrivacy('player-privacy')","savePrivacy('revoke-player-privacy')","review('tag'"])assert.ok(review.includes(action),action);
+for(const action of ["action:'approve'","review('hide'","review('restore'","review('publish-event'","review('suspend-event'","review('resume-event'","createGrant('invite')","createGrant('code')","revokeGrant(g)","resolveRemoval(r,'done')","savePrivacy('player-privacy')","savePrivacy('revoke-player-privacy')","action:'tag'"])assert.ok(review.includes(action),action);
 for(const action of ['createEvent','saveEventDate','addPlayer','<Uploader ','<RetentionDeletionReview '])assert.ok(page.includes(action),action);
 // Approving saves unsaved tag changes first, and "no identifiable child" is only offered when no child is selected.
 assert.match(review,/if\(tagsDirty\)\{await post\('\/review',\{action:'tag'/);
 assert.match(review,/noChildrenConfirmed:tags\.length===0&&approval\.noChildren/);
-assert.match(review,/\{tags\.length===0&&<label className="fga-check">/);
+// Owner policy: approving only asks who is in the photo; "no identifiable child" is one of the choices.
+assert.match(review,/ไม่มีเด็กที่จำหน้าได้<\/label>/);
+assert.match(review,/<form className="fga-add-name" onSubmit=\{addName\}>/);
+assert.match(review,/fetch\(api\+'\/players',\{method:'POST'/);
+assert.doesNotMatch(review,/gpsConfirmed|approval\.basis|approval\.attest/);
 // Disabled buttons say what is missing.
 for(const list of ['approveMissing','privacyMissing','publishMissing'])assert.match(review,new RegExp('<Missing items=\\{'+list+'\\}/>'));
 assert.match(review,/disabled=\{busy\|\|approveMissing\.length>0\}/);
@@ -35,9 +39,8 @@ assert.match(page,/\+ อัปโหลดรูป<\/button>/);
 const css=await readFile('app/football-gallery/admin/admin.css','utf8');
 assert.match(css,/@media\(max-width:560px\)\{\s*\.fga-tabs:not\(\.fga-tabs-main\)\{display:grid;grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/);
 // Permission fields explain what to write, and the GPS note says who sees the location and how to check it.
-for(const part of ['BASIS_HINT','EVIDENCE_HINT','aria-describedby="fga-basis-hint"','aria-describedby="fga-evidence-hint"'])assert.ok(review.includes(part),part);
-assert.match(review,/กดดาวน์โหลดไฟล์ต้นฉบับ/);
-assert.match(review,/<summary>วิธีตรวจและตัดสินใจ<\/summary>/);
+for(const part of ['BASIS_HINT','EVIDENCE_HINT'])assert.ok(review.includes('{'+part+'}'),part);
+assert.match(review,/active\.has_gps&&<p className="fga-gps-note"/);
 // Review on a phone: verified files fold away and the approve buttons stay pinned near the bottom.
 assert.match(review,/className="fga-files"/);
 assert.match(review,/<div className="fga-approve-bar">/);
@@ -55,9 +58,6 @@ assert.match(upload,/function AlbumStatus\(/);
 assert.match(upload,/ขั้นตอนของรอบอัปโหลดนี้/);
 assert.match(upload,/const done=\[files>0,uploaded,reviewed,reviewed&&album\.live\]/);
 assert.doesNotMatch(upload,/files>0\|\|!!summary\|\|album\.media>0/);
-// Carried-over permission text comes with a reminder to check it covers every child in this photo.
-assert.match(review,/ตรวจก่อนใช้ค่าเดิมต่อ/);
-assert.match(review,/เด็กทุกคนที่อยู่ในภาพนี้/);
 // The publish step gets the retention period on sign-in, without opening Settings first.
 assert.match(page,/fetch\(api\+'\/retention-settings'/);
 // Publishing uses a ready-made notice for parents unless the admin edits it.
@@ -65,9 +65,25 @@ assert.match(review,/const defaultNotice=\(title,until\)=>/);
 assert.match(review,/const notice=publish\.edited\?publish\.notice:defaultNotice\(event\.title,publish\.retention\)/);
 assert.match(review,/review\('publish-event',\{notice,/);
 // Review detail: photo beside three numbered sections; a preview that fails to load says why.
-assert.equal((review.match(/className="fga-step-card"/g)||[]).length,3);
+assert.equal((review.match(/className="fga-step-card"/g)||[]).length,1);
 assert.match(review,/onError=\{\(\)=>setThumbFailed/);
 assert.match(css,/\.fga-review-layout\{grid-template-columns:/);
+// Children management: its own Studio tab with add, edit, remove and consent withdrawal, kept in the URL.
+assert.match(page,/view==='children'\?<ChildrenManager /);
+assert.match(page,/else if\(q\.get\('view'\)==='children'\)setView\('children'\)/);
+const kids=await readFile('app/football-gallery/admin/children-client.jsx','utf8');
+for(const part of ["call('/players','POST'","call('/players','PATCH'","'DELETE'","action:'revoke-player-privacy'","action:'player-privacy'"])assert.ok(kids.includes(part),part);
+const players=await readFile('app/api/football-gallery/admin/players/route.js','utf8');
+assert.match(players,/export async function PATCH\(/);
+assert.match(players,/export async function DELETE\(/);
+assert.match(players,/if\(used\.rows\[0\]\.published\|\|used\.rows\[0\]\.history\)throw Error\('IN_USE'\)/);
+// Withdrawing consent is recorded even for a child who never had a consent record of their own.
+const reviewRoute=await readFile('app/api/football-gallery/admin/review/route.js','utf8');
+assert.match(reviewRoute,/if\(!withdrawn\.rowCount\)await client\.query\(`INSERT INTO fg_privacy_records/);
+// The public page links to the admin Studio, and /admin is a short address for it.
+const front=await readFile('app/football-gallery/page.jsx','utf8');
+assert.match(front,/<a className="fg-admin-link" href="\/admin">จัดการหลังบ้าน<\/a>/);
+assert.match(await readFile('app/admin/page.js','utf8'),/redirect\('\/football-gallery\/admin'\)/);
 // The site root opens Football Gallery; the old PhotoFlow demo is no longer the front page.
 const root=await readFile('app/page.js','utf8');
 assert.match(root,/redirect\('\/football-gallery'\)/);
