@@ -58,6 +58,16 @@ assert.doesNotMatch(upload,/files>0\|\|!!summary\|\|album\.media>0/);
 // Carried-over permission text comes with a reminder to check it covers every child in this photo.
 assert.match(review,/ตรวจก่อนใช้ค่าเดิมต่อ/);
 assert.match(review,/เด็กทุกคนที่อยู่ในภาพนี้/);
+// The publish step gets the retention period on sign-in, without opening Settings first.
+assert.match(page,/fetch\(api\+'\/retention-settings'/);
+// Publishing uses a ready-made notice for parents unless the admin edits it.
+assert.match(review,/const defaultNotice=\(title,until\)=>/);
+assert.match(review,/const notice=publish\.edited\?publish\.notice:defaultNotice\(event\.title,publish\.retention\)/);
+assert.match(review,/review\('publish-event',\{notice,/);
+// Review detail: photo beside three numbered sections; a preview that fails to load says why.
+assert.equal((review.match(/className="fga-step-card"/g)||[]).length,3);
+assert.match(review,/onError=\{\(\)=>setThumbFailed/);
+assert.match(css,/\.fga-review-layout\{grid-template-columns:/);
 // The site root opens Football Gallery; the old PhotoFlow demo is no longer the front page.
 const root=await readFile('app/page.js','utf8');
 assert.match(root,/redirect\('\/football-gallery'\)/);
