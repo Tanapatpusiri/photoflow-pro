@@ -1,55 +1,57 @@
-# Football Gallery — production readiness gate (updated 14 Nov 2026)
+# Football Gallery — production readiness gate
 
-Status: **NOT production-ready.** Code paths are implemented and pass an end-to-end suite against a
-real PostgreSQL 16 database in two storage modes, but nothing has run against the owner's real Google
-Drive, the deployed Cloudflare Worker, the Vercel Preview/Production deployment, or a real iPhone /
-LINE app. Do not merge PR #14 into `main` until every item marked ⏳ is done.
+Updated: 15 November 2026. Status: **not production-ready**. Keep the pull request in draft until
+the review, verification and deployment gates below are satisfied. The target for this working
+branch is `develop`; merging to the production branch requires separate explicit authorization.
 
-Primary storage (owner decision, 14 Nov 2026): **Google Drive** of the owner's Google One account
-(`FG_STORAGE=drive`). Originals never pass through Vercel: browsers upload straight to Google with
-resumable sessions, and a Cloudflare Worker (Free plan) streams previews, originals and ZIP parts.
-Cloudflare R2 mode is kept as an alternative (R2 could not be enabled without billing).
+## Preview evidence
 
-## Verified locally
-`tests/football-gallery-e2e.mjs` — **129/129 in Google Drive mode** (local Google OAuth + Drive v3
-emulator, Worker running in workerd via `wrangler dev`) and **120/120 in R2/S3 mode** (moto S3).
-- Admin: scrypt sign-in, per-IP + per-account (failed only) rate limits, logout, same-origin CSRF guard on every mutation.
-- Google Drive connection: owner-only, `drive.file` scope, offline + consent, state signed and bound
-  to the starting browser (forged callback rejected), refresh token encrypted (AES-256-GCM) in the DB.
-- Events, players, many-to-many tagging (one file, many children), audit log viewer.
-- Upload: server-decided MIME by extension allow-list, duplicate detection by SHA-256, JPEG/RAW pairing.
-  Drive: browser → Google resumable upload in 8 MiB chunks, resume from the offset Google reports,
-  SHA-256 confirmed from Google's `sha256Checksum` without re-downloading. R2: single PUT ≤ 64 MiB,
-  resumable multipart above that, SHA-256/CRC32 recomputed from storage in resumable steps.
-- Tampered content and size mismatches are rejected in both modes.
-- Separate JPEG previews (photos and video poster frames); originals never modified.
-- Privacy: per-child legal basis + evidence before approval, GPS metadata flag, consent withdrawal,
-  Privacy Notice + retention date required to publish, event suspension/resume, removal requests.
-- Access: LINE invite link (no sign-up/OTP), event code backup, per-event cookies, revocation takes
-  effect immediately — including download links already handed to the Worker (re-authorised by the app
-  on every original/ZIP request); preview links expire after 15 minutes.
-- Downloads: per-file originals byte-for-byte (SHA-256 round trip), Download All / per child / selection
-  as split ZIP parts (stored, ZIP64, SHA256SUMS.txt), exact Content-Length, HTTP Range resume through
-  the Worker; Drive ZIP parts ≤ 45 files (Worker Free subrequest budget).
-- Browser (Chrome, 390 px iPhone viewport, local script): owner connects Drive, uploads JPEG + RAW +
-  150 MB video from the file picker straight to Google (29 chunk PUTs), previews load from the Worker,
-  no horizontal scroll, no JavaScript errors.
-- UI: 67 screen states at 320/375/390/430 px (iPhone Safari + LINE user agents), no input under 16 px.
-- Performance (local): 4,000-photo event — album 41 ms, photo pages 6–36 ms.
+- The current feature branch builds on Vercel Preview. Google Drive is connected in that Preview;
+  this does not establish the state of any production service or account.
+- A synthetic JPEG was uploaded to the real Preview Drive, its SHA-256 was verified, its preview
+  was displayed, and an original and ZIP were downloaded and checked in an earlier Preview.
+  ZIP/download behavior must be retested after Worker changes before release.
+- In Preview, previously issued preview links and album access were rejected after a test grant was
+  revoked. Test grants issued for this check were subsequently revoked.
+- In Preview, a correctly dated event was accessible, an undated published test event was rejected,
+  and an approved synthetic date was subsequently recorded for that test event. The API refused to
+  overwrite the date. The existing retention date was not changed.
+- A separately initialized, incomplete synthetic JPEG upload was resumed through the Preview UI;
+  the final original's SHA-256 matched and the generated preview was available. This does not
+  establish behavior for large files, multiple cameras or a complete real album.
+- The administrator's retention review list was checked on Preview. It identifies missing or invalid
+  dates, expired events and events due within 30 days, and is unavailable without admin access.
+  The list does not notify the owner, delete files, or record approval to delete.
 
-## ⏳ Blockers before merging to main
-1. Owner: Google Cloud project + Drive API + OAuth consent **published In production** + OAuth client
-   with redirect URIs; deploy the Worker and set its secret; Vercel env vars (docs/FOOTBALL_GALLERY_INFRA_SETUP_TH.md §1).
-2. Apply migration 004 to the Neon database and bootstrap the owner account.
-3. Connect the real Google Drive and run tests/football-gallery-e2e.mjs against the Vercel Preview.
-4. Confirm on Cloudflare that the Worker stays within the Free plan CPU limit while streaming a 45-file ZIP part
-   and a multi-GB video (the local runtime does not enforce CPU limits).
-5. Confirm Google accepts browser chunk uploads from the production origin (CORS on the session URI).
-6. Real-device check: iPhone Safari and LINE in-app browser (invite link from a LINE chat, photo, video and one ZIP part).
-7. Compare the 9 screens with the user's approved visual master (images are not in the repository).
-8. Decide the Vercel plan (Hobby is non-commercial).
-9. Record the real guardian consent / lawful basis process; never assume permission for children in group photos.
-10. 3,000+ real files from multiple cameras.
+The previous gate reported 129/129 Drive-emulator checks, 120/120 S3-emulator checks, 67 local
+screen states and a local 4,000-photo performance exercise. Those historical reports have not been
+independently repeated for the current commit and are not evidence of a full live Preview pass.
 
-Only after all of the above, and with the owner's explicit approval: merge PR #14 into `main`, let the
-existing Vercel Production deployment build, then smoke-test https://photoflow-pro.vercel.app/football-gallery.
+## Release blockers
+
+1. Review the complete branch diff, current source and target, required checks, permissions and
+   conflict status. Re-run affected checks on the exact commit being merged. Do not treat self-review
+   as a required external approval.
+2. Google OAuth remains in testing. Prepare a complete, accurate public homepage and privacy policy,
+   verify the required domain and finish the applicable Google app verification before public use.
+   The owner must confirm the real legal basis, guardian/child process, notices and contact details.
+3. Verify production database isolation, migrations, owner account, environment settings, Drive
+   account and Worker configuration independently. Preview configuration is not proof of production
+   configuration. Keep credentials out of Git and reports.
+4. Complete the owner's deletion-confirmation workflow, covering original files, preview files,
+   related records, partial failures, backups and verification. Until then, retention expiry only
+   closes access; stored files are not automatically deleted. No destructive deletion is authorized
+   by this document.
+5. Complete full integration tests against appropriately isolated Preview resources, including
+   upload interruption/retry, originals, RAW/video, ZIP integrity and range requests, large files,
+   45-file ZIP parts, multiple cameras and error recovery. Do not run tests that reconnect or alter
+   a real Drive account without understanding their effects.
+6. Check real iPhone Safari and LINE, the approved visual master, main-site regressions, service
+   plan suitability, operational monitoring and recovery, dependency auditing, and the existing
+   Worker editor diagnostics. A passing build alone is not sufficient.
+7. Review and clean up temporary testing access with the owner's authorization. Reconcile the
+   separate test Worker's dashboard settings and checked-in configuration before redeploying it.
+
+Only after the required review, verification, CI and environment-specific deployment permissions
+pass may the feature be merged to `develop`. Production changes must flow through `develop`, and
+must not be merged or deployed without the owner's separate explicit instruction.
