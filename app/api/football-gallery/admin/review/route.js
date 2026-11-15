@@ -16,6 +16,7 @@ const messages={
  GPS_CONFIRMATION_REQUIRED:'กรุณายืนยันว่าได้ตรวจความเสี่ยงจากพิกัดในต้นฉบับทุกไฟล์แล้ว',
  NO_CHILDREN_CONFIRMATION_REQUIRED:'ภาพที่ไม่ได้แท็กเด็กต้องยืนยันว่าไม่มีเด็กที่ระบุตัวได้',
  MEDIA_HIDDEN:'ไฟล์นี้ถูกซ่อนอยู่ ต้องกู้คืนเพื่อตรวจใหม่ก่อน',
+ MEDIA_DELETING:'ภาพนี้อยู่ระหว่างการลบ กรุณาดำเนินการลบให้เสร็จก่อน',
  PRIVACY_NOTICE_REQUIRED:'ต้องระบุประกาศความเป็นส่วนตัว (อย่างน้อย 40 ตัวอักษร) และวันสิ้นสุดการเก็บรักษาก่อนเผยแพร่',
  EVENT_DATE_REQUIRED:'ต้องระบุวันจัดงานก่อนเผยแพร่เพื่อกำหนดระยะเวลาเก็บภาพ',
  RETENTION_OUT_OF_RANGE:'วันสิ้นสุดการเข้าถึงต้องอยู่หลังวันงานและไม่เกินระยะเวลาที่เจ้าของตั้งไว้',
@@ -38,6 +39,8 @@ export async function POST(request){
    if(!isUuid(id))throw new ReviewError('INVALID_INPUT',400);
    const m=await client.query(`SELECT id,status FROM fg_media WHERE id=$1 AND event_id=$2${lock?' FOR UPDATE':''}`,[id,eventId]);
    if(!m.rowCount)throw new ReviewError('MEDIA_NOT_FOUND',404);
+   const deleting=await client.query('SELECT 1 FROM fg_settings WHERE key=$1',['media.delete.'+eventId+'.'+id]);
+   if(deleting.rowCount)throw new ReviewError('MEDIA_DELETING',409);
    return m.rows[0];
   };
   let detail=null,resource=id||null;
@@ -72,12 +75,11 @@ export async function POST(request){
    const revoked=await client.query(`SELECT COUNT(*)::int AS n FROM fg_media_players mp WHERE mp.media_id=$1 AND EXISTS(SELECT 1 FROM fg_privacy_records r WHERE r.event_id=$2 AND r.player_id=mp.player_id AND r.revoked_at IS NOT NULL) AND NOT EXISTS(SELECT 1 FROM fg_privacy_records r WHERE r.event_id=$2 AND r.player_id=mp.player_id AND r.scope='private_gallery' AND r.reviewed_at IS NOT NULL AND r.revoked_at IS NULL)`,[id,eventId]);
    if(revoked.rows[0].n)throw new ReviewError('PLAYER_CONSENT_REVOKED');
    const tagged=await client.query('SELECT COUNT(*)::int AS n FROM fg_media_players WHERE media_id=$1',[id]);
-   if(!tagged.rows[0].n&&d.noChildrenConfirmed!==true)throw new ReviewError('NO_CHILDREN_CONFIRMATION_REQUIRED',400);
    await client.query(`INSERT INTO fg_privacy_records(event_id,media_id,basis,evidence_ref,scope,reviewed_at) VALUES($1,$2,$3,$4,'private_gallery',NOW())`,[eventId,id,basis,evidence]);
    await client.query(`UPDATE fg_media SET publish_allowed=true,metadata_reviewed=true,status='published' WHERE id=$1 AND event_id=$2`,[id,eventId]);
    // Children tagged in an approved photo can be found by name in the parents' gallery.
    await client.query(`UPDATE fg_players SET visible=true WHERE event_id=$2 AND id IN(SELECT player_id FROM fg_media_players WHERE media_id=$1)`,[id,eventId]);
-   detail={noChildrenConfirmed:!tagged.rows[0].n,consent:'album'};
+   detail={noChildrenConfirmed:d.noChildrenConfirmed===true&&!tagged.rows[0].n,taggedChildren:tagged.rows[0].n,consent:'album'};
   }else if(action==='player-privacy'){
    const basis=text(d.basis,5,200),evidence=text(d.evidence,5,1000);
    if(!isUuid(d.playerId)||!basis||!evidence||d.confirmed!==true)throw new ReviewError('RIGHTS_NOT_CONFIRMED',400);

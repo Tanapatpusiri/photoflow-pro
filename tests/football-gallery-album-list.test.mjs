@@ -1,0 +1,13 @@
+import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
+let query='',withGrant=false;
+const data=[{id:'private',slug:'private',title:'Private',cover:'file-a',public_grant:null},{id:'public',slug:'public',title:'Public',cover:'file-b',public_grant:'public-grant'}];
+globalThis.__albums={NextResponse:{json:(body,{status=200}={})=>({body,status})},db:()=>({query:async(sql)=>{query=sql;return {rows:data,rowCount:data.length}}}),configured:()=>true,grantFor:async(_r,id)=>withGrant&&id==='private'?{codeId:'private-grant'}:null,privateHeaders:{},ACTIVE_RETENTION_SQL:'RETENTION_OK',thumbUrl:(file,grant)=>`thumb:${file}:${grant}`};
+let src=await readFile('app/api/football-gallery/albums/route.js','utf8');src=src.replace(/^import .*;\n/gm,'');src='const {NextResponse,db,configured,grantFor,privateHeaders,ACTIVE_RETENTION_SQL,thumbUrl}=globalThis.__albums;\n'+src;
+const {GET}=await import('data:text/javascript;base64,'+Buffer.from(src).toString('base64'));
+const request={nextUrl:{searchParams:new URLSearchParams()}};
+let r=await GET(request);assert.equal(r.status,200);assert.equal(r.body.albums[0].locked,true);assert.equal(r.body.albums[0].coverUrl,undefined);assert.equal(r.body.albums[1].locked,false);assert.equal(r.body.albums[1].coverUrl,'thumb:file-b:public-grant');
+assert.match(query,/m\.status='published'/);assert.match(query,/m\.publish_allowed=true/);assert.match(query,/RETENTION_OK/);
+withGrant=true;r=await GET(request);assert.equal(r.body.albums[0].coverUrl,'thumb:file-a:private-grant');
+assert.equal((await GET({nextUrl:{searchParams:new URLSearchParams('page=-1')}})).status,400);
+console.log('PASS: private covers require access, public covers use a public grant and invalid pages fail');

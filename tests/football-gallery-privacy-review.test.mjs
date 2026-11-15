@@ -7,6 +7,7 @@ const client={async query(sql,args){
  if(['BEGIN','COMMIT','ROLLBACK'].includes(sql))return {rowCount:0,rows:[]};
  if(sql.startsWith('SELECT id,status,privacy_approved_at'))return {rowCount:1,rows:[{id:'event',status:'draft'}]};
  if(sql.startsWith('SELECT id,status FROM fg_media'))return {rowCount:1,rows:[{id:'media',status:'review'}]};
+ if(sql.startsWith('SELECT 1 FROM fg_settings'))return {rowCount:scenario.deleting?1:0,rows:scenario.deleting?[{ok:1}]:[]};
  if(sql.includes('AS originals'))return {rowCount:1,rows:[{originals:1,verified:scenario.verified===false?0:1}]};
  if(sql.includes('revoked_at IS NOT NULL'))return {rowCount:1,rows:[{n:scenario.revoked||0}]};
  if(sql.startsWith('UPDATE fg_players SET visible=true'))return {rowCount:scenario.tagged||0,rows:[]};
@@ -33,12 +34,13 @@ const req=body=>({json:async()=>body});
 // Owner policy: consent is confirmed once at publish, so approving only needs who is in the photo.
 const body={action:'approve',eventId:'event',mediaId:'media'};
 const runReview=async(extra={})=>{calls=[];audits=[];return review.POST(req({...body,...extra}))};
-scenario={};let r=await runReview();assert.equal(r.body.code,'NO_CHILDREN_CONFIRMATION_REQUIRED');assert.ok(calls.some(x=>x.sql==='ROLLBACK'));assert.ok(!calls.some(x=>x.sql.startsWith('UPDATE fg_media')));
-r=await runReview({noChildrenConfirmed:true});assert.equal(r.status,200);assert.deepEqual(audits[0].detail,{noChildrenConfirmed:true,consent:'album'});
+scenario={};let r=await runReview();assert.equal(r.status,200);assert.deepEqual(audits[0].detail,{noChildrenConfirmed:false,taggedChildren:0,consent:'album'});
+r=await runReview({noChildrenConfirmed:true});assert.equal(r.status,200);assert.deepEqual(audits[0].detail,{noChildrenConfirmed:true,taggedChildren:0,consent:'album'});
 const record=calls.find(x=>x.sql.startsWith('INSERT INTO fg_privacy_records'));assert.ok(record.args[2].length>=5&&record.args[3].length>=5,'default basis and evidence are recorded');
-scenario={tagged:1};r=await runReview();assert.equal(r.status,200);assert.deepEqual(audits[0].detail,{noChildrenConfirmed:false,consent:'album'});assert.ok(calls.some(x=>x.sql.startsWith('UPDATE fg_players SET visible=true')),'tagged children become findable by name');
+scenario={tagged:1};r=await runReview();assert.equal(r.status,200);assert.deepEqual(audits[0].detail,{noChildrenConfirmed:false,taggedChildren:1,consent:'album'});assert.ok(calls.some(x=>x.sql.startsWith('UPDATE fg_players SET visible=true')),'tagged children become findable by name');
 scenario={tagged:1};r=await runReview({basis:'basis test',evidence:'evidence test'});assert.equal(r.status,200);assert.equal(calls.find(x=>x.sql.startsWith('INSERT INTO fg_privacy_records')).args[2],'basis test');
 scenario={tagged:1,revoked:1};r=await runReview();assert.equal(r.body.code,'PLAYER_CONSENT_REVOKED');assert.ok(!calls.some(x=>x.sql.startsWith('UPDATE fg_media')));
+scenario={deleting:true};r=await runReview();assert.equal(r.body.code,'MEDIA_DELETING');assert.ok(!calls.some(x=>x.sql.startsWith('UPDATE fg_media')));
 scenario={verified:false};r=await runReview({noChildrenConfirmed:true});assert.equal(r.body.code,'INTEGRITY_NOT_VERIFIED');
 const resolve=async(extra={})=>{calls=[];audits=[];return removals.POST(req({id:'request',state:'done',...extra}))};
 scenario={};r=await resolve({resolution:'ดำเนินการถอดภาพแล้ว'});assert.equal(r.status,400);assert.ok(!calls.some(x=>x.sql.startsWith('UPDATE fg_removal_requests')));

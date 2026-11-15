@@ -18,6 +18,8 @@ export default function FootballGallery() {
  const [busy,setBusy]=useState(false);
  const [message,setMessage]=useState('');
  const [status,setStatus]=useState('idle');
+ const [albums,setAlbums]=useState([]),[albumsLoading,setAlbumsLoading]=useState(true),[albumsError,setAlbumsError]=useState(''),[albumsPage,setAlbumsPage]=useState(1),[albumsMore,setAlbumsMore]=useState(false),[albumsRetry,setAlbumsRetry]=useState(0);
+ useEffect(()=>{let alive=true;setAlbumsLoading(true);fetch('/api/football-gallery/albums?page='+albumsPage,{cache:'no-store'}).then(async r=>{const d=await r.json();if(!r.ok)throw Error(d.message||'โหลดอัลบั้มไม่สำเร็จ');if(alive){setAlbums(old=>albumsPage===1?d.albums||[]:[...old,...(d.albums||[])]);setAlbumsMore(!!d.hasMore);setAlbumsError('')}}).catch(e=>{if(alive)setAlbumsError(e.message)}).finally(()=>{if(alive)setAlbumsLoading(false)});return()=>{alive=false}},[albumsPage,albumsRetry]);
  useEffect(()=>{const invite=new URLSearchParams(window.location.search).get('invite');if(invite==='invalid'){setStatus('error');setMessage('ลิงก์เชิญหมดอายุหรือถูกยกเลิก กรุณาขอลิงก์ใหม่จากผู้จัดงาน หรือกรอกรหัสอัลบั้ม')}else if(invite==='suspended'){setStatus('error');setMessage('ผู้จัดงานปิดอัลบั้มนี้ไว้ชั่วคราว กรุณาติดต่อผู้จัดงาน')}},[]);
  async function enter(e){
   e.preventDefault();
@@ -37,14 +39,13 @@ export default function FootballGallery() {
   <div className="fg-shell">
    <header className="fg-header">
     <div className="fg-brand-icon"><Icon name="camera" size={29}/></div>
-    <div className="fg-brand-text"><strong>Football Gallery</strong><span>Private photo albums for families</span></div>
+    <div className="fg-brand-text"><strong>Football Gallery</strong><span>Photo albums for families</span></div>
     <a className="fg-admin-link" href="/admin">จัดการหลังบ้าน</a>
    </header>
    <div className="fg-content">
-    <section className="fg-title-section" aria-labelledby="fg-title"><p className="fg-overline">PRIVATE PHOTO GALLERY</p><h1 id="fg-title">ทุกโมเมนต์สำคัญ<br/>อยู่ในภาพถ่าย</h1><p>เลือกรูปการแข่งขันของลูกได้ง่าย ๆ ดาวน์โหลด JPEG, RAW และวิดีโอในคุณภาพต้นฉบับ</p></section>
-    <section className="fg-cover" aria-label="แกลเลอรีส่วนตัว">
-     <div className="fg-cover-art"><Icon name="image" size={56}/></div>
-     <div className="fg-cover-bottom"><span className="fg-private"><Icon name="lock" size={15}/> Private Album</span><h2>ภาพการแข่งขันฟุตบอล</h2><p>เฉพาะผู้ได้รับสิทธิ์เข้าชม</p></div>
+    <section aria-label="อัลบั้มการแข่งขัน">
+     {albums.length>0&&<div className="fg-album-grid">{albums.map(album=><a className="fg-album-card" key={album.slug} href={'/football-gallery/'+encodeURIComponent(album.slug)}><div className="fg-album-art">{album.coverUrl?<img src={album.coverUrl} alt=""/>:<Icon name={album.locked?'lock':'image'} size={36}/>}</div><div className="fg-album-info"><strong>{album.title}</strong>{album.date&&<span>{new Date(album.date).toLocaleDateString('th-TH',{dateStyle:'medium',timeZone:'UTC'})}</span>}{album.locked&&<span><Icon name="lock" size={13}/> อัลบั้มส่วนตัว</span>}</div></a>)}</div>}
+     {albumsLoading&&<p>กำลังโหลดอัลบั้ม…</p>}{albumsError&&<p role="alert">{albumsError} <button type="button" onClick={()=>setAlbumsRetry(n=>n+1)}>ลองอีกครั้ง</button></p>}{!albumsLoading&&!albumsError&&albums.length===0&&<p>ยังไม่มีอัลบั้มที่เปิดให้เข้าชม</p>}{albumsMore&&!albumsError&&<button type="button" className="fg-primary" disabled={albumsLoading} onClick={()=>setAlbumsPage(n=>n+1)}>โหลดอัลบั้มเพิ่ม</button>}
     </section>
     <section className="fg-access" aria-label="เข้าชมอัลบั้ม">
      <h2>เข้าชมอัลบั้ม</h2><p className="fg-subtitle">เปิดลิงก์ที่ได้รับทาง LINE หรือกรอกรหัสประจำงาน</p>
@@ -53,10 +54,10 @@ export default function FootballGallery() {
       <button type="submit" disabled={busy} className="fg-primary">{busy?'กำลังตรวจสอบ…':'เข้าสู่อัลบั้ม'}<Icon name="arrow" size={20}/></button>
      </form>
     </section>
-    <div className="fg-features"><span><Icon name="lock" size={18}/> Private</span><span><Icon name="image" size={18}/> JPEG + RAW</span><span><Icon name="video" size={18}/> Videos</span></div>
-    <div className="fg-notice"><Icon name="shield" size={23}/><div><strong>ความเป็นส่วนตัวของเด็กสำคัญที่สุด</strong><p>ไม่ต้องสมัครสมาชิก ภาพและไฟล์ต้นฉบับจะเข้าถึงได้เมื่อได้รับสิทธิ์จากผู้ดูแลเท่านั้น</p></div></div>
+    <div className="fg-features"><span><Icon name="lock" size={18}/> Public / Private</span><span><Icon name="image" size={18}/> JPEG + RAW</span><span><Icon name="video" size={18}/> Videos</span></div>
+    <div className="fg-notice"><Icon name="shield" size={23}/><div><strong>ความเป็นส่วนตัวของเด็กสำคัญที่สุด</strong><p>อัลบั้มส่วนตัวต้องได้รับสิทธิ์จากผู้ดูแล อัลบั้มสาธารณะเปิดให้ทุกคนเข้าชม</p></div></div>
    </div>
-   <footer className="fg-footer">หากไม่พบรหัส โปรดติดต่อผู้จัดงานหรือช่างภาพ<br/>เว็บไซต์นี้ยังไม่เปิดเผยอัลบั้มสาธารณะ</footer>
+   <footer className="fg-footer">หากไม่พบรหัส โปรดติดต่อผู้จัดงานหรือช่างภาพ</footer>
   </div>
  </main>
 }

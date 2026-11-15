@@ -1,0 +1,11 @@
+import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
+let allowed=false,calls=[];
+const client={async query(sql,args){calls.push({sql,args});if(sql.startsWith('UPDATE fg_events'))return {rowCount:allowed?1:0,rows:allowed?[{id:'event'}]:[]};return {rowCount:0,rows:[]}},release(){}};
+globalThis.__cover={db:()=>({connect:async()=>client}),isUuid:x=>['event','media'].includes(x),adminGuard:async()=>({admin:{id:'owner'}}),send:(body,status=200)=>({body,status}),audit:async()=>{}};
+let src=await readFile('app/api/football-gallery/admin/cover/route.js','utf8');src=src.replace(/^import .*;\n/gm,'');src='const {db,isUuid,adminGuard,send,audit}=globalThis.__cover;\n'+src;
+const {POST}=await import('data:text/javascript;base64,'+Buffer.from(src).toString('base64'));const req=body=>({json:async()=>body});
+assert.equal((await POST(req({eventId:'wrong',mediaId:'media'}))).status,400);
+let r=await POST(req({eventId:'event',mediaId:'media'}));assert.equal(r.status,400);let update=calls.find(c=>c.sql.startsWith('UPDATE fg_events'));assert.match(update.sql,/m\.event_id=e\.id/);assert.match(update.sql,/m\.status='published'/);assert.match(update.sql,/f\.verified_bytes=true/);
+allowed=true;calls=[];r=await POST(req({eventId:'event',mediaId:'media'}));assert.equal(r.status,200);assert.ok(calls.some(c=>c.sql==='COMMIT'));
+console.log('PASS: only approved images in the album can be used as a cover');
