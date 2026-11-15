@@ -1,0 +1,18 @@
+import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
+let source=await readFile('lib/football-gallery-drive.js','utf8');
+const start=source.indexOf('export async function listFolderPage('),end=source.indexOf('\nexport async function deleteFile',start);
+let called;
+globalThis.__folderApi={api:async(path)=>{called=path;return {files:[]}},DriveError:class extends Error{}};
+let fragment='const {api,DriveError}=globalThis.__folderApi;\n'+source.slice(start,end);
+const {listFolderPage}=await import('data:text/javascript;base64,'+Buffer.from(fragment).toString('base64'));
+await listFolderPage('safe-folder','next+token');const url=new URL(called,'https://example.test');assert.equal(url.searchParams.get('q'),"'safe-folder' in parents");assert.equal(url.searchParams.get('pageToken'),'next+token');assert.match(url.searchParams.get('fields'),/incompleteSearch/);assert.ok(!url.searchParams.get('q').includes('trashed=false'));
+await assert.rejects(()=>listFolderPage("wrong' folder",null));
+let role='owner',queries=[];
+globalThis.__retentionFolder={db:()=>({query:async(sql)=>{queries.push(sql);if(sql.startsWith('SELECT drive_folder_id'))return {rowCount:1,rows:[{drive_folder_id:'event-folder'}]};if(sql.startsWith('SELECT value FROM'))return {rows:[{value:'preview-folder'}]};if(sql.startsWith('SELECT f.id'))return {rows:[{id:'file-1',r2_key:'drive-1'},{id:'file-2',r2_key:'drive-2'}]};throw Error('Unexpected SQL')}}),isUuid:x=>x==='event',adminGuard:async()=>({admin:{role}}),reply:(body,status=200)=>({body,status}),listFolderPage:async()=>({incompleteSearch:true,nextPageToken:'next',files:[{id:'drive-1',name:'ok.jpg',appProperties:{fgFileId:'file-1'}},{id:'drive-2',name:'wrong.jpg',appProperties:{fgFileId:'wrong'}},{id:'drive-3',name:'unknown.jpg',trashed:true},{id:'preview-folder',name:'previews',mimeType:'application/vnd.google-apps.folder'},{id:'other-folder',name:'other',mimeType:'application/vnd.google-apps.folder'}]})};
+source=await readFile('app/api/football-gallery/admin/retention-folder/route.js','utf8');source=source.replace(/^import .*;\n/gm,'');source='const {db,isUuid,adminGuard,reply,listFolderPage}=globalThis.__retentionFolder;\n'+source;
+const route=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));const req=q=>({nextUrl:new URL('https://example.test/?'+q)});
+role='admin';let r=await route.GET(req('event=event'));assert.equal(r.status,403);assert.equal(queries.length,0);
+role='owner';r=await route.GET(req('event=event&scope=elsewhere'));assert.equal(r.status,400);
+r=await route.GET(req('event=event&scope=event'));assert.equal(r.status,200);assert.deepEqual(r.body.items.map(x=>x.status),['recorded','identity_mismatch','untracked','preview_folder','other_folder']);assert.equal(r.body.items[2].trashed,true);assert.equal(r.body.incomplete,true);assert.equal(r.body.nextToken,'next');assert.ok(r.body.items.every(x=>!('id' in x)));assert.ok(queries[0].includes("(event_date+INTERVAL '1 year')::date<CURRENT_DATE"));
+console.log('PASS: owner-only folder listing flags untracked files, trash, identity mismatch, nested folders and incomplete searches');
