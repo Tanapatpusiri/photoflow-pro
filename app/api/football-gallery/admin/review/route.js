@@ -11,6 +11,8 @@ const messages={
  RIGHTS_NOT_CONFIRMED:'ต้องกรอกฐานกฎหมาย หลักฐาน และยืนยันการตรวจสิทธิ์',
  INTEGRITY_NOT_VERIFIED:'ไฟล์ต้นฉบับยังไม่ผ่านการตรวจ SHA-256',
  PLAYER_RIGHTS_NOT_RECORDED:'ยังไม่ได้บันทึกฐานกฎหมายและหลักฐานของเด็กทุกคนที่แท็ก',
+ GPS_CONFIRMATION_REQUIRED:'กรุณายืนยันว่าได้ตรวจความเสี่ยงจากพิกัดในต้นฉบับทุกไฟล์แล้ว',
+ NO_CHILDREN_CONFIRMATION_REQUIRED:'ภาพที่ไม่ได้แท็กเด็กต้องยืนยันว่าไม่มีเด็กที่ระบุตัวได้',
  MEDIA_HIDDEN:'ไฟล์นี้ถูกซ่อนอยู่ ต้องกู้คืนเพื่อตรวจใหม่ก่อน',
  PRIVACY_NOTICE_REQUIRED:'ต้องระบุประกาศความเป็นส่วนตัว (อย่างน้อย 40 ตัวอักษร) และวันสิ้นสุดการเก็บรักษาก่อนเผยแพร่',
  EVENT_DATE_REQUIRED:'ต้องระบุวันจัดงานก่อนเผยแพร่เพื่อกำหนดระยะเวลาเก็บภาพ',
@@ -60,12 +62,16 @@ export async function POST(request){
    const basis=text(d.basis,5,200),evidence=text(d.evidence,5,1000);
    if(!basis||!evidence||d.confirmed!==true)throw new ReviewError('RIGHTS_NOT_CONFIRMED',400);
    const m=await media(true);if(m.status==='hidden')throw new ReviewError('MEDIA_HIDDEN');
+   if(d.gpsConfirmed!==true)throw new ReviewError('GPS_CONFIRMATION_REQUIRED',400);
    const files=await client.query(`SELECT COUNT(*)::int AS originals,COUNT(*) FILTER(WHERE verified_hash=true)::int AS verified FROM fg_media_files WHERE media_id=$1 AND variant IN('JPEG','RAW','VIDEO_ORIGINAL')`,[id]);
    if(!files.rows[0].originals||files.rows[0].originals!==files.rows[0].verified)throw new ReviewError('INTEGRITY_NOT_VERIFIED');
    const missing=await client.query(`SELECT COUNT(*)::int AS n FROM fg_media_players mp JOIN fg_players p ON p.id=mp.player_id WHERE mp.media_id=$1 AND NOT EXISTS(SELECT 1 FROM fg_privacy_records r WHERE r.event_id=$2 AND r.player_id=p.id AND r.scope='private_gallery' AND r.reviewed_at IS NOT NULL AND r.revoked_at IS NULL)`,[id,eventId]);
    if(missing.rows[0].n)throw new ReviewError('PLAYER_RIGHTS_NOT_RECORDED');
+   const tagged=await client.query('SELECT COUNT(*)::int AS n FROM fg_media_players WHERE media_id=$1',[id]);
+   if(!tagged.rows[0].n&&d.noChildrenConfirmed!==true)throw new ReviewError('NO_CHILDREN_CONFIRMATION_REQUIRED',400);
    await client.query(`INSERT INTO fg_privacy_records(event_id,media_id,basis,evidence_ref,scope,reviewed_at) VALUES($1,$2,$3,$4,'private_gallery',NOW())`,[eventId,id,basis,evidence]);
    await client.query(`UPDATE fg_media SET publish_allowed=true,metadata_reviewed=true,status='published' WHERE id=$1 AND event_id=$2`,[id,eventId]);
+   detail={gpsConfirmed:true,noChildrenConfirmed:!tagged.rows[0].n};
   }else if(action==='player-privacy'){
    const basis=text(d.basis,5,200),evidence=text(d.evidence,5,1000);
    if(!isUuid(d.playerId)||!basis||!evidence||d.confirmed!==true)throw new ReviewError('RIGHTS_NOT_CONFIRMED',400);

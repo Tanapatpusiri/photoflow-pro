@@ -19,7 +19,7 @@ export async function POST(request,{params}){
   if(!e.rowCount)return reply({message:'ไม่พบอัลบั้ม'},404);
   const grant=await grantFor(request,e.rows[0].id);
   if(!grant)return reply({message:'ไม่มีสิทธิ์'},403);
-  if(!await rateLimit('removal',grant.codeId+':'+grant.nonce,5,60))return reply({message:'ส่งคำขอบ่อยเกินไป กรุณาลองใหม่ภายหลัง'},429);
+  if(!await rateLimit('removal',grant.codeId,30,60))return reply({message:'ส่งคำขอบ่อยเกินไป กรุณาลองใหม่ภายหลัง'},429);
   if(d.mediaId){
    const m=await db().query('SELECT 1 FROM fg_media WHERE id=$1 AND event_id=$2',[d.mediaId,e.rows[0].id]);
    if(!m.rowCount)return reply({message:'ไม่พบไฟล์'},404);

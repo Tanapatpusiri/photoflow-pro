@@ -10,7 +10,7 @@ const inDays=n=>new Date(Date.now()+n*86400000).toISOString().slice(0,10);
 
 export default function ReviewClient({event,players,onUpdated,onPlayersChanged}){
  const [items,setItems]=useState([]),[active,setActive]=useState(null),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false),[error,setError]=useState(''),[info,setInfo]=useState(''),[page,setPage]=useState(1),[hasMore,setHasMore]=useState(false),[filter,setFilter]=useState('');
- const [tags,setTags]=useState([]),[approval,setApproval]=useState({basis:'',evidence:'',attest:false});
+ const [tags,setTags]=useState([]),[approval,setApproval]=useState({basis:'',evidence:'',attest:false,gps:false,noChildren:false});
  const [privacy,setPrivacy]=useState({player:'',basis:'',evidence:'',attest:false});
  const [publish,setPublish]=useState({notice:'',retention:oneYearAfterEvent(event.event_date),attest:false});
  const [grants,setGrants]=useState([]),[grantLabel,setGrantLabel]=useState(''),[grantDays,setGrantDays]=useState(14),[issued,setIssued]=useState(null);
@@ -18,7 +18,7 @@ export default function ReviewClient({event,players,onUpdated,onPlayersChanged})
  const load=async(p=1,f=filter)=>{setLoading(true);try{const d=await get('/media?event='+encodeURIComponent(event.id)+'&page='+p+(f?'&status='+f:''));setItems(old=>p===1?d.items:[...old,...d.items]);setHasMore(d.hasMore);setPage(p);setError('')}catch(e){setError(e.message)}finally{setLoading(false)}};
  const loadSide=async()=>{try{const [g,r,a]=await Promise.all([get('/grants?event='+event.id),get('/removals?event='+event.id),get('/audit?event='+event.id)]);setGrants(g.grants);setRemovals(r.requests);setAuditLog(a.entries.slice(0,20))}catch(e){setError(e.message)}};
  useEffect(()=>{setActive(null);setItems([]);setPage(1);setIssued(null);setPublish({notice:'',retention:oneYearAfterEvent(event.event_date),attest:false});load(1);loadSide()},[event.id,event.event_date]);
- const select=item=>{setActive(item);setTags(item.players||[]);setApproval({basis:'',evidence:'',attest:false});setError('');setInfo('')};
+ const select=item=>{setActive(item);setTags(item.players||[]);setApproval({basis:'',evidence:'',attest:false,gps:false,noChildren:false});setError('');setInfo('')};
  const run=async(task,ok)=>{if(busy)return;setBusy(true);setError('');setInfo('');try{await task();if(ok)setInfo(ok)}catch(e){setError(e.message)}finally{setBusy(false)}};
  const review=(action,data={},ok)=>run(async()=>{await post('/review',{action,eventId:event.id,mediaId:active?.id,...data});await load(1);setActive(null);await onUpdated?.();await loadSide()},ok);
  const verify=file=>run(async()=>{
@@ -27,7 +27,7 @@ export default function ReviewClient({event,players,onUpdated,onPlayersChanged})
  },'ตรวจ SHA-256 แล้ว');
  const createGrant=type=>run(async()=>{const r=await post('/grants',{event:event.id,type,days:grantDays,label:grantLabel});setIssued({type,...r});setGrantLabel('');await loadSide()});
  const revokeGrant=g=>run(async()=>{if(!confirm('ยกเลิกสิทธิ์นี้? ผู้ที่เข้าด้วยลิงก์/รหัสนี้จะเข้าไม่ได้ทันที'))return;await post('/grants',{event:event.id,action:'revoke',type:g.type,grantId:g.id});await loadSide()},'ยกเลิกสิทธิ์แล้ว');
- const resolveRemoval=(r,state)=>run(async()=>{await post('/removals',{id:r.id,state,resolution:state==='done'?'ดำเนินการถอดภาพแล้ว':state==='rejected'?'ไม่สามารถดำเนินการได้':''});await load(1);await loadSide();await onUpdated?.()},'บันทึกคำขอแล้ว');
+ const resolveRemoval=(r,state)=>{let resolution=state==='done'?'ซ่อนภาพที่ระบุจากแกลเลอรีแล้ว':state==='rejected'?'ไม่สามารถดำเนินการได้':'';let manualConfirmed=false;if(state==='done'&&!r.media_id){resolution=prompt('ระบุสิ่งที่ดำเนินการจริงสำหรับคำขอนี้ (อย่างน้อย 10 ตัวอักษร) ระบบจะไม่ซ่อนภาพให้อัตโนมัติ','');if(resolution===null)return;if(resolution.trim().length<10){setError('กรุณาระบุสิ่งที่ดำเนินการจริงอย่างน้อย 10 ตัวอักษร');return}manualConfirmed=confirm('ยืนยันว่าได้ดำเนินการตามที่ระบุแล้ว? ระบบจะไม่ซ่อนภาพให้อัตโนมัติ');if(!manualConfirmed)return}return run(async()=>{await post('/removals',{id:r.id,state,resolution,manualConfirmed});await load(1);await loadSide();await onUpdated?.()},'บันทึกคำขอแล้ว')};
  const savePrivacy=action=>run(async()=>{await post('/review',{action,eventId:event.id,playerId:privacy.player,basis:privacy.basis,evidence:privacy.evidence,confirmed:privacy.attest});setPrivacy({player:'',basis:'',evidence:'',attest:false});await onPlayersChanged?.();await load(1);await loadSide()},action==='player-privacy'?'บันทึกสิทธิ์นักฟุตบอลแล้ว':'ถอนสิทธิ์แล้ว ภาพที่แท็กเด็กคนนี้กลับไปรอตรวจ');
  const copy=text=>navigator.clipboard?.writeText(text).then(()=>setInfo('คัดลอกแล้ว'),()=>setError('คัดลอกไม่สำเร็จ'));
  const originals=f=>['JPEG','RAW','VIDEO_ORIGINAL'].includes(f.variant);
@@ -50,8 +50,11 @@ export default function ReviewClient({event,players,onUpdated,onPlayersChanged})
    <h3>ยืนยันการเผยแพร่</h3>
    <label>ฐานทางกฎหมาย / ขอบเขตการอนุญาต<input value={approval.basis} onChange={e=>setApproval(a=>({...a,basis:e.target.value}))} placeholder="กรอกเฉพาะข้อมูลที่ตรวจสอบได้จริง"/></label>
    <label>หลักฐานการอนุญาต / อ้างอิง<input value={approval.evidence} onChange={e=>setApproval(a=>({...a,evidence:e.target.value}))} placeholder="รหัสเอกสารหรือข้อมูลหลักฐาน"/></label>
-   <label className="fga-check"><input type="checkbox" checked={approval.attest} onChange={e=>setApproval(a=>({...a,attest:e.target.checked}))}/>ตรวจสิทธิ์เด็กทุกคนที่ปรากฏในภาพและ Metadata แล้ว</label>
-   <button disabled={busy||!approval.attest||approval.basis.trim().length<5||approval.evidence.trim().length<5} onClick={()=>review('approve',{basis:approval.basis,evidence:approval.evidence,confirmed:approval.attest},'อนุมัติแล้ว')}>อนุมัติภาพนี้สำหรับ Private Gallery</button>
+   <label className="fga-check"><input type="checkbox" checked={approval.attest} onChange={e=>setApproval(a=>({...a,attest:e.target.checked}))}/>ตรวจสิทธิ์เด็กทุกคนที่ปรากฏในภาพแล้ว</label>
+   <p>การตรวจ GPS อัตโนมัติไม่ครอบคลุมไฟล์และ Metadata ทุกกรณี ไฟล์ต้นฉบับที่ดาวน์โหลดอาจมีพิกัดอยู่</p>
+   <label className="fga-check"><input type="checkbox" checked={approval.gps} onChange={e=>setApproval(a=>({...a,gps:e.target.checked}))}/>ยืนยันว่าได้ตรวจความเสี่ยงจากพิกัดในต้นฉบับทุกไฟล์ และอนุญาตให้เผยแพร่ได้</label>
+   {!active.players?.length&&<label className="fga-check"><input type="checkbox" checked={approval.noChildren} onChange={e=>setApproval(a=>({...a,noChildren:e.target.checked}))}/>ยืนยันว่าไม่มีเด็กที่ระบุตัวได้ในภาพนี้</label>}
+   <button disabled={busy||!approval.attest||!approval.gps||(!active.players?.length&&!approval.noChildren)||approval.basis.trim().length<5||approval.evidence.trim().length<5} onClick={()=>review('approve',{basis:approval.basis,evidence:approval.evidence,confirmed:approval.attest,gpsConfirmed:approval.gps,noChildrenConfirmed:approval.noChildren},'อนุมัติแล้ว')}>อนุมัติภาพนี้สำหรับ Private Gallery</button>
    <button className="fga-danger" disabled={busy} onClick={()=>review('hide',{},'ซ่อนแล้ว')}>ซ่อนภาพนี้</button></>}
   </div>:<>
    <div className="fga-actions">{[['','ทั้งหมด'],['review','รอตรวจ'],['published','เผยแพร่'],['hidden','ซ่อน']].map(([v,l])=><button key={v} className={filter===v?'fga-chip active':'fga-chip'} onClick={()=>{setFilter(v);load(1,v)}}>{l}</button>)}</div>
@@ -92,7 +95,7 @@ export default function ReviewClient({event,players,onUpdated,onPlayersChanged})
   </div>}
 
   <div className="fga-review-policy"><h3>คำขอถอดภาพ ({removals.filter(r=>['new','in_review'].includes(r.state)).length})</h3>
-   {removals.length===0?<p>ยังไม่มีคำขอ</p>:<div className="fga-items">{removals.map(r=><div key={r.id}><strong>{r.media_title?'ไฟล์ '+r.media_title:'ทั้งงาน / ไม่ระบุไฟล์'} · {({new:'ใหม่',in_review:'กำลังตรวจ',done:'ดำเนินการแล้ว',rejected:'ไม่ดำเนินการ'})[r.state]}</strong><span>{fmtDate(r.created_at)}{r.contact?' · ติดต่อ: '+r.contact:''}</span><span>{r.description}</span>
+   {removals.length===0?<p>ยังไม่มีคำขอ</p>:<div className="fga-items">{removals.map(r=><div key={r.id}><strong>{r.media_title?'ไฟล์ '+r.media_title:'ทั้งงาน / ไม่ระบุไฟล์'} · {({new:'ใหม่',in_review:'กำลังตรวจ',done:'ดำเนินการแล้ว',rejected:'ไม่ดำเนินการ'})[r.state]}</strong><span>{fmtDate(r.created_at)}{r.contact?' · ติดต่อ: '+r.contact:''}</span><span>{r.description}</span>{r.resolution&&<span>ผลที่บันทึก: {r.resolution}</span>}
     {['new','in_review'].includes(r.state)&&<div className="fga-actions">{r.state==='new'&&<button className="fga-quiet" disabled={busy} onClick={()=>resolveRemoval(r,'in_review')}>รับเรื่อง</button>}<button disabled={busy} onClick={()=>resolveRemoval(r,'done')}>{r.media_id?'ถอดภาพนี้':'ดำเนินการแล้ว'}</button><button className="fga-quiet" disabled={busy} onClick={()=>resolveRemoval(r,'rejected')}>ไม่ดำเนินการ</button></div>}</div>)}</div>}
   </div>
 

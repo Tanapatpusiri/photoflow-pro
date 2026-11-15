@@ -192,7 +192,7 @@ const item=id=>list.body.items.find(i=>i.id===id);
 check('GPS metadata is flagged for review (DSC0001 has GPS)',item(up['DSC0001.JPG'].info.mediaId)?.has_gps===true&&item(up['DSC0002.JPG'].info.mediaId)?.has_gps===false);
 const A=players['น้องเอ'].id,B=players['น้องบี'].id,C=players['น้องซี'].id;
 const ok=r=>r.status===200;
-const evidence={basis:'ความยินยอมผู้ปกครอง (แบบฟอร์ม)',evidence:'FORM-2026-U10-001',confirmed:true};
+const evidence={basis:'ความยินยอมผู้ปกครอง (แบบฟอร์ม)',evidence:'FORM-2026-U10-001',confirmed:true,gpsConfirmed:true,noChildrenConfirmed:true};
 check('tag one photo with two children (no file copies)',ok(await review({action:'tag',eventId:evA.id,mediaId:up['DSC0001.JPG'].info.mediaId,players:[A,B]})));
 const early=await review({action:'approve',eventId:evA.id,mediaId:up['DSC0001.JPG'].info.mediaId,...evidence});
 check('approval blocked until every tagged child has a privacy record',early.status===409&&early.body.code==='PLAYER_RIGHTS_NOT_RECORDED',JSON.stringify(early.body));

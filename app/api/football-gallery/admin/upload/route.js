@@ -165,7 +165,7 @@ async function init(admin,d,origin){
    const media=await client.query(`SELECT m.id FROM fg_media m WHERE m.event_id=$1 AND m.upload_batch=$2 AND m.pair_key=$3 AND m.kind='photo' AND m.status<>'hidden' AND NOT EXISTS(SELECT 1 FROM fg_media_files f WHERE f.media_id=m.id AND f.variant=$4) ORDER BY m.created_at DESC LIMIT 1`,[d.event,batch,pairkey,type.variant]);
    if(media.rowCount){
     mediaId=media.rows[0].id;
-    await client.query(`UPDATE fg_media SET captured_at=COALESCE(captured_at,$2),has_gps=CASE WHEN $3::boolean IS NULL THEN has_gps ELSE COALESCE(has_gps,false) OR $3::boolean END WHERE id=$1`,[mediaId,captured,hasGps]);
+    await client.query(`UPDATE fg_media SET captured_at=COALESCE(captured_at,$2),has_gps=CASE WHEN $3::boolean IS NULL THEN has_gps ELSE COALESCE(has_gps,false) OR $3::boolean END,status=CASE WHEN status='published' THEN 'review' ELSE status END,publish_allowed=false,metadata_reviewed=false WHERE id=$1`,[mediaId,captured,hasGps]);
    }
   }
   if(!mediaId){

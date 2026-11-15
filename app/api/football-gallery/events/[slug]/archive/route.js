@@ -21,7 +21,7 @@ export async function POST(request,{params}){
   if(!e.rowCount)return reply({message:'ไม่พบอัลบั้ม'},404);
   const event=e.rows[0],grant=await grantFor(request,event.id);
   if(!grant)return reply({message:'ไม่มีสิทธิ์',needsAccess:true},403);
-  if(!await rateLimit('archive',grant.codeId+':'+grant.nonce,30,60))return reply({message:'สร้างชุดดาวน์โหลดบ่อยเกินไป กรุณารอสักครู่'},429);
+  if(!await rateLimit('archive',grant.codeId,30,60))return reply({message:'สร้างชุดดาวน์โหลดบ่อยเกินไป กรุณารอสักครู่'},429);
   const files=await selectArchiveFiles(event.id,{scope,playerId:d.playerId,mediaIds:d.mediaIds?[...new Set(d.mediaIds)]:null,variants:formats.map(k=>FORMAT_VARIANTS[k])});
   if(!files.length)return reply({message:'ไม่มีไฟล์ต้นฉบับที่พร้อมดาวน์โหลดตามที่เลือก'},404);
   const groups=partition(files,ARCHIVE_PART_BYTES(),ARCHIVE_MAX_FILES(files)),fallback=event.event_date?new Date(event.event_date):new Date();
