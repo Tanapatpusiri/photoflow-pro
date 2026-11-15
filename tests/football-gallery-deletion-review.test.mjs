@@ -1,0 +1,24 @@
+import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
+let role='owner',scenario={},calls=[],audits=[];
+const client={async query(sql,args){
+ calls.push({sql,args});
+ if(['BEGIN','COMMIT','ROLLBACK'].includes(sql))return {rowCount:0,rows:[]};
+ if(sql.startsWith('SELECT id,event_date::text'))return scenario.eligible===false?{rowCount:0,rows:[]}:{rowCount:1,rows:[{id:'event',event_date:'2024-01-01',retention_until:'2025-01-01'}]};
+ if(sql.startsWith('SELECT id FROM fg_retention_deletion_reviews'))return {rowCount:scenario.existing?1:0,rows:scenario.existing?[{id:'existing'}]:[]};
+ if(sql.startsWith('SELECT COUNT(f.id)'))return {rowCount:1,rows:[{files:2,originals:1,previews:1,pending:0,drive_files:2,other_files:0}]};
+ if(sql.startsWith('INSERT INTO fg_retention_deletion_reviews'))return {rowCount:1,rows:[{id:'review'}]};
+ throw Error('Unexpected query: '+sql);
+},release(){}};
+globalThis.__deletionTest={db:()=>({connect:async()=>client,query:async(sql,args)=>{calls.push({sql,args});return {rows:[]}}}),isUuid:x=>x==='event',adminGuard:async()=>({admin:{id:'admin',role}}),reply:(body,status=200)=>({body,status}),audit:async(_client,a)=>audits.push(a)};
+let source=await readFile('app/api/football-gallery/admin/retention-review/route.js','utf8');source=source.replace(/^import .*;\n/gm,'');
+source='const {db,isUuid,adminGuard,reply,audit}=globalThis.__deletionTest;\n'+source;
+const route=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
+const req={json:async()=>({event:'event'})};
+role='admin';let result=await route.POST(req);assert.equal(result.status,403);assert.equal(calls.length,0);
+role='owner';scenario={eligible:false};result=await route.POST(req);assert.equal(result.status,409);assert.ok(calls.some(x=>x.sql==='ROLLBACK'));assert.ok(!calls.some(x=>x.sql.startsWith('INSERT')));
+const eligibility=calls.find(x=>x.sql.startsWith('SELECT id,event_date::text')).sql;assert.match(eligibility,/retention_until<CURRENT_DATE/);assert.match(eligibility,/\(event_date\+INTERVAL '1 year'\)::date<CURRENT_DATE/);
+calls=[];scenario={existing:true};result=await route.POST(req);assert.equal(result.status,409);assert.ok(!calls.some(x=>x.sql.startsWith('INSERT')));
+calls=[];scenario={};result=await route.POST(req);assert.equal(result.status,201);assert.equal(result.body.snapshot.originals,1);assert.equal(audits[0].action,'retention.review_prepared');assert.ok(calls.some(x=>x.sql==='COMMIT'));assert.ok(!calls.some(x=>/\bDELETE\b|\bUPDATE\b/i.test(x.sql.replace('FOR UPDATE',''))));
+calls=[];role='admin';result=await route.GET({nextUrl:new URL('https://example.test/?event=event')});assert.equal(result.status,403);assert.equal(calls.length,0);
+console.log('PASS: owner-only, expired and one-year eligibility, idempotency, and non-destructive preparation');
