@@ -28,7 +28,7 @@ export default function ReviewClient({event,players,retentionMonths,uploadKey=0,
  useEffect(()=>{if(uploadKey)load(1)},[uploadKey]);
  useEffect(()=>{if(retentionMonths)setPublish(p=>p.retention?p:{...p,retention:addRetentionMonths(event.event_date,retentionMonths)})},[retentionMonths,event.event_date]);
  // Basis and evidence usually apply to the whole match, so they are kept between photos; the confirmations are per photo.
- const select=item=>{setActive(item);setTags(item.players||[]);setApproval(a=>({basis:a.basis,evidence:a.evidence,attest:false,gps:false,noChildren:false}));setError('');setInfo('')};
+ const select=item=>{setActive(item);setTags(item.players||[]);setApproval(a=>({basis:a.basis,evidence:a.evidence,carried:!!(a.basis.trim()||a.evidence.trim()),attest:false,gps:false,noChildren:false}));setError('');setInfo('')};
  const run=async(task,ok)=>{if(busy)return;setBusy(true);setError('');setInfo('');try{await task();if(ok)setInfo(ok)}catch(e){setError(e.message)}finally{setBusy(false)}};
  const review=(action,data={},ok)=>run(async()=>{await post('/review',{action,eventId:event.id,mediaId:active?.id,...data});await load(1);setActive(null);await onUpdated?.();await loadSide()},ok);
  const savedTags=active?.players||[];
@@ -86,7 +86,7 @@ export default function ReviewClient({event,players,retentionMonths,uploadKey=0,
    <h3>ยืนยันการเผยแพร่</h3>
    <label>ฐานทางกฎหมาย / ขอบเขตการอนุญาต<input value={approval.basis} onChange={e=>setApproval(a=>({...a,basis:e.target.value}))} placeholder="เช่น ผู้ปกครองยินยอมให้เผยแพร่ในอัลบั้มส่วนตัวของงานนี้" aria-describedby="fga-basis-hint"/><small id="fga-basis-hint" className="fga-hint">{BASIS_HINT}</small></label>
    <label>หลักฐานการอนุญาต / อ้างอิง<input value={approval.evidence} onChange={e=>setApproval(a=>({...a,evidence:e.target.value}))} placeholder="เช่น แบบฟอร์มยินยอม เลขที่ 2569-014" aria-describedby="fga-evidence-hint"/><small id="fga-evidence-hint" className="fga-hint">{EVIDENCE_HINT}</small></label>
-   <p className="fga-hint">ช่องสองช่องนี้ใช้ค่าเดิมต่อไปเมื่อเปลี่ยนไปภาพถัดไปในงานเดียวกัน</p>
+   {approval.carried?<div className="fga-message" role="note"><strong>ตรวจก่อนใช้ค่าเดิมต่อ</strong> ระบบคงข้อความสองช่องนี้ไว้จากภาพก่อนหน้า เพื่อไม่ต้องพิมพ์ซ้ำ แต่ไม่ได้ตรวจแทนคุณ ก่อนอนุมัติภาพนี้ให้ตรวจว่าหลักฐานนี้ครอบคลุม<strong>เด็กทุกคนที่อยู่ในภาพนี้</strong>{tags.length>0?' ('+players.filter(p=>tags.includes(p.id)).map(p=>p.name).join(', ')+')':''} และการใช้ภาพนี้จริง ถ้าเด็กบางคนมีเงื่อนไขต่างกัน เช่น ยินยอมเฉพาะบางงาน หรือใช้แบบฟอร์มคนละฉบับ ให้แก้สองช่องนี้ให้ตรงกับภาพนี้ก่อน</div>:<p className="fga-hint">ข้อความในสองช่องนี้จะคงไว้ให้ภาพถัดไป แต่ต้องตรวจทุกครั้งว่ายังตรงกับเด็กในภาพนั้น</p>}
    <label className="fga-check"><input type="checkbox" checked={approval.attest} onChange={e=>setApproval(a=>({...a,attest:e.target.checked}))}/>ตรวจสิทธิ์เด็กทุกคนที่ปรากฏในภาพแล้ว</label>
    <div className={active.has_gps?'fga-gps fga-gps-found':'fga-gps'} role="note">
     <strong>{active.has_gps?'ไฟล์นี้มีตำแหน่งที่ถ่าย (GPS) ติดมาด้วย':'ตำแหน่งที่ถ่าย (GPS)'}</strong>

@@ -78,3 +78,8 @@
  .fga-approve-bar{position:sticky;bottom:0;z-index:2;background:#fff;padding:10px 0 calc(env(safe-area-inset-bottom) + 10px);box-shadow:0 -10px 14px #fff}
  .fga-summary .fga-primary{justify-self:stretch}
 }
+.fga-album-status{display:grid;gap:4px;background:#f7f7f8;border-radius:14px;padding:12px 14px;margin-bottom:14px;font-size:13px}
+.fga-album-status p{margin:0}
+.fga-album-status .fga-link{justify-self:start;border:0;background:transparent;padding:0;color:#303033;font-weight:600;cursor:pointer;font-size:13px}
+.fga-round{display:grid;gap:8px;margin-bottom:6px}
+.fga-round-title{font-size:12px;font-weight:600;color:#77777d}
