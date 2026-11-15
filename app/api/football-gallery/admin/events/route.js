@@ -6,6 +6,8 @@ export const runtime='nodejs';
 export const dynamic='force-dynamic';
 export async function GET(request){
  const {error}=await adminGuard(request);if(error)return error;
+ const event=request.nextUrl.searchParams.get('event');
+ if(event!==null&&!isUuid(event))return send({message:'รหัสงานไม่ถูกต้อง'},400);
  try{
   // Correlated counts instead of joining players x media, which multiplied rows per event.
   const q=await db().query(`SELECT e.id,e.title,e.slug,e.venue,e.event_date,e.status,e.privacy_approved_at,e.retention_until,
@@ -13,7 +15,7 @@ export async function GET(request){
    (SELECT COUNT(*)::int FROM fg_media m WHERE m.event_id=e.id AND m.status<>'hidden') AS media,
    (SELECT COUNT(*)::int FROM fg_media m WHERE m.event_id=e.id AND m.status='published') AS published,
    (SELECT COUNT(*)::int FROM fg_removal_requests r WHERE r.event_id=e.id AND r.state IN('new','in_review')) AS open_removals
-   FROM fg_events e ORDER BY e.created_at DESC LIMIT 100`);
+   FROM fg_events e WHERE ($1::uuid IS NULL OR e.id=$1::uuid) ORDER BY e.created_at DESC LIMIT 100`,[event]);
   return send({events:q.rows});
  }catch(e){console.error('fg admin events',e?.code||'unknown');return send({message:'ไม่สามารถอ่านข้อมูล'},503)}
 }

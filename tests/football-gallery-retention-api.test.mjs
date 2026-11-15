@@ -15,7 +15,8 @@ const client={async query(sql,args){
  }
  throw Error('Unexpected query: '+sql);
 },release(){}};
-globalThis.__retentionDb=()=>({connect:async()=>client});
+let listArgs;
+globalThis.__retentionDb=()=>({connect:async()=>client,query:async(sql,args)=>{listArgs=args;return {rows:[{...event}],rowCount:1}}});
 globalThis.__retentionAdmin={adminGuard:async()=>({admin:{id:'admin'}}),adminReply:(body,status=200)=>({body,status}),audit:async()=>{}};
 const load=async(path)=>{
  let s=await readFile(path,'utf8');
@@ -27,9 +28,15 @@ const load=async(path)=>{
 const review=await load('app/api/football-gallery/admin/review/route.js');
 const events=await load('app/api/football-gallery/admin/events/route.js');
 const req=(body)=>({json:async()=>body});
+let listing=await events.GET({nextUrl:new URL('https://example.test/')});assert.equal(listing.status,200);assert.deepEqual(listArgs,[null]);
+listing=await events.GET({nextUrl:new URL('https://example.test/?event=test-event')});assert.equal(listing.status,200);assert.deepEqual(listArgs,['test-event']);
+listing=await events.GET({nextUrl:new URL('https://example.test/?event=bad')});assert.equal(listing.status,400);
 const publish=(retentionUntil)=>review.POST(req({action:'publish-event',eventId:event.id,notice:'คำอธิบายการทดสอบความเป็นส่วนตัวที่มีความยาวมากกว่าสี่สิบตัวอักษร',retentionUntil,confirmed:true}));
 let result=await publish('2027-11-16');assert.equal(result.status,400);assert.equal(result.body.code,'RETENTION_OUT_OF_RANGE');assert.equal(lastUpdate,null);
 result=await publish('2027-11-15');assert.equal(result.status,200);assert.equal(lastUpdate.args[2],'2027-11-15');
+event.status='archived';result=await publish('2027-11-15');assert.equal(result.status,409);assert.equal(result.body.code,'EVENT_NOT_DRAFT');
+event.status='published';result=await publish('2027-11-15');assert.equal(result.status,409);assert.equal(result.body.code,'EVENT_NOT_DRAFT');
+event.status='draft';
 event.event_date=null;result=await publish('2027-11-15');assert.equal(result.status,400);assert.equal(result.body.code,'EVENT_DATE_REQUIRED');
 result=await events.PATCH(req({event:event.id,date:'2026-02-30'}));assert.equal(result.status,400);
 result=await events.PATCH(req({event:event.id,date:'2026-11-15'}));assert.equal(result.status,200);assert.equal(event.event_date,'2026-11-15');

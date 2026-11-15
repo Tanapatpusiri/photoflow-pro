@@ -15,7 +15,7 @@ const messages={
  PRIVACY_NOTICE_REQUIRED:'ต้องระบุประกาศความเป็นส่วนตัว (อย่างน้อย 40 ตัวอักษร) และวันสิ้นสุดการเก็บรักษาก่อนเผยแพร่',
  EVENT_DATE_REQUIRED:'ต้องระบุวันจัดงานก่อนเผยแพร่เพื่อกำหนดระยะเวลาเก็บภาพ',
  RETENTION_OUT_OF_RANGE:'วันสิ้นสุดการเข้าถึงต้องอยู่ในอนาคตและไม่เกิน 1 ปีหลังวันจัดงาน',
- EVENT_NOT_PUBLISHED:'งานยังไม่ได้เผยแพร่',EVENT_NOT_SUSPENDED:'งานไม่ได้อยู่ในสถานะระงับ',
+ EVENT_NOT_PUBLISHED:'งานยังไม่ได้เผยแพร่',EVENT_NOT_SUSPENDED:'งานไม่ได้อยู่ในสถานะระงับ',EVENT_NOT_DRAFT:'เผยแพร่ได้เฉพาะงาน Draft',
  UNKNOWN_ACTION:'คำสั่งไม่ถูกต้อง'
 };
 const text=(v,min,max)=>typeof v==='string'&&v.trim().length>=min&&v.trim().length<=max?v.trim():null;
@@ -82,6 +82,7 @@ export async function POST(request){
    const affected=await client.query(`UPDATE fg_media m SET status='review',publish_allowed=false WHERE m.event_id=$1 AND m.status='published' AND EXISTS(SELECT 1 FROM fg_media_players mp WHERE mp.media_id=m.id AND mp.player_id=$2)`,[eventId,d.playerId]);
    resource=d.playerId;detail={unpublished:affected.rowCount};
   }else if(action==='publish-event'){
+   if(ev.rows[0].status!=='draft')throw new ReviewError('EVENT_NOT_DRAFT');
    const notice=text(d.notice,40,10000),retention=d.retentionUntil;
    if(d.confirmed!==true||!notice||!retention)throw new ReviewError('PRIVACY_NOTICE_REQUIRED',400);
    if(!ev.rows[0].event_date)throw new ReviewError('EVENT_DATE_REQUIRED',400);

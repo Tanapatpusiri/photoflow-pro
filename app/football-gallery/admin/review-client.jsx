@@ -72,6 +72,7 @@ export default function ReviewClient({event,players,onUpdated,onPlayersChanged})
    <h3>เปิดงานให้ผู้ปกครอง</h3>
    {event.status==='published'?<><p>เผยแพร่แล้ว{event.retention_until?' · เก็บถึง '+new Date(event.retention_until).toLocaleDateString('th-TH',{dateStyle:'medium'}):''} ระงับได้ทันทีหากพบปัญหา</p><button className="fga-danger" disabled={busy} onClick={()=>confirm('ระงับการเผยแพร่ทั้งงาน? ผู้ปกครองทุกคนจะเข้าไม่ได้จนกว่าจะเปิดอีกครั้ง')&&review('suspend-event',{},'ระงับการเผยแพร่แล้ว')}>ระงับการเผยแพร่ทั้งงาน</button></>
    :event.status==='suspended'?<><p>งานนี้ถูกระงับอยู่ ผู้ปกครองเข้าไม่ได้</p><button disabled={busy} onClick={()=>review('resume-event',{},'เปิดการเผยแพร่อีกครั้งแล้ว')}>เปิดการเผยแพร่อีกครั้ง</button></>
+   :event.status==='archived'?<p>งานนี้เก็บถาวรแล้ว ผู้ปกครองเข้าไม่ได้</p>
    :<><p>ใส่ Privacy Notice ที่ใช้กับงานนี้จริง และวันสิ้นสุดการเก็บรักษา หลังวันดังกล่าวลิงก์และรหัสทั้งหมดจะใช้ไม่ได้ หากยังไม่ได้รับความยินยอม/ฐานกฎหมาย ไม่ควรเผยแพร่</p>
     <textarea rows={5} value={publish.notice} onChange={e=>setPublish(p=>({...p,notice:e.target.value}))} placeholder="ผู้ควบคุมข้อมูล วัตถุประสงค์ สิทธิ์ ระยะเก็บและช่องทางขอถอดรูป"/>
     <label>เปิดให้เข้าถึงถึงวันที่<input type="date" value={publish.retention} min={inDays(1)} max={oneYearAfterEvent(event.event_date)||undefined} onChange={e=>setPublish(p=>({...p,retention:e.target.value}))}/></label>
