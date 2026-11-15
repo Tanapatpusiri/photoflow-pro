@@ -5,6 +5,8 @@ import {formatBytes,formatCaptureTime} from '../../../lib/football-gallery-forma
 const api='/api/football-gallery/admin';
 async function post(path,body){const r=await fetch(api+path,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});let d={};try{d=await r.json()}catch{}if(!r.ok&&r.status!==202)throw Error(d.message||'ดำเนินการไม่สำเร็จ');return {status:r.status,...d}}
 async function get(path){const r=await fetch(api+path,{cache:'no-store'});const d=await r.json();if(!r.ok)throw Error(d.message||'โหลดข้อมูลไม่สำเร็จ');return d}
+const BASIS_HINT='เขียนว่าได้รับอนุญาตจากใคร ให้ทำอะไร และใช้ได้แค่ไหน เช่น "ผู้ปกครองยินยอมตามแบบฟอร์มสมัครแข่ง ให้เผยแพร่เฉพาะในอัลบั้มส่วนตัวของงานนี้"';
+const EVIDENCE_HINT='เขียนว่าหลักฐานอยู่ที่ไหน เพื่อให้ตามหาได้ภายหลัง เช่น "แบบฟอร์มยินยอม เลขที่ 2569-014 เก็บที่สำนักงานสโมสร" ไม่ต้องใส่เบอร์โทร เลขบัตร หรือข้อมูลส่วนตัวของผู้ปกครอง';
 const STATUS={uploading:'กำลังอัปโหลด',review:'รอตรวจ',published:'เผยแพร่แล้ว',hidden:'ซ่อน'};
 const fmtDate=v=>v?new Date(v).toLocaleString('th-TH',{dateStyle:'medium',timeStyle:'short'}):'';
 // Calendar dates follow Thailand, matching the server's Bangkok "today".
@@ -73,23 +75,37 @@ export default function ReviewClient({event,players,retentionMonths,uploadKey=0,
    {active.thumb&&<img className="fga-review-photo" src={active.thumb} alt="ภาพสำหรับผู้ดูแลตรวจสอบก่อนเผยแพร่"/>}
    <h3>{active.title||active.id.slice(0,8)} · {active.kind==='photo'?'รูปภาพ':'วิดีโอ'}</h3>
    <p>สถานะ: {STATUS[active.status]||active.status}{active.captured_at?' · ถ่ายเมื่อ '+formatCaptureTime(active.captured_at):''}</p>
-   {active.has_gps&&<div className="fga-message" role="note">ไฟล์นี้มีตำแหน่งที่ถ่าย (GPS) ติดมาด้วย คนที่ดาวน์โหลดไฟล์ต้นฉบับจะเห็นตำแหน่งนี้ ตรวจให้แน่ใจว่าเปิดเผยได้ก่อนอนุมัติ</div>}
-   <div className="fga-items">{active.files.map(f=><div key={f.id}><strong>{f.variant} · {f.filename}</strong><span>{formatBytes(f.bytes)} · {f.pending?'อัปโหลดยังไม่ครบ':!originals(f)?'ภาพตัวอย่าง':f.verifiedHash?'ไฟล์ครบถ้วน ✓':verifying[f.id]!==undefined?'กำลังตรวจ '+verifying[f.id]+'%':'ยังไม่ได้ตรวจความครบถ้วน'}</span>{!f.verifiedHash&&!f.pending&&originals(f)&&<button onClick={()=>verify(f)} disabled={busy}>ตรวจความครบถ้วน</button>}</div>)}</div>
+   {(()=>{const list=<div className="fga-items">{active.files.map(f=><div key={f.id}><strong>{f.variant} · {f.filename}</strong><span>{formatBytes(f.bytes)} · {f.pending?'อัปโหลดยังไม่ครบ':!originals(f)?'ภาพตัวอย่าง':f.verifiedHash?'ไฟล์ครบถ้วน ✓':verifying[f.id]!==undefined?'กำลังตรวจ '+verifying[f.id]+'%':'ยังไม่ได้ตรวจความครบถ้วน'}</span>{!f.verifiedHash&&!f.pending&&originals(f)&&<button onClick={()=>verify(f)} disabled={busy}>ตรวจความครบถ้วน</button>}</div>)}</div>;
+    // Files that are all complete need no action, so they fold away to keep the form close to the photo.
+    return active.files.every(f=>!f.pending&&(!originals(f)||f.verifiedHash))?<details className="fga-files"><summary>ไฟล์ {active.files.length} ไฟล์ · ครบถ้วน ✓</summary>{list}</details>:list})()}
    {active.status==='hidden'?<button className="fga-quiet" disabled={busy} onClick={()=>review('restore',{},'กู้คืนแล้ว ต้องตรวจใหม่ก่อนเผยแพร่')}>กู้คืนเพื่อตรวจใหม่</button>:<>
    <h3>แท็กนักฟุตบอล</h3><p>ภาพหนึ่งภาพแท็กเด็กได้หลายคนโดยไม่คัดลอกไฟล์ การเปลี่ยนแท็กจะส่งภาพกลับไปรอตรวจ</p>
    <div className="fga-checkboxes">{players.map(p=><label key={p.id}><input type="checkbox" checked={tags.includes(p.id)} onChange={e=>setTags(s=>e.target.checked?[...s,p.id]:s.filter(x=>x!==p.id))}/>{p.name} {p.jersey&&'#'+p.jersey}{!p.privacy_recorded&&' (ยังไม่บันทึกสิทธิ์)'}</label>)}</div>
    {tagsDirty&&<p className="fga-message" role="status">แท็กที่เลือกยังไม่ได้บันทึก กด "บันทึกแท็ก" หรือกดอนุมัติ ระบบจะบันทึกแท็กให้ก่อนอนุมัติ</p>}
    <button className="fga-quiet" disabled={busy||!tagsDirty} onClick={()=>review('tag',{players:tags},'บันทึกแท็กแล้ว')}>บันทึกแท็ก</button>
    <h3>ยืนยันการเผยแพร่</h3>
-   <label>ฐานทางกฎหมาย / ขอบเขตการอนุญาต<input value={approval.basis} onChange={e=>setApproval(a=>({...a,basis:e.target.value}))} placeholder="กรอกเฉพาะข้อมูลที่ตรวจสอบได้จริง"/></label>
-   <label>หลักฐานการอนุญาต / อ้างอิง<input value={approval.evidence} onChange={e=>setApproval(a=>({...a,evidence:e.target.value}))} placeholder="รหัสเอกสารหรือข้อมูลหลักฐาน"/></label>
+   <label>ฐานทางกฎหมาย / ขอบเขตการอนุญาต<input value={approval.basis} onChange={e=>setApproval(a=>({...a,basis:e.target.value}))} placeholder="เช่น ผู้ปกครองยินยอมให้เผยแพร่ในอัลบั้มส่วนตัวของงานนี้" aria-describedby="fga-basis-hint"/><small id="fga-basis-hint" className="fga-hint">{BASIS_HINT}</small></label>
+   <label>หลักฐานการอนุญาต / อ้างอิง<input value={approval.evidence} onChange={e=>setApproval(a=>({...a,evidence:e.target.value}))} placeholder="เช่น แบบฟอร์มยินยอม เลขที่ 2569-014" aria-describedby="fga-evidence-hint"/><small id="fga-evidence-hint" className="fga-hint">{EVIDENCE_HINT}</small></label>
+   <p className="fga-hint">ช่องสองช่องนี้ใช้ค่าเดิมต่อไปเมื่อเปลี่ยนไปภาพถัดไปในงานเดียวกัน</p>
    <label className="fga-check"><input type="checkbox" checked={approval.attest} onChange={e=>setApproval(a=>({...a,attest:e.target.checked}))}/>ตรวจสิทธิ์เด็กทุกคนที่ปรากฏในภาพแล้ว</label>
-   <p>ระบบตรวจหาตำแหน่ง GPS ในไฟล์ได้ไม่ครบทุกชนิดไฟล์ ไฟล์ต้นฉบับที่ดาวน์โหลดอาจมีตำแหน่งที่ถ่ายติดอยู่</p>
+   <div className={active.has_gps?'fga-gps fga-gps-found':'fga-gps'} role="note">
+    <strong>{active.has_gps?'ไฟล์นี้มีตำแหน่งที่ถ่าย (GPS) ติดมาด้วย':'ตำแหน่งที่ถ่าย (GPS)'}</strong>
+    <p>{active.has_gps?'ผู้ปกครองที่เข้าอัลบั้มนี้ได้และกดดาวน์โหลดไฟล์ต้นฉบับ จะเปิดดูตำแหน่งนี้บนแผนที่ได้':'ระบบไม่พบ GPS ในไฟล์นี้ แต่ตรวจได้ไม่ครบทุกชนิดไฟล์ (โดยเฉพาะ RAW และวิดีโอ)'} · ภาพตัวอย่างที่แสดงในหน้าเว็บไม่มีตำแหน่งติดไปด้วย</p>
+    <details><summary>วิธีตรวจและตัดสินใจ</summary>
+     <ol>
+      <li>เปิดไฟล์ต้นฉบับในเครื่อง: Mac ใช้แอป Preview → Tools → Show Inspector → แท็บ GPS · Windows คลิกขวาที่ไฟล์ → Properties → Details → GPS · iPhone/Android เปิดในแอปรูปภาพแล้วปัดขึ้นดูแผนที่</li>
+      <li>ถ้าตำแหน่งคือสนามแข่งหรือสถานที่จัดงาน ซึ่งผู้ปกครองรู้อยู่แล้ว ถือว่าเปิดเผยได้ ติ๊กยืนยันด้านล่าง</li>
+      <li>ถ้าตำแหน่งคือบ้าน โรงเรียน หรือที่อื่นที่บอกว่าเด็กอยู่ที่ไหน อย่าอนุมัติ ให้กด "ซ่อนภาพนี้" แล้วลบตำแหน่งออกจากไฟล์ก่อนอัปโหลดใหม่ (ปิด Location ในกล้อง หรือใช้คำสั่ง Remove Location Info ในแอป Preview)</li>
+     </ol>
+    </details>
+   </div>
    <label className="fga-check"><input type="checkbox" checked={approval.gps} onChange={e=>setApproval(a=>({...a,gps:e.target.checked}))}/>ยืนยันว่าตรวจเรื่องตำแหน่ง GPS ในไฟล์แล้ว และเปิดเผยได้</label>
    {tags.length===0&&<label className="fga-check"><input type="checkbox" checked={approval.noChildren} onChange={e=>setApproval(a=>({...a,noChildren:e.target.checked}))}/>ยืนยันว่าไม่มีเด็กที่ระบุตัวได้ในภาพนี้ (ถ้ามีเด็กในภาพ ให้แท็กด้านบนแทน)</label>}
    <Missing items={approveMissing}/>
-   <button disabled={busy||approveMissing.length>0} onClick={approve}>{tagsDirty?'บันทึกแท็กและอนุมัติภาพนี้':'อนุมัติภาพนี้'}</button>
-   <button className="fga-danger" disabled={busy} onClick={()=>review('hide',{},'ซ่อนแล้ว')}>ซ่อนภาพนี้</button></>}
+   <div className="fga-approve-bar">
+    <button disabled={busy||approveMissing.length>0} onClick={approve}>{approveMissing.length>0?`ยังขาด ${approveMissing.length} ข้อ`:tagsDirty?'บันทึกแท็กและอนุมัติภาพนี้':'อนุมัติภาพนี้'}</button>
+    <button className="fga-danger" disabled={busy} onClick={()=>review('hide',{},'ซ่อนแล้ว')}>ซ่อนภาพนี้</button>
+   </div></>}
   </div>:<>
    <div className="fga-actions">{[['','ทั้งหมด'],['review','รอตรวจ'],['published','เผยแพร่'],['hidden','ซ่อน']].map(([v,l])=><button key={v} className={filter===v?'fga-chip active':'fga-chip'} onClick={()=>{setFilter(v);load(1,v)}}>{l}</button>)}</div>
    <div className="fga-review-grid">{items.map(item=><button key={item.id} className="fga-review-tile" onClick={()=>select(item)}>{item.thumb?<img src={item.thumb} alt="ภาพรอตรวจ" loading="lazy"/>:<div className="fga-review-placeholder">ยังไม่มี Preview</div>}<strong>{item.title||(item.kind==='photo'?'รูปภาพ':'วิดีโอ')}</strong><span>{STATUS[item.status]||item.status} · {item.files.filter(originals).map(f=>f.variant==='VIDEO_ORIGINAL'?'VIDEO':f.variant).join('+')}{item.has_gps?' · GPS':''}</span></button>)}</div>
@@ -102,7 +118,7 @@ export default function ReviewClient({event,players,retentionMonths,uploadKey=0,
    <h3>สิทธิ์ของนักฟุตบอล</h3><p>บันทึกฐานกฎหมายของเด็กแต่ละคนก่อนอนุมัติภาพที่แท็กเด็กคนนั้น หากผู้ปกครองถอนความยินยอม ให้ถอนสิทธิ์ ภาพที่แท็กเด็กคนนั้นจะถูกปิดทันที</p>
    <select value={privacy.player} onChange={e=>setPrivacy(p=>({...p,player:e.target.value}))}><option value="">เลือกนักฟุตบอล</option>{players.map(p=><option key={p.id} value={p.id}>{p.name} {p.jersey&&'#'+p.jersey} · {p.privacy_recorded?'บันทึกแล้ว':'ยังไม่บันทึก'}</option>)}</select>
    {selectedPlayer?.privacy_recorded?<button className="fga-danger" disabled={busy} onClick={()=>confirm('ถอนสิทธิ์ของ '+selectedPlayer.name+'?')&&savePrivacy('revoke-player-privacy')}>ถอนสิทธิ์ / ผู้ปกครองถอนความยินยอม</button>:<>
-   <label>ฐานการอนุญาต<input value={privacy.basis} onChange={e=>setPrivacy(p=>({...p,basis:e.target.value}))}/></label><label>หลักฐานอ้างอิง<input value={privacy.evidence} onChange={e=>setPrivacy(p=>({...p,evidence:e.target.value}))}/></label>
+   <label>ฐานการอนุญาต<input value={privacy.basis} onChange={e=>setPrivacy(p=>({...p,basis:e.target.value}))} placeholder="เช่น ผู้ปกครองยินยอมให้เผยแพร่ในอัลบั้มส่วนตัวของงานนี้"/><small className="fga-hint">{BASIS_HINT}</small></label><label>หลักฐานอ้างอิง<input value={privacy.evidence} onChange={e=>setPrivacy(p=>({...p,evidence:e.target.value}))} placeholder="เช่น แบบฟอร์มยินยอม เลขที่ 2569-014"/><small className="fga-hint">{EVIDENCE_HINT}</small></label>
    <label className="fga-check"><input type="checkbox" checked={privacy.attest} onChange={e=>setPrivacy(p=>({...p,attest:e.target.checked}))}/>ยืนยันว่าได้ตรวจฐานทางกฎหมายและผู้มีอำนาจอนุญาตแล้ว</label>
    <Missing items={privacyMissing}/><button disabled={busy||privacyMissing.length>0} onClick={()=>savePrivacy('player-privacy')}>บันทึกสิทธิ์นักฟุตบอล</button></>}
   </div>}

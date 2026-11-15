@@ -34,7 +34,7 @@ export default function FootballAdmin(){
  const [title,setTitle]=useState(''),[venue,setVenue]=useState(''),[date,setDate]=useState(''),[showCreate,setShowCreate]=useState(false);
  const [missingDate,setMissingDate]=useState('');
  const [retentionRefresh,setRetentionRefresh]=useState(0);
- const [uploadKey,setUploadKey]=useState(0),[uploadedAlbum,setUploadedAlbum]=useState(null);
+ const [uploadKey,setUploadKey]=useState(0);
  const [retentionMonths,setRetentionMonths]=useState(null);
  const [view,setView]=useState('albums'),[albumTab,setAlbumTab]=useState('review');
  const [activeId,setActiveId]=useState(null),[players,setPlayers]=useState([]),[name,setName]=useState(''),[jersey,setJersey]=useState(''),[team,setTeam]=useState('');
@@ -105,8 +105,7 @@ export default function FootballAdmin(){
      {players.length===0?<p className="fga-meta">ยังไม่มีนักฟุตบอล</p>:<div className="fga-items">{players.map(p=><div key={p.id}><strong>{p.name} {p.jersey?'#'+p.jersey:''}</strong><span>{p.team||'ไม่ระบุทีม'} · {p.visible?'บันทึกสิทธิ์แล้ว · แสดงในอัลบั้ม':'ยังไม่บันทึกสิทธิ์'}</span></div>)}</div>}
      <form onSubmit={addPlayer} className="fga-inline-form"><label>ชื่อเล่น/ชื่อแสดง<input value={name} onChange={e=>setName(e.target.value)} required maxLength={100}/></label><label>หมายเลขเสื้อ<input value={jersey} onChange={e=>setJersey(e.target.value)} maxLength={12} inputMode="numeric"/></label><label>ทีม<input value={team} onChange={e=>setTeam(e.target.value)} maxLength={100}/></label><button disabled={busy||!name.trim()}>เพิ่มนักฟุตบอล</button></form>
     </section>}
-    {albumTab==='upload'&&<section className="fga-card"><h2>อัปโหลด JPEG / RAW / วิดีโอ</h2>{canUpload?<Uploader eventId={active.id} onUploaded={()=>{setUploadKey(n=>n+1);setUploadedAlbum(active.id);return load()}}/>:<p>อัลบั้มที่ระงับหรือเก็บถาวรไม่เปิดรับอัปโหลด</p>}
-     {uploadedAlbum===active.id&&<button className="fga-primary fga-next" onClick={()=>setAlbumTab('review')}>ไปตรวจภาพที่อัปโหลด ›</button>}
+    {albumTab==='upload'&&<section className="fga-card"><h2>อัปโหลด JPEG / RAW / วิดีโอ</h2>{canUpload?<Uploader eventId={active.id} album={{media:active.media||0,pending:pending(active),live:active.status==='published'}} onUploaded={()=>{setUploadKey(n=>n+1);return load()}} onReview={()=>setAlbumTab('review')} onPublish={()=>setAlbumTab('publish')}/>:<p>อัลบั้มที่ระงับหรือเก็บถาวรไม่เปิดรับอัปโหลด</p>}
     </section>}
     {['players','review','publish','requests'].includes(albumTab)&&<section className="fga-card"><ReviewClient view={albumTab} event={active} players={players} retentionMonths={retentionMonths} uploadKey={uploadKey} onUpdated={load} onPlayersChanged={()=>loadPlayers()} onNavigate={setAlbumTab}/></section>}
     {albumTab==='retention'&&<RetentionDeletionReview key={active.id} event={active}/>}
