@@ -1,0 +1,24 @@
+import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
+import {randomUUID} from 'node:crypto';
+let statements=[];
+const client={async query(sql){
+ statements.push(sql);
+ if(['BEGIN','COMMIT','ROLLBACK'].includes(sql))return {rowCount:0,rows:[]};
+ if(sql.startsWith('SELECT id FROM fg_events'))return {rowCount:1,rows:[{id:'event'}]};
+ if(sql.startsWith('SELECT f.id,f.media_id'))return {rowCount:0,rows:[]};
+ if(sql.startsWith('SELECT m.id FROM fg_media'))return {rowCount:1,rows:[{id:'published-media'}]};
+ if(sql.startsWith('UPDATE fg_media SET captured_at'))return {rowCount:1,rows:[]};
+ if(sql.startsWith('INSERT INTO fg_media_files'))return {rowCount:1,rows:[]};
+ throw Error('Unexpected query: '+sql);
+},release(){}};
+globalThis.__pairTest={randomUUID,db:()=>({connect:async()=>client}),isUuid:x=>x==='event',originalType:()=>({base:'photo',ext:'raw',variant:'RAW',mime:'image/raw'}),storageDriver:()=> 's3',presignUpload:async()=> 'https://upload.example',adminGuard:async()=>({admin:{id:'admin'}}),send:(body,status=200)=>({body,status}),audit:async()=>{},DRIVE_CHUNK:1};
+let source=await readFile('app/api/football-gallery/admin/upload/route.js','utf8');source=source.replace(/^import .*;\n/gm,'');
+source='const {randomUUID,db,isUuid,originalType,storageDriver,presignUpload,adminGuard,send,audit,DRIVE_CHUNK}=globalThis.__pairTest;\n'+source;
+const {POST}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
+const response=await POST({headers:{get:()=> 'https://preview.example'},json:async()=>({action:'init',event:'event',filename:'photo.raw',bytes:100,sha256:'a'.repeat(64),batch:'batch'})});
+assert.equal(response.status,201);assert.equal(response.body.mediaId,'published-media');
+const update=statements.findIndex(s=>s.startsWith('UPDATE fg_media SET captured_at'));
+const insert=statements.findIndex(s=>s.startsWith('INSERT INTO fg_media_files'));
+assert.ok(update>=0&&update<insert);assert.match(statements[update],/status=CASE WHEN status='published' THEN 'review'/);assert.match(statements[update],/publish_allowed=false,metadata_reviewed=false/);
+console.log('PASS: pairing a new original returns published media to privacy review');
