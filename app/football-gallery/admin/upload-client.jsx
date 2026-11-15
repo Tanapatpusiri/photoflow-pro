@@ -94,15 +94,26 @@ async function exifOf(file){
  try{return probeExif(new Uint8Array(await file.slice(0,262144).arrayBuffer()))}catch{return null}
 }
 
-// Where the album stands in the whole flow: choose files → upload → review → publish.
+// Album status: what is already in the album, independent of the files picked now.
+function AlbumStatus({album,onReview}){
+ const n=v=>v.toLocaleString('th-TH');
+ return <div className="fga-album-status" role="note">
+  <strong>สถานะอัลบั้มตอนนี้</strong>
+  <p>{album.media>0?`มีภาพ/วิดีโอในอัลบั้มแล้ว ${n(album.media)} รายการ · รอตรวจ ${n(album.pending)} · ${album.live?'อัลบั้มเผยแพร่แล้ว':'ยังไม่เผยแพร่'}`:'อัลบั้มนี้ยังไม่มีภาพ'}</p>
+  {album.pending>0&&onReview&&<button className="fga-link" onClick={onReview}>ไปตรวจภาพที่ค้างอยู่ ›</button>}
+ </div>;
+}
+// Steps of this upload round only: they start fresh every time new files are chosen.
 function Steps({files,running,progress,summary,album}){
- const uploaded=summary?summary.failed===0:!running&&files===0&&album.media>0;
- const done=[files>0||!!summary||album.media>0,uploaded,album.media>0&&album.pending===0&&uploaded,album.live];
+ const uploaded=!!summary&&!summary.stopped&&summary.failed===0&&summary.skipped===0;
+ const reviewed=uploaded&&album.pending===0;
+ const done=[files>0,uploaded,reviewed,reviewed&&album.live];
  // Only the first unfinished step is the current one.
  const current=done.indexOf(false);
- const notes=[files>0?files.toLocaleString('th-TH')+' ไฟล์':'',running?`${progress.toLocaleString('th-TH')}/${files.toLocaleString('th-TH')} ไฟล์`:summary&&summary.failed?`ไม่สำเร็จ ${summary.failed} ไฟล์`:'',album.pending>0?`รอตรวจ ${album.pending.toLocaleString('th-TH')}`:'',''];
+ const n=v=>v.toLocaleString('th-TH');
+ const notes=[files>0?n(files)+' ไฟล์':'ยังไม่ได้เลือก',running?`${n(progress)}/${n(files)} ไฟล์`:summary&&summary.failed?`ไม่สำเร็จ ${n(summary.failed)} ไฟล์`:summary&&(summary.stopped||summary.skipped)?'หยุดไว้':'',uploaded&&album.pending>0?`รอตรวจ ${n(album.pending)}`:'',''];
  const steps=['เลือกไฟล์','อัปโหลด','ตรวจภาพ','เผยแพร่'].map((label,i)=>[label,done[i]&&(current===-1||i<current)?'done':i===current?'now':'todo',notes[i]]);
- return <ol className="fga-steps" aria-label="ขั้นตอนของอัลบั้ม">{steps.map(([label,state,note],i)=><li key={label} className={state} aria-current={state==='now'?'step':undefined}><span>{state==='done'?'✓':i+1}</span><strong>{label}</strong>{note&&<small>{note}</small>}</li>)}</ol>;
+ return <div className="fga-round"><small className="fga-round-title">ขั้นตอนของรอบอัปโหลดนี้</small><ol className="fga-steps" aria-label="ขั้นตอนของรอบอัปโหลดนี้">{steps.map(([label,state,note],i)=><li key={label} className={state} aria-current={state==='now'?'step':undefined}><span>{state==='done'?'✓':i+1}</span><strong>{label}</strong>{note&&<small>{note}</small>}</li>)}</ol></div>;
 }
 
 export default function Uploader({eventId,album={media:0,pending:0,live:false},onUploaded,onReview,onPublish}){
@@ -185,6 +196,7 @@ export default function Uploader({eventId,album={media:0,pending:0,live:false},o
  }
  const total=files.reduce((n,f)=>n+f.size,0);
  return <div className="fga-uploader">
+  <AlbumStatus album={album} onReview={!summary&&!running?onReview:null}/>
   <Steps files={files.length} running={running} progress={progress} summary={summary} album={album}/>
   <label>ชื่อกล้อง (ไม่บังคับ)<input value={camera} onChange={e=>setCamera(e.target.value)} placeholder="เช่น Canon R6 กล้อง 1" disabled={running}/></label>
   <label>เลือกรูปหรือวิดีโอ (เลือกได้หลายไฟล์พร้อมกัน)<input type="file" multiple disabled={running} accept=".jpg,.jpeg,.arw,.cr2,.cr3,.nef,.raf,.dng,.orf,.rw2,.pef,.srw,.3fr,.iiq,.mov,.mp4,.m4v" onChange={e=>{setFiles(Array.from(e.target.files||[]));setStatus({});setErrors([]);setSummary(null)}}/></label>

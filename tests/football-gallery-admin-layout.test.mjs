@@ -50,6 +50,14 @@ assert.match(upload,/role="progressbar"/);
 for(const label of ['สำเร็จ','มีอยู่แล้ว (ข้าม)','ไม่สำเร็จ'])assert.ok(upload.includes('<dt>'+label+'</dt>'),label);
 assert.match(upload,/onClick=\{onReview\}/);
 assert.match(page,/<Uploader eventId=\{active\.id\} album=\{\{/);
+// Upload steps describe only the files picked now; what is already in the album is shown separately.
+assert.match(upload,/function AlbumStatus\(/);
+assert.match(upload,/ขั้นตอนของรอบอัปโหลดนี้/);
+assert.match(upload,/const done=\[files>0,uploaded,reviewed,reviewed&&album\.live\]/);
+assert.doesNotMatch(upload,/files>0\|\|!!summary\|\|album\.media>0/);
+// Carried-over permission text comes with a reminder to check it covers every child in this photo.
+assert.match(review,/ตรวจก่อนใช้ค่าเดิมต่อ/);
+assert.match(review,/เด็กทุกคนที่อยู่ในภาพนี้/);
 // The site root opens Football Gallery; the old PhotoFlow demo is no longer the front page.
 const root=await readFile('app/page.js','utf8');
 assert.match(root,/redirect\('\/football-gallery'\)/);
