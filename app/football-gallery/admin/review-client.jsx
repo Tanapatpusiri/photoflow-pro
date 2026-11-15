@@ -25,13 +25,36 @@ export default function ReviewClient({event,players,retentionMonths,uploadKey=0,
  // Show newly uploaded files without leaving the current filter or the file being reviewed.
  useEffect(()=>{if(uploadKey)load(1)},[uploadKey]);
  useEffect(()=>{if(retentionMonths)setPublish(p=>p.retention?p:{...p,retention:addRetentionMonths(event.event_date,retentionMonths)})},[retentionMonths,event.event_date]);
- const select=item=>{setActive(item);setTags(item.players||[]);setApproval({basis:'',evidence:'',attest:false,gps:false,noChildren:false});setError('');setInfo('')};
+ // Basis and evidence usually apply to the whole match, so they are kept between photos; the confirmations are per photo.
+ const select=item=>{setActive(item);setTags(item.players||[]);setApproval(a=>({basis:a.basis,evidence:a.evidence,attest:false,gps:false,noChildren:false}));setError('');setInfo('')};
  const run=async(task,ok)=>{if(busy)return;setBusy(true);setError('');setInfo('');try{await task();if(ok)setInfo(ok)}catch(e){setError(e.message)}finally{setBusy(false)}};
  const review=(action,data={},ok)=>run(async()=>{await post('/review',{action,eventId:event.id,mediaId:active?.id,...data});await load(1);setActive(null);await onUpdated?.();await loadSide()},ok);
+ const savedTags=active?.players||[];
+ const tagsDirty=!!active&&(tags.length!==savedTags.length||tags.some(t=>!savedTags.includes(t)));
+ const approve=()=>run(async()=>{
+  if(tagsDirty){await post('/review',{action:'tag',eventId:event.id,mediaId:active.id,players:tags});setActive(a=>a&&{...a,players:[...tags]})}
+  await post('/review',{action:'approve',eventId:event.id,mediaId:active.id,basis:approval.basis,evidence:approval.evidence,confirmed:approval.attest,gpsConfirmed:approval.gps,noChildrenConfirmed:tags.length===0&&approval.noChildren});
+  await load(1);setActive(null);await onUpdated?.();await loadSide();
+ },'อนุมัติแล้ว');
+ // Plain-language list of what still blocks each action, shown next to its button.
+ const approveMissing=!active?[]:[
+  active.files.some(f=>f.pending)&&'ไฟล์ยังอัปโหลดไม่ครบ',
+  active.files.some(f=>['JPEG','RAW','VIDEO_ORIGINAL'].includes(f.variant)&&!f.pending&&!f.verifiedHash)&&'ตรวจความครบถ้วนของไฟล์ต้นฉบับ (กดปุ่มด้านบน)',
+  ...players.filter(p=>tags.includes(p.id)&&!p.privacy_recorded).map(p=>'บันทึกสิทธิ์ของ '+p.name+' ในแท็บ "นักฟุตบอล" ก่อน'),
+  approval.basis.trim().length<5&&'กรอกฐานทางกฎหมาย (อย่างน้อย 5 ตัวอักษร)',
+  approval.evidence.trim().length<5&&'กรอกหลักฐานการอนุญาต (อย่างน้อย 5 ตัวอักษร)',
+  !approval.attest&&'ติ๊กยืนยันว่าตรวจสิทธิ์เด็กในภาพแล้ว',
+  !approval.gps&&'ติ๊กยืนยันเรื่องตำแหน่ง GPS ในไฟล์',
+  tags.length===0&&!approval.noChildren&&'แท็กเด็กที่อยู่ในภาพ หรือติ๊กว่าไม่มีเด็กที่ระบุตัวได้'
+ ].filter(Boolean);
+ const privacyMissing=[!privacy.player&&'เลือกนักฟุตบอล',privacy.basis.trim().length<5&&'กรอกฐานการอนุญาต (อย่างน้อย 5 ตัวอักษร)',privacy.evidence.trim().length<5&&'กรอกหลักฐานอ้างอิง (อย่างน้อย 5 ตัวอักษร)',!privacy.attest&&'ติ๊กยืนยันการตรวจฐานกฎหมาย'].filter(Boolean);
+ const publishMax=addRetentionMonths(event.event_date,retentionMonths);
+ const publishMissing=[publish.notice.trim().length<40&&`เขียน Privacy Notice อย่างน้อย 40 ตัวอักษร (ตอนนี้ ${publish.notice.trim().length})`,!event.event_date&&'บันทึกวันจัดงานก่อน (ด้านบนของหน้า)',event.event_date&&!retentionMonths&&'รอโหลดระยะเวลาเก็บภาพ',!publish.retention&&'เลือกวันสิ้นสุดการเข้าถึง',publish.retention&&publishMax&&publish.retention>publishMax&&'วันสิ้นสุดต้องไม่เกิน '+publishMax,publish.retention&&event.event_date&&publish.retention<=event.event_date.slice(0,10)&&'วันสิ้นสุดต้องหลังวันจัดงาน',!publish.attest&&'ติ๊กยืนยันฐานกฎหมายและ Privacy Notice'].filter(Boolean);
+ const Missing=({items})=>items.length?<div className="fga-missing" role="note"><strong>ยังกดไม่ได้ เพราะยังขาด:</strong><ul>{items.map(m=><li key={m}>{m}</li>)}</ul></div>:null;
  const verify=file=>run(async()=>{
   for(let i=0;i<5000;i++){const r=await post('/verify-file',{fileId:file.id});if(r.status===202){setVerifying(v=>({...v,[file.id]:Math.floor(r.offset/r.bytes*100)}));continue}break}
   setVerifying(v=>({...v,[file.id]:undefined}));const d=await get('/media?event='+encodeURIComponent(event.id));setItems(d.items);setActive(a=>a&&d.items.find(x=>x.id===a.id)||a);
- },'ตรวจ SHA-256 แล้ว');
+ },'ตรวจความครบถ้วนของไฟล์แล้ว');
  const createGrant=type=>run(async()=>{const r=await post('/grants',{event:event.id,type,days:grantDays,label:grantLabel});setIssued({type,...r});setGrantLabel('');await loadSide()});
  const revokeGrant=g=>run(async()=>{if(!confirm('ยกเลิกสิทธิ์นี้? ผู้ที่เข้าด้วยลิงก์/รหัสนี้จะเข้าไม่ได้ทันที'))return;await post('/grants',{event:event.id,action:'revoke',type:g.type,grantId:g.id});await loadSide()},'ยกเลิกสิทธิ์แล้ว');
  const resolveRemoval=(r,state)=>{let resolution=state==='done'?'ซ่อนภาพที่ระบุจากแกลเลอรีแล้ว':state==='rejected'?'ไม่สามารถดำเนินการได้':'';let manualConfirmed=false;if(state==='done'&&!r.media_id){resolution=prompt('ระบุสิ่งที่ดำเนินการจริงสำหรับคำขอนี้ (อย่างน้อย 10 ตัวอักษร) ระบบจะไม่ซ่อนภาพให้อัตโนมัติ','');if(resolution===null)return;if(resolution.trim().length<10){setError('กรุณาระบุสิ่งที่ดำเนินการจริงอย่างน้อย 10 ตัวอักษร');return}manualConfirmed=confirm('ยืนยันว่าได้ดำเนินการตามที่ระบุแล้ว? ระบบจะไม่ซ่อนภาพให้อัตโนมัติ');if(!manualConfirmed)return}return run(async()=>{await post('/removals',{id:r.id,state,resolution,manualConfirmed});await load(1);await loadSide();await onUpdated?.()},'บันทึกคำขอแล้ว')};
@@ -44,26 +67,28 @@ export default function ReviewClient({event,players,retentionMonths,uploadKey=0,
   {error&&<div className="fga-message" role="alert">{error}</div>}
   {info&&<div className="fga-message fga-ok" role="status">{info}</div>}
   {show('review')&&<>
-  <h2>ตรวจภาพก่อนเผยแพร่</h2><p>ทุกไฟล์ถูกปิดไว้จนกว่าตรวจสิทธิ์เด็ก Metadata และ SHA-256 เสร็จ เลือกภาพเพื่อแท็กนักฟุตบอลและอนุมัติ</p>
+  <h2>ตรวจภาพก่อนเผยแพร่</h2><p>ผู้ปกครองจะเห็นเฉพาะภาพที่คุณอนุมัติแล้ว กดที่ภาพเพื่อแท็กนักฟุตบอลและอนุมัติ</p>
   {active?<div className="fga-review-detail">
    <button className="fga-link" onClick={()=>setActive(null)}>‹ กลับรายการ</button>
    {active.thumb&&<img className="fga-review-photo" src={active.thumb} alt="ภาพสำหรับผู้ดูแลตรวจสอบก่อนเผยแพร่"/>}
    <h3>{active.title||active.id.slice(0,8)} · {active.kind==='photo'?'รูปภาพ':'วิดีโอ'}</h3>
    <p>สถานะ: {STATUS[active.status]||active.status}{active.captured_at?' · ถ่ายเมื่อ '+formatCaptureTime(active.captured_at):''}</p>
-   {active.has_gps&&<div className="fga-message" role="note">ไฟล์ต้นฉบับมีพิกัด GPS ใน Metadata ระบบไม่แก้ไขต้นฉบับ ผู้ที่ดาวน์โหลดจะเห็นพิกัดนี้ ตรวจว่าเผยแพร่ได้ก่อนอนุมัติ</div>}
-   <div className="fga-items">{active.files.map(f=><div key={f.id}><strong>{f.variant} · {f.filename}</strong><span>{formatBytes(f.bytes)} · {f.pending?'อัปโหลดยังไม่ครบ':!originals(f)?'ภาพตัวอย่าง (ไฟล์แยก)':f.verifiedHash?'SHA-256 ผ่าน':verifying[f.id]!==undefined?'กำลังตรวจ '+verifying[f.id]+'%':'รอตรวจ SHA-256'}</span>{!f.verifiedHash&&!f.pending&&originals(f)&&<button onClick={()=>verify(f)} disabled={busy}>ตรวจสอบ SHA-256</button>}</div>)}</div>
+   {active.has_gps&&<div className="fga-message" role="note">ไฟล์นี้มีตำแหน่งที่ถ่าย (GPS) ติดมาด้วย คนที่ดาวน์โหลดไฟล์ต้นฉบับจะเห็นตำแหน่งนี้ ตรวจให้แน่ใจว่าเปิดเผยได้ก่อนอนุมัติ</div>}
+   <div className="fga-items">{active.files.map(f=><div key={f.id}><strong>{f.variant} · {f.filename}</strong><span>{formatBytes(f.bytes)} · {f.pending?'อัปโหลดยังไม่ครบ':!originals(f)?'ภาพตัวอย่าง':f.verifiedHash?'ไฟล์ครบถ้วน ✓':verifying[f.id]!==undefined?'กำลังตรวจ '+verifying[f.id]+'%':'ยังไม่ได้ตรวจความครบถ้วน'}</span>{!f.verifiedHash&&!f.pending&&originals(f)&&<button onClick={()=>verify(f)} disabled={busy}>ตรวจความครบถ้วน</button>}</div>)}</div>
    {active.status==='hidden'?<button className="fga-quiet" disabled={busy} onClick={()=>review('restore',{},'กู้คืนแล้ว ต้องตรวจใหม่ก่อนเผยแพร่')}>กู้คืนเพื่อตรวจใหม่</button>:<>
    <h3>แท็กนักฟุตบอล</h3><p>ภาพหนึ่งภาพแท็กเด็กได้หลายคนโดยไม่คัดลอกไฟล์ การเปลี่ยนแท็กจะส่งภาพกลับไปรอตรวจ</p>
    <div className="fga-checkboxes">{players.map(p=><label key={p.id}><input type="checkbox" checked={tags.includes(p.id)} onChange={e=>setTags(s=>e.target.checked?[...s,p.id]:s.filter(x=>x!==p.id))}/>{p.name} {p.jersey&&'#'+p.jersey}{!p.privacy_recorded&&' (ยังไม่บันทึกสิทธิ์)'}</label>)}</div>
-   <button className="fga-quiet" disabled={busy} onClick={()=>review('tag',{players:tags},'บันทึกแท็กแล้ว')}>บันทึกแท็ก</button>
+   {tagsDirty&&<p className="fga-message" role="status">แท็กที่เลือกยังไม่ได้บันทึก กด "บันทึกแท็ก" หรือกดอนุมัติ ระบบจะบันทึกแท็กให้ก่อนอนุมัติ</p>}
+   <button className="fga-quiet" disabled={busy||!tagsDirty} onClick={()=>review('tag',{players:tags},'บันทึกแท็กแล้ว')}>บันทึกแท็ก</button>
    <h3>ยืนยันการเผยแพร่</h3>
    <label>ฐานทางกฎหมาย / ขอบเขตการอนุญาต<input value={approval.basis} onChange={e=>setApproval(a=>({...a,basis:e.target.value}))} placeholder="กรอกเฉพาะข้อมูลที่ตรวจสอบได้จริง"/></label>
    <label>หลักฐานการอนุญาต / อ้างอิง<input value={approval.evidence} onChange={e=>setApproval(a=>({...a,evidence:e.target.value}))} placeholder="รหัสเอกสารหรือข้อมูลหลักฐาน"/></label>
    <label className="fga-check"><input type="checkbox" checked={approval.attest} onChange={e=>setApproval(a=>({...a,attest:e.target.checked}))}/>ตรวจสิทธิ์เด็กทุกคนที่ปรากฏในภาพแล้ว</label>
-   <p>การตรวจ GPS อัตโนมัติไม่ครอบคลุมไฟล์และ Metadata ทุกกรณี ไฟล์ต้นฉบับที่ดาวน์โหลดอาจมีพิกัดอยู่</p>
-   <label className="fga-check"><input type="checkbox" checked={approval.gps} onChange={e=>setApproval(a=>({...a,gps:e.target.checked}))}/>ยืนยันว่าได้ตรวจความเสี่ยงจากพิกัดในต้นฉบับทุกไฟล์ และอนุญาตให้เผยแพร่ได้</label>
-   {!active.players?.length&&<label className="fga-check"><input type="checkbox" checked={approval.noChildren} onChange={e=>setApproval(a=>({...a,noChildren:e.target.checked}))}/>ยืนยันว่าไม่มีเด็กที่ระบุตัวได้ในภาพนี้</label>}
-   <button disabled={busy||!approval.attest||!approval.gps||(!active.players?.length&&!approval.noChildren)||approval.basis.trim().length<5||approval.evidence.trim().length<5} onClick={()=>review('approve',{basis:approval.basis,evidence:approval.evidence,confirmed:approval.attest,gpsConfirmed:approval.gps,noChildrenConfirmed:approval.noChildren},'อนุมัติแล้ว')}>อนุมัติภาพนี้สำหรับ Private Gallery</button>
+   <p>ระบบตรวจหาตำแหน่ง GPS ในไฟล์ได้ไม่ครบทุกชนิดไฟล์ ไฟล์ต้นฉบับที่ดาวน์โหลดอาจมีตำแหน่งที่ถ่ายติดอยู่</p>
+   <label className="fga-check"><input type="checkbox" checked={approval.gps} onChange={e=>setApproval(a=>({...a,gps:e.target.checked}))}/>ยืนยันว่าตรวจเรื่องตำแหน่ง GPS ในไฟล์แล้ว และเปิดเผยได้</label>
+   {tags.length===0&&<label className="fga-check"><input type="checkbox" checked={approval.noChildren} onChange={e=>setApproval(a=>({...a,noChildren:e.target.checked}))}/>ยืนยันว่าไม่มีเด็กที่ระบุตัวได้ในภาพนี้ (ถ้ามีเด็กในภาพ ให้แท็กด้านบนแทน)</label>}
+   <Missing items={approveMissing}/>
+   <button disabled={busy||approveMissing.length>0} onClick={approve}>{tagsDirty?'บันทึกแท็กและอนุมัติภาพนี้':'อนุมัติภาพนี้'}</button>
    <button className="fga-danger" disabled={busy} onClick={()=>review('hide',{},'ซ่อนแล้ว')}>ซ่อนภาพนี้</button></>}
   </div>:<>
    <div className="fga-actions">{[['','ทั้งหมด'],['review','รอตรวจ'],['published','เผยแพร่'],['hidden','ซ่อน']].map(([v,l])=><button key={v} className={filter===v?'fga-chip active':'fga-chip'} onClick={()=>{setFilter(v);load(1,v)}}>{l}</button>)}</div>
@@ -79,7 +104,7 @@ export default function ReviewClient({event,players,retentionMonths,uploadKey=0,
    {selectedPlayer?.privacy_recorded?<button className="fga-danger" disabled={busy} onClick={()=>confirm('ถอนสิทธิ์ของ '+selectedPlayer.name+'?')&&savePrivacy('revoke-player-privacy')}>ถอนสิทธิ์ / ผู้ปกครองถอนความยินยอม</button>:<>
    <label>ฐานการอนุญาต<input value={privacy.basis} onChange={e=>setPrivacy(p=>({...p,basis:e.target.value}))}/></label><label>หลักฐานอ้างอิง<input value={privacy.evidence} onChange={e=>setPrivacy(p=>({...p,evidence:e.target.value}))}/></label>
    <label className="fga-check"><input type="checkbox" checked={privacy.attest} onChange={e=>setPrivacy(p=>({...p,attest:e.target.checked}))}/>ยืนยันว่าได้ตรวจฐานทางกฎหมายและผู้มีอำนาจอนุญาตแล้ว</label>
-   <button disabled={busy||!privacy.player||privacy.basis.trim().length<5||privacy.evidence.trim().length<5||!privacy.attest} onClick={()=>savePrivacy('player-privacy')}>บันทึกสิทธิ์นักฟุตบอล</button></>}
+   <Missing items={privacyMissing}/><button disabled={busy||privacyMissing.length>0} onClick={()=>savePrivacy('player-privacy')}>บันทึกสิทธิ์นักฟุตบอล</button></>}
   </div>}
 
   {show('publish')&&<>
@@ -93,7 +118,8 @@ export default function ReviewClient({event,players,retentionMonths,uploadKey=0,
     <label>เปิดให้เข้าถึงถึงวันที่<input type="date" value={publish.retention} min={inDays(1)} max={addRetentionMonths(event.event_date,retentionMonths)||undefined} onChange={e=>setPublish(p=>({...p,retention:e.target.value}))}/></label>
     <p>{event.event_date&&retentionMonths?`เข้าถึงได้ไม่เกิน ${retentionMonths} เดือนหลังวันจัดงาน`:!event.event_date?'กรุณาบันทึกวันจัดงานก่อนเผยแพร่':'กำลังโหลดระยะเวลาที่เจ้าของตั้ง'} เมื่อครบกำหนดระบบจะปิดการเข้าถึง แต่ไฟล์ยังอยู่ในที่เก็บจนกว่าเจ้าของจะยืนยันและดำเนินการลบ</p>{event.event_date&&retentionMonths&&publish.retention>addRetentionMonths(event.event_date,retentionMonths)&&<p role="alert">กรุณาปรับวันสิ้นสุดให้ไม่เกินระยะเวลาที่ตั้งไว้</p>}
     <label className="fga-check"><input type="checkbox" checked={publish.attest} onChange={e=>setPublish(p=>({...p,attest:e.target.checked}))}/>ยืนยันว่าภาพที่อนุมัติมีฐานกฎหมายครบ และ Privacy Notice ถูกต้อง</label>
-    <button disabled={busy||publish.notice.trim().length<40||!event.event_date||!retentionMonths||!publish.retention||publish.retention>addRetentionMonths(event.event_date,retentionMonths)||publish.retention<=event.event_date.slice(0,10)||!publish.attest} onClick={()=>review('publish-event',{notice:publish.notice,retentionUntil:publish.retention,confirmed:publish.attest},'เผยแพร่อัลบั้มส่วนตัวแล้ว')}>เผยแพร่อัลบั้มส่วนตัว</button></>}
+    {event.published===0&&<p className="fga-message" role="note">ยังไม่มีภาพที่อนุมัติ ถ้าเผยแพร่ตอนนี้ ผู้ปกครองจะเห็นอัลบั้มว่าง</p>}<Missing items={publishMissing}/>
+    <button disabled={busy||publishMissing.length>0} onClick={()=>review('publish-event',{notice:publish.notice,retentionUntil:publish.retention,confirmed:publish.attest},'เผยแพร่อัลบั้มส่วนตัวแล้ว')}>เผยแพร่อัลบั้มส่วนตัว</button></>}
   </div>
 
   {event.status==='published'&&<div className="fga-review-policy"><h3>ส่งลิงก์ผู้ปกครอง</h3>

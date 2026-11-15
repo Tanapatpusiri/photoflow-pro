@@ -17,6 +17,15 @@ const fmtDay=v=>v?new Date(v).toLocaleDateString('th-TH',{dateStyle:'medium',tim
 const pending=e=>Math.max(0,(e?.media||0)-(e?.published||0));
 // Open the step that needs attention first.
 const defaultTab=e=>!e?'review':e.open_removals?'requests':!e.media?'upload':pending(e)?'review':'publish';
+// What to do next in this album, in plain words, with the tab that does it.
+function nextStep(e){
+ if(!e||['suspended','archived'].includes(e.status))return null;
+ if(e.open_removals)return {tab:'requests',text:`มีคำขอถอดภาพ ${e.open_removals} รายการรอดำเนินการ`,action:'ดูคำขอ'};
+ if(!e.media)return {tab:'upload',text:'ขั้นต่อไป: อัปโหลดรูปเข้าอัลบั้มนี้',action:'อัปโหลดรูป'};
+ if(pending(e))return {tab:'review',text:`ขั้นต่อไป: ตรวจและอนุมัติภาพ ${pending(e)} รายการ`,action:'ตรวจภาพ'};
+ if(e.status==='draft')return {tab:'publish',text:'ภาพพร้อมแล้ว ขั้นต่อไป: เผยแพร่อัลบั้มให้ผู้ปกครอง',action:'เผยแพร่'};
+ return {tab:'publish',text:'อัลบั้มเผยแพร่แล้ว ส่งลิงก์หรือรหัสให้ผู้ปกครองได้',action:'ส่งลิงก์'};
+}
 function Badge({status}){return <span className={'fga-badge '+status}>{STATUS[status]||status}</span>}
 function Stats({e}){return <div className="fga-stats"><span>{e.media||0} รายการ</span><span>เผยแพร่ {e.published||0}</span>{pending(e)>0&&<span className="alert">รอตรวจ {pending(e)}</span>}<span>{e.players||0} นักฟุตบอล</span>{e.open_removals>0&&<span className="alert">คำขอถอดภาพ {e.open_removals}</span>}</div>}
 
@@ -87,6 +96,7 @@ export default function FootballAdmin(){
      <div className="fga-row"><h2>{active.title}</h2><Badge status={active.status}/></div>
      <p className="fga-meta">{active.event_date?'วันจัดงาน '+fmtDay(active.event_date):'ยังไม่ระบุวันจัดงาน'}{active.venue?' · '+active.venue:''}{active.retention_until?' · เปิดให้เข้าถึงถึง '+fmtDay(active.retention_until):''}</p>
      <Stats e={active}/>
+     {(()=>{const next=nextStep(active);return <div className="fga-next-step">{next&&<p>{next.text}</p>}<div className="fga-actions">{next&&albumTab!==next.tab&&<button className="fga-primary" onClick={()=>setAlbumTab(next.tab)}>{next.action} ›</button>}{canUpload&&albumTab!=='upload'&&next?.tab!=='upload'&&<button className="fga-secondary" onClick={()=>setAlbumTab('upload')}>+ อัปโหลดรูป</button>}</div></div>})()}
     </section>
     {!active.event_date&&['draft','published','suspended'].includes(active.status)&&<section className="fga-card fga-attention"><h2>ต้องระบุวันจัดงาน</h2><p>ใช้คำนวณวันสิ้นสุดการเข้าถึง และต้องมีก่อนเผยแพร่{active.status==='published'?' การบันทึกอาจเปิดให้ผู้มีสิทธิ์เข้าถึงอัลบั้มอีกครั้งทันทีหากยังไม่หมดอายุ':''}</p><form onSubmit={saveEventDate}><label>วันที่จัดงาน<input type="date" value={missingDate} onChange={e=>setMissingDate(e.target.value)} required/></label><button disabled={busy||!missingDate}>บันทึกวันจัดงาน</button></form></section>}
     <nav className="fga-tabs" aria-label="ขั้นตอนของอัลบั้ม">{ALBUM_TABS.map(([k,l])=><button key={k} className={albumTab===k?'active':''} aria-current={albumTab===k?'step':undefined} onClick={()=>setAlbumTab(k)}>{l}{counts[k]>0&&<span className={'fga-count'+(k==='requests'||k==='review'?' alert':'')}>{counts[k]}</span>}</button>)}</nav>

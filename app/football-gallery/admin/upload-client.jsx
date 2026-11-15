@@ -68,7 +68,7 @@ async function verify(fileId,onProgress){
   const r=await withRetry(async()=>{const x=await post('/api/football-gallery/admin/verify-file',{fileId});if(x.status>=500)throw Error(x.data.message||'ตรวจสอบไม่สำเร็จ');return x});
   if(r.status===202){onProgress?.(r.data.offset/r.data.bytes);continue}
   if(r.ok&&r.data.verified)return true;
-  throw Error(r.data.message||'SHA-256 ไม่ตรงกับต้นฉบับ');
+  throw Error(r.data.message||'ไฟล์ที่อัปโหลดไม่ตรงกับต้นฉบับ กรุณาลองใหม่');
  }
  throw Error('ตรวจสอบนานเกินไป');
 }
@@ -102,8 +102,8 @@ export default function Uploader({eventId,onUploaded}){
   const resumeKey=fingerprint(eventId,f),saved=readResume()[resumeKey];
   set(key,'กำลังตรวจ Metadata…');
   const exif=await exifOf(f);
-  set(key,'คำนวณ SHA-256…');
-  const sums=saved?.sha256&&saved?.crc32?saved:await digest(f,p=>set(key,'คำนวณ SHA-256 '+Math.floor(p*100)+'%'));
+  set(key,'กำลังเตรียมไฟล์…');
+  const sums=saved?.sha256&&saved?.crc32?saved:await digest(f,p=>set(key,'กำลังเตรียมไฟล์ '+Math.floor(p*100)+'%'));
   const {sha256,crc32}=sums;
   let info=null;
   if(saved?.fileId){const r=await post(endpoint,{action:'list-parts',fileId:saved.fileId});if(r.ok&&!r.data.completed)info={...r.data,resumed:true};else if(r.ok&&r.data.completed)info={fileId:saved.fileId,mediaId:r.data.mediaId,done:true};else writeResume(resumeKey,null)}
@@ -145,8 +145,8 @@ export default function Uploader({eventId,onUploaded}){
    const complete=await withRetry(async()=>{const c=await post(endpoint,{action:'complete',fileId:info.fileId});if(c.status>=500)throw Error(c.data.message);return c});
    if(!complete.ok)throw Error(complete.data.message||'ยืนยันไฟล์ไม่สำเร็จ');
   }
-  set(key,'ตรวจ SHA-256 จาก Storage…');
-  await verify(info.fileId,p=>set(key,'ตรวจ SHA-256 '+Math.floor(p*100)+'%'));
+  set(key,'กำลังตรวจว่าไฟล์ครบถ้วน…');
+  await verify(info.fileId,p=>set(key,'ตรวจความครบถ้วน '+Math.floor(p*100)+'%'));
   writeResume(resumeKey,null);
   try{
    if(/\.jpe?g$/i.test(f.name))await savePreview(info.mediaId,await createPreview(f));
@@ -173,13 +173,13 @@ export default function Uploader({eventId,onUploaded}){
  }
  const total=files.reduce((n,f)=>n+f.size,0);
  return <div className="fga-uploader">
-  <label>กล้อง/ชุดไฟล์ (ช่วยจับคู่ JPEG + RAW)<input value={camera} onChange={e=>setCamera(e.target.value)} placeholder="ตัวอย่าง: Canon R6 กล้อง 1" disabled={running}/></label>
-  <label>เลือก JPEG / RAW / MOV / MP4<input type="file" multiple disabled={running} accept=".jpg,.jpeg,.arw,.cr2,.cr3,.nef,.raf,.dng,.orf,.rw2,.pef,.srw,.3fr,.iiq,.mov,.mp4,.m4v" onChange={e=>{setFiles(Array.from(e.target.files||[]));setStatus({});setErrors([]);setSummary(null)}}/></label>
-  <p>{files.length.toLocaleString('th-TH')} ไฟล์ · {fmtBytes(total)} · เลือก JPEG และ RAW ของชุดเดียวกันพร้อมกันเพื่อจับคู่เป็นรายการเดียว</p>
-  {running?<button onClick={()=>controller.current?.abort()} className="fga-quiet-btn">หยุดชั่วคราว (อัปโหลดต่อได้ภายหลัง)</button>:<button disabled={files.length===0} onClick={run}>{Object.keys(status).length?'อัปโหลดต่อ / ลองใหม่':'เริ่มอัปโหลดต้นฉบับ'}</button>}
-  {summary&&<p role="status" className="fga-message">สำเร็จ {summary.ok} · ซ้ำ {summary.duplicate} · ผิดพลาด {summary.failed}</p>}
+  <label>ชื่อกล้อง (ไม่บังคับ)<input value={camera} onChange={e=>setCamera(e.target.value)} placeholder="เช่น Canon R6 กล้อง 1" disabled={running}/></label>
+  <label>เลือกรูปหรือวิดีโอ (เลือกได้หลายไฟล์พร้อมกัน)<input type="file" multiple disabled={running} accept=".jpg,.jpeg,.arw,.cr2,.cr3,.nef,.raf,.dng,.orf,.rw2,.pef,.srw,.3fr,.iiq,.mov,.mp4,.m4v" onChange={e=>{setFiles(Array.from(e.target.files||[]));setStatus({});setErrors([]);setSummary(null)}}/></label>
+  <p>เลือกแล้ว {files.length.toLocaleString('th-TH')} ไฟล์ · {fmtBytes(total)} · ถ้ามีไฟล์ JPEG และ RAW ของรูปเดียวกัน ให้เลือกพร้อมกัน ระบบจะรวมเป็นรูปเดียว</p>
+  {running?<button onClick={()=>controller.current?.abort()} className="fga-quiet-btn">หยุดชั่วคราว (อัปโหลดต่อได้ภายหลัง)</button>:<button disabled={files.length===0} onClick={run}>{Object.keys(status).length?'อัปโหลดต่อ / ลองใหม่':'เริ่มอัปโหลด'}</button>}
+  {summary&&<p role="status" className="fga-message">อัปโหลดสำเร็จ {summary.ok} · มีอยู่แล้ว {summary.duplicate} · ไม่สำเร็จ {summary.failed}</p>}
   {files.length>0&&<div className="fga-upload-list">{files.slice(0,200).map((f,i)=><div key={i}><span>{f.name} · {fmtBytes(f.size)}</span><small>{status[f.name+'-'+i]||'รออัปโหลด'}</small></div>)}{files.length>200&&<p>แสดงสถานะ 200 ไฟล์แรกจาก {files.length.toLocaleString('th-TH')} ไฟล์</p>}</div>}
   {errors.length>0&&<div role="alert">{errors.slice(-12).map((e,i)=><p key={i} className="fga-message">{e}</p>)}</div>}
-  <p>ต้นฉบับถูกส่งจากเครื่องนี้เข้าที่เก็บส่วนตัวโดยตรงแบบ byte-for-byte ไม่ย่อ ไม่บีบอัด ไม่แก้สีหรือ Metadata ไฟล์ใหญ่แบ่งส่วนและอัปโหลดต่อจากจุดเดิมได้ ไฟล์จะยังไม่เผยแพร่จนกว่าตรวจ SHA-256 และสิทธิ์ภาพเด็กครบ</p>
+  <p>ระบบเก็บไฟล์ต้นฉบับตามจริง ไม่ย่อขนาดและไม่แก้ไขรูป ถ้าอัปโหลดค้างหรือหยุดไว้ กลับมากดอัปโหลดต่อได้ ผู้ปกครองจะยังมองไม่เห็นรูปจนกว่าคุณจะตรวจภาพและกดเผยแพร่</p>
  </div>
 }
