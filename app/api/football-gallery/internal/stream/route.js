@@ -16,10 +16,16 @@ export async function POST(request){
  if(!workerAuthorized(request))return reply({error:'unauthorized'},401);
  let body;try{body=await request.json()}catch{return reply({error:'bad-request'},400)}
  const t=verifyTicket(body?.ticket);
- if(!t||!['f','z'].includes(t.k)||!isUuid(t.g)||!isUuid(t.e))return reply({error:'invalid-ticket'},403);
+ if(!t||!['t','f','z'].includes(t.k)||!isUuid(t.g)||!isUuid(t.e))return reply({error:'invalid-ticket'},403);
  const rangeStart=Number(body.rangeStart)||0;
  try{
   if(!await grantActive(t.e,t.g))return reply({error:'access-revoked'},403);
+  if(t.k==='t'){
+   if(!isUuid(t.f))return reply({error:'invalid-ticket'},403);
+   const q=await db().query(`SELECT f.r2_key FROM fg_media_files f JOIN fg_media m ON m.id=f.media_id WHERE f.id=$1 AND m.event_id=$2 AND f.storage='drive' AND f.variant IN('THUMB','PREVIEW','VIDEO_PREVIEW') AND f.verified_bytes=true AND m.status='published' AND m.publish_allowed=true AND m.metadata_reviewed=true`,[t.f,t.e]);
+   if(!q.rowCount)return reply({error:'not-available'},404);
+   return reply({preview:{driveId:q.rows[0].r2_key}});
+  }
   if(t.k==='f'){
    if(!isUuid(t.f))return reply({error:'invalid-ticket'},403);
    const q=await db().query(`SELECT f.r2_key,f.original_filename,f.size_bytes,f.mime_type FROM fg_media_files f JOIN fg_media m ON m.id=f.media_id WHERE f.id=$1 AND m.event_id=$2 AND f.storage='drive' AND f.variant IN('JPEG','RAW','VIDEO_ORIGINAL') AND ${PUBLISHED}`,[t.f,t.e]);

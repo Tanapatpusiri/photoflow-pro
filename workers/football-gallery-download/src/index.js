@@ -1,7 +1,8 @@
 // Football Gallery download Worker (Cloudflare Workers, Free plan compatible).
 // Streams private originals, ZIP parts and previews from Google Drive to parents so no file
 // bytes pass through Vercel. It holds no Google refresh token and no database access:
-//   /t/<ticket>  preview JPEG (self-contained signed ticket, 15 minutes)
+//   /t/<ticket>  parent preview -> re-authorised by the app on every request
+//   /a/<ticket>  admin preview (short-lived bearer URL)
 //   /f/<ticket>  original file  -> re-authorised by the app on every request
 //   /z/<ticket>  ZIP part       -> re-authorised by the app on every request
 // File bodies are piped natively (no per-chunk JavaScript) to stay within the Free plan CPU limit;
@@ -51,10 +52,17 @@ async function driveFetch(env,id,range,retry=true){
 const requestedStart=request=>{const m=/^bytes=(\d+)-/.exec(request.headers.get('range')||'');return m?Number(m[1]):0};
 const deny=status=>text(status===410?'ลิงก์หมดอายุหรือรายการเปลี่ยนแปลง กรุณากลับไปที่อัลบั้มแล้วกดดาวน์โหลดใหม่':status===404?'ไม่พบไฟล์':'ไม่มีสิทธิ์ดาวน์โหลด กรุณาเปิดอัลบั้มอีกครั้ง',status===410||status===404?status:403);
 
-async function preview(env,t){
- const r=await driveFetch(env,t.d);
+async function preview(env,ticket,t){
+ let driveId=t.d;
+ if(t.k==='t'){
+  const auth=await authorize(env,ticket,0);
+  if(auth.status!==200)return deny(auth.status);
+  driveId=auth.body.preview?.driveId;
+ }
+ if(typeof driveId!=='string'||!driveId)return deny(403);
+ const r=await driveFetch(env,driveId);
  if(!r.ok){r.body?.cancel();return text('ไม่พบภาพ',404)}
- return new Response(r.body,{status:200,headers:{'content-type':'image/jpeg','content-length':r.headers.get('content-length')||'','cache-control':'private, max-age=900','content-disposition':'inline','x-content-type-options':'nosniff','referrer-policy':'no-referrer'}});
+ return new Response(r.body,{status:200,headers:{'content-type':'image/jpeg','content-length':r.headers.get('content-length')||'','cache-control':'private, no-store','content-disposition':'inline','x-content-type-options':'nosniff','referrer-policy':'no-referrer'}});
 }
 
 async function original(env,request,ticket){
@@ -114,12 +122,12 @@ export default {
   const url=new URL(request.url);
   if(request.method!=='GET'&&request.method!=='HEAD')return text('Method not allowed',405);
   if(url.pathname==='/'||url.pathname==='/health')return text('ok',200);
-  const m=/^\/([tfz])\/([A-Za-z0-9_\-.]{20,2000})$/.exec(url.pathname);
+  const m=/^\/([atfz])\/([A-Za-z0-9_\-.]{20,2000})$/.exec(url.pathname);
   if(!m)return text('Not found',404);
   const t=await verifyTicket(env,m[2]);
   if(!t||t.k!==m[1])return deny(403);
   try{
-   if(t.k==='t')return await preview(env,t);
+   if(t.k==='t'||t.k==='a')return await preview(env,m[2],t);
    if(t.k==='f')return await original(env,request,m[2]);
    return await zip(env,request,m[2],ctx);
   }catch(e){console.error('download failed',e?.message);return text('ระบบดาวน์โหลดขัดข้องชั่วคราว กรุณาลองใหม่',503)}

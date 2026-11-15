@@ -18,7 +18,7 @@ export async function GET(request,{params}){
   if(preview?!file.verified_bytes:!file.verified_hash)return deny('ไฟล์ยังไม่พร้อม',404);
   if(!preview)await db().query('INSERT INTO fg_audit(event_id,action,resource_id,detail) VALUES($1,$2,$3,$4)',[file.event_id,'download.original',fileId,JSON.stringify({grant:grant.codeId})]);
   // Google Drive files are streamed by the download Worker (no file bytes pass through this app).
-  const signed=file.storage==='drive'?(preview?thumbUrl(file.r2_key):originalUrl(fileId,grant.codeId,file.event_id))
+  const signed=file.storage==='drive'?(preview?thumbUrl(fileId,grant.codeId,file.event_id):originalUrl(fileId,grant.codeId,file.event_id))
    :preview?await presignInline(file.r2_key):await presignOriginal(file.r2_key,file.original_filename);
   return NextResponse.redirect(signed,{status:302,headers:privateHeaders});
  }catch(err){console.error('fg presign',err?.code||'unknown');return deny('ไม่สามารถดาวน์โหลดไฟล์',503)}

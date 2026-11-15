@@ -12,7 +12,8 @@ export async function GET(request,{params}){
   const event=await db().query("SELECT id FROM fg_events WHERE slug=$1 AND status='published'",[slug]);
   if(!event.rowCount)return reply({message:'ไม่พบอัลบั้ม'},404);
   const id=event.rows[0].id;
-  if(!await grantFor(request,id))return reply({message:'ไม่มีสิทธิ์',needsAccess:true},403);
+  const grant=await grantFor(request,id);
+  if(!grant)return reply({message:'ไม่มีสิทธิ์',needsAccess:true},403);
   const u=new URL(request.url),kind=u.searchParams.get('kind'),player=u.searchParams.get('player'),page=Math.max(1,Math.min(100000,Number(u.searchParams.get('page'))||1));
   if(kind&&!['photo','video'].includes(kind))return reply({message:'ประเภทไฟล์ไม่ถูกต้อง'},400);
   if(player&&!isUuid(player))return reply({message:'ข้อมูลนักฟุตบอลไม่ถูกต้อง'},400);
@@ -23,9 +24,9 @@ export async function GET(request,{params}){
   // Only files that are safe to hand out: verified originals and verified previews.
   const rows=await db().query(`SELECT m.id,m.kind,m.title,m.captured_at,
    COALESCE((SELECT json_agg(json_build_object('id',f.id,'variant',f.variant,'filename',f.original_filename,'bytes',f.size_bytes,'sha256',f.sha256) ORDER BY f.variant) FROM fg_media_files f WHERE f.media_id=m.id AND ((f.variant IN('JPEG','RAW','VIDEO_ORIGINAL') AND f.verified_hash=true) OR (f.variant IN('THUMB','PREVIEW','VIDEO_PREVIEW') AND f.verified_bytes=true))),'[]'::json) AS files,
-   (SELECT CASE WHEN f.storage='drive' THEN f.r2_key END FROM fg_media_files f WHERE f.media_id=m.id AND f.variant='THUMB' AND f.verified_bytes=true) AS thumb_drive
+   (SELECT CASE WHEN f.storage='drive' THEN f.id END FROM fg_media_files f WHERE f.media_id=m.id AND f.variant='THUMB' AND f.verified_bytes=true) AS thumb_drive
    FROM fg_media m WHERE ${where} ORDER BY m.captured_at NULLS LAST,m.title NULLS LAST,m.id LIMIT ${PAGE} OFFSET $${inputs.length}`,inputs);
-  const items=rows.rows.map(({thumb_drive,...item})=>thumb_drive?{...item,thumbUrl:thumbUrl(thumb_drive)}:item);
+  const items=rows.rows.map(({thumb_drive,...item})=>thumb_drive?{...item,thumbUrl:thumbUrl(thumb_drive,grant.codeId,id)}:item);
   return reply({items,hasMore:items.length===PAGE,page});
  }catch(err){console.error('fg media list',err?.code||'unknown');return reply({message:'ไม่สามารถโหลดรายการรูป'},503)}
 }
