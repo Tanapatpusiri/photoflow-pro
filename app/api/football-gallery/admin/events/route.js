@@ -17,7 +17,8 @@ export async function GET(request){
   return send({events:q.rows});
  }catch(e){console.error('fg admin events',e?.code||'unknown');return send({message:'ไม่สามารถอ่านข้อมูล'},503)}
 }
-// Fill a missing event date only while the event is still a draft.
+// Fill a missing date without overwriting one. Published/suspended legacy events
+// can be repaired only when their existing retention is consistent with that date.
 export async function PATCH(request){
  const {admin,error}=await adminGuard(request,{mutation:true});if(error)return error;
  let d;try{d=await request.json()}catch{return send({message:'ข้อมูลไม่ถูกต้อง'},400)}
@@ -25,9 +26,9 @@ export async function PATCH(request){
  const client=await db().connect();
  try{
   await client.query('BEGIN');
-  const q=await client.query("UPDATE fg_events SET event_date=$2,updated_at=NOW() WHERE id=$1 AND status='draft' AND event_date IS NULL RETURNING id",[d.event,d.date]);
-  if(!q.rowCount){await client.query('ROLLBACK');return send({message:'กำหนดวันได้เฉพาะงาน Draft ที่ยังไม่มีวันจัดงาน'},409)}
-  await audit(client,{adminId:admin.id,eventId:d.event,action:'event.set_date'});
+  const q=await client.query("UPDATE fg_events SET event_date=$2,updated_at=NOW() WHERE id=$1 AND event_date IS NULL AND (status='draft' OR (status IN ('published','suspended') AND retention_until IS NOT NULL AND retention_until<=($2::date + INTERVAL '1 year')::date)) RETURNING id",[d.event,d.date]);
+  if(!q.rowCount){await client.query('ROLLBACK');return send({message:'บันทึกได้เฉพาะงานที่ยังไม่มีวันจัดงาน และวันสิ้นสุดต้องไม่เกิน 1 ปีหลังวันจัดงาน'},409)}
+  await audit(client,{adminId:admin.id,eventId:d.event,action:'event.set_date',detail:{date:d.date}});
   await client.query('COMMIT');return send({ok:true});
  }catch(e){await client.query('ROLLBACK');console.error('fg event date',e?.code||'unknown');return send({message:'บันทึกวันจัดงานไม่สำเร็จ'},503)}finally{client.release()}
 }

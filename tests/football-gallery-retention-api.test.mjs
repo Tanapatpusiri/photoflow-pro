@@ -2,14 +2,15 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 const retentionSource=await readFile('lib/football-gallery-retention.js','utf8');
 globalThis.__retentionTest=await import('data:text/javascript;base64,'+Buffer.from(retentionSource).toString('base64'));
-const event={id:'test-event',status:'draft',event_date:'2026-11-15',privacy_approved_at:null,today:'2026-11-15'};
+const event={id:'test-event',status:'draft',event_date:'2026-11-15',retention_until:null,privacy_approved_at:null,today:'2026-11-15'};
 let lastUpdate=null;
 const client={async query(sql,args){
  if(['BEGIN','COMMIT','ROLLBACK'].includes(sql))return {rows:[],rowCount:0};
  if(sql.startsWith('SELECT id,status,privacy_approved_at'))return {rows:[{...event}],rowCount:1};
  if(sql.startsWith('UPDATE fg_events SET status=')){lastUpdate={sql,args};return {rows:[],rowCount:1}}
  if(sql.startsWith('UPDATE fg_events SET event_date=')){
-  if(event.status!=='draft'||event.event_date)return {rows:[],rowCount:0};
+  const permitted=event.status==='draft'||(['published','suspended'].includes(event.status)&&event.retention_until&&event.retention_until<=globalThis.__retentionTest.oneYearAfterEvent(args[1]));
+  if(!permitted||event.event_date)return {rows:[],rowCount:0};
   event.event_date=args[1];return {rows:[{id:event.id}],rowCount:1};
  }
  throw Error('Unexpected query: '+sql);
@@ -33,5 +34,10 @@ event.event_date=null;result=await publish('2027-11-15');assert.equal(result.sta
 result=await events.PATCH(req({event:event.id,date:'2026-02-30'}));assert.equal(result.status,400);
 result=await events.PATCH(req({event:event.id,date:'2026-11-15'}));assert.equal(result.status,200);assert.equal(event.event_date,'2026-11-15');
 result=await events.PATCH(req({event:event.id,date:'2026-11-16'}));assert.equal(result.status,409);
-event.event_date=null;event.status='published';result=await events.PATCH(req({event:event.id,date:'2026-11-15'}));assert.equal(result.status,409);
-console.log('PASS: server retention limit, date requirement and draft-only date update');
+event.event_date=null;event.status='published';event.retention_until=null;result=await events.PATCH(req({event:event.id,date:'2026-11-15'}));assert.equal(result.status,409);
+event.retention_until='2027-11-16';result=await events.PATCH(req({event:event.id,date:'2026-11-15'}));assert.equal(result.status,409);
+event.retention_until='2027-11-15';result=await events.PATCH(req({event:event.id,date:'2026-11-15'}));assert.equal(result.status,200);
+result=await events.PATCH(req({event:event.id,date:'2026-11-16'}));assert.equal(result.status,409);
+event.event_date=null;event.status='suspended';result=await events.PATCH(req({event:event.id,date:'2026-11-15'}));assert.equal(result.status,200);
+event.event_date=null;event.status='archived';result=await events.PATCH(req({event:event.id,date:'2026-11-15'}));assert.equal(result.status,409);
+console.log('PASS: server retention limit and safe missing-date repair');
