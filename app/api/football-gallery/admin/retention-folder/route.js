@@ -1,6 +1,7 @@
 import {db,isUuid} from '../../../../../lib/football-gallery-server';
 import {adminGuard,adminReply as reply} from '../../../../../lib/football-gallery-admin';
 import {listFolderPage} from '../../../../../lib/football-gallery-drive';
+import {DELETION_ELIGIBLE_SQL} from '../../../../../lib/football-gallery-deletion-eligibility';
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
 const FOLDER='application/vnd.google-apps.folder';
@@ -10,8 +11,8 @@ export async function GET(request){
  const sp=request.nextUrl.searchParams,event=sp.get('event'),scope=sp.get('scope')||'event',token=sp.get('token');
  if(!isUuid(event)||!['event','preview'].includes(scope)||(token!==null&&(!token||token.length>1500)))return reply({message:'ข้อมูลไม่ถูกต้อง'},400);
  try{
-  const ev=await db().query(`SELECT drive_folder_id FROM fg_events WHERE id=$1 AND event_date IS NOT NULL AND retention_until IS NOT NULL AND retention_until>event_date AND retention_until<=(event_date+INTERVAL '1 year')::date AND retention_until<CURRENT_DATE AND (event_date+INTERVAL '1 year')::date<CURRENT_DATE`,[event]);
-  if(!ev.rowCount)return reply({message:'ตรวจได้เฉพาะงานที่ครบกำหนดและผ่านวันครบ 1 ปีหลังงาน'},409);
+  const ev=await db().query(`SELECT e.drive_folder_id FROM fg_events e WHERE e.id=$1 AND ${DELETION_ELIGIBLE_SQL}`,[event]);
+  if(!ev.rowCount)return reply({message:'ตรวจได้เฉพาะงานที่หมดสิทธิ์เข้าถึงและผ่านวันที่กำหนดให้ตรวจเพื่อลบแล้ว'},409);
   const saved=await db().query('SELECT value FROM fg_settings WHERE key=$1',['drive.preview_folder.'+event]);
   const previewFolder=saved.rows[0]?.value||null,folder=scope==='event'?ev.rows[0].drive_folder_id:previewFolder;
   if(!folder)return reply({message:'ไม่มีโฟลเดอร์ที่บันทึกไว้สำหรับส่วนนี้ จึงยังตรวจไม่ได้'},409);

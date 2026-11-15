@@ -22,7 +22,8 @@ globalThis.__privacyRetention={validRetentionDate:()=>true};
 async function load(path){let s=await readFile(path,'utf8');
  s=s.replace(/import \{db,isUuid\} from '[^']+';/,"const db=globalThis.__privacyDb; const isUuid=(x)=>['event','media','request'].includes(x);");
  s=s.replace(/import \{adminGuard,adminReply as reply,audit\} from '[^']+';/,'const {adminGuard,adminReply:reply,audit}=globalThis.__privacyAdmin;');
- s=s.replace(/import \{validRetentionDate\} from '[^']+';/,'const {validRetentionDate}=globalThis.__privacyRetention;');
+ s=s.replace(/import \{addRetentionMonths,validRetentionDate\} from '[^']+';/,'const {addRetentionMonths,validRetentionDate}=globalThis.__privacyRetention;');
+ s=s.replace(/import \{RETENTION_SETTINGS_LOCK,readRetentionMonths\} from '[^']+';/,"const RETENTION_SETTINGS_LOCK='RETENTION_LOCK'; const readRetentionMonths=async()=>12;");
  return import('data:text/javascript;base64,'+Buffer.from(s).toString('base64'));
 }
 const review=await load('app/api/football-gallery/admin/review/route.js');

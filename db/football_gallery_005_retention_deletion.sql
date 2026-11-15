@@ -2,6 +2,8 @@
 -- preparation to review a single expired album. This does not authorize or
 -- perform deletion. Snapshot counts are informational and must be recalculated
 -- before any future deletion confirmation or execution.
+-- Existing albums keep the original one-year rule when deletion_after is NULL.
+ALTER TABLE fg_events ADD COLUMN IF NOT EXISTS deletion_after date;
 CREATE TABLE IF NOT EXISTS fg_retention_deletion_reviews (
  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
  event_id uuid NOT NULL REFERENCES fg_events(id),

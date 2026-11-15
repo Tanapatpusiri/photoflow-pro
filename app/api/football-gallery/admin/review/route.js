@@ -1,6 +1,7 @@
 import {db,isUuid} from '../../../../../lib/football-gallery-server';
 import {adminGuard,adminReply as reply,audit} from '../../../../../lib/football-gallery-admin';
-import {validRetentionDate} from '../../../../../lib/football-gallery-retention';
+import {addRetentionMonths,validRetentionDate} from '../../../../../lib/football-gallery-retention';
+import {RETENTION_SETTINGS_LOCK,readRetentionMonths} from '../../../../../lib/football-gallery-retention-settings';
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
 
@@ -16,7 +17,7 @@ const messages={
  MEDIA_HIDDEN:'ไฟล์นี้ถูกซ่อนอยู่ ต้องกู้คืนเพื่อตรวจใหม่ก่อน',
  PRIVACY_NOTICE_REQUIRED:'ต้องระบุประกาศความเป็นส่วนตัว (อย่างน้อย 40 ตัวอักษร) และวันสิ้นสุดการเก็บรักษาก่อนเผยแพร่',
  EVENT_DATE_REQUIRED:'ต้องระบุวันจัดงานก่อนเผยแพร่เพื่อกำหนดระยะเวลาเก็บภาพ',
- RETENTION_OUT_OF_RANGE:'วันสิ้นสุดการเข้าถึงต้องอยู่ในอนาคตและไม่เกิน 1 ปีหลังวันจัดงาน',
+ RETENTION_OUT_OF_RANGE:'วันสิ้นสุดการเข้าถึงต้องอยู่หลังวันงานและไม่เกินระยะเวลาที่เจ้าของตั้งไว้',
  EVENT_NOT_PUBLISHED:'งานยังไม่ได้เผยแพร่',EVENT_NOT_SUSPENDED:'งานไม่ได้อยู่ในสถานะระงับ',EVENT_NOT_DRAFT:'เผยแพร่ได้เฉพาะงาน Draft',
  UNKNOWN_ACTION:'คำสั่งไม่ถูกต้อง'
 };
@@ -92,9 +93,12 @@ export async function POST(request){
    const notice=text(d.notice,40,10000),retention=d.retentionUntil;
    if(d.confirmed!==true||!notice||!retention)throw new ReviewError('PRIVACY_NOTICE_REQUIRED',400);
    if(!ev.rows[0].event_date)throw new ReviewError('EVENT_DATE_REQUIRED',400);
-   if(!validRetentionDate(ev.rows[0].event_date,retention,ev.rows[0].today))throw new ReviewError('RETENTION_OUT_OF_RANGE',400);
-   await client.query(`UPDATE fg_events SET status='published',privacy_notice=$2,privacy_approved_at=NOW(),retention_until=$3,updated_at=NOW() WHERE id=$1`,[eventId,notice,retention]);
-   detail={retentionUntil:retention};
+   await client.query(RETENTION_SETTINGS_LOCK);
+   const months=await readRetentionMonths(client);
+   if(!validRetentionDate(ev.rows[0].event_date,retention,ev.rows[0].today,months))throw new ReviewError('RETENTION_OUT_OF_RANGE',400);
+   const deletionAfter=addRetentionMonths(ev.rows[0].event_date,months);
+   await client.query(`UPDATE fg_events SET status='published',privacy_notice=$2,privacy_approved_at=NOW(),retention_until=$3,deletion_after=$4,updated_at=NOW() WHERE id=$1`,[eventId,notice,retention,deletionAfter]);
+   detail={retentionUntil:retention,deletionAfter,periodMonths:months};
   }else if(action==='suspend-event'){
    if(ev.rows[0].status!=='published')throw new ReviewError('EVENT_NOT_PUBLISHED');
    await client.query(`UPDATE fg_events SET status='suspended',updated_at=NOW() WHERE id=$1`,[eventId]);
