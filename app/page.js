@@ -1,2 +1,2 @@
 import { redirect } from 'next/navigation';
-export default function Page() { redirect('/app.html'); }
+export default function Page() { redirect('/football-gallery'); }

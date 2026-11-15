@@ -10,7 +10,9 @@ const fmtDate=v=>v?new Date(v).toLocaleString('th-TH',{dateStyle:'medium',timeSt
 // Calendar dates follow Thailand, matching the server's Bangkok "today".
 const inDays=n=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Bangkok'}).format(new Date(Date.now()+n*86400000));
 
-export default function ReviewClient({event,players,retentionMonths,uploadKey=0,onUpdated,onPlayersChanged}){
+// view picks the part of the album workflow to show; state is kept while switching between them.
+export default function ReviewClient({event,players,retentionMonths,uploadKey=0,onUpdated,onPlayersChanged,view='all',onNavigate}){
+ const show=part=>view==='all'||view===part;
  const [items,setItems]=useState([]),[active,setActive]=useState(null),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false),[error,setError]=useState(''),[info,setInfo]=useState(''),[page,setPage]=useState(1),[hasMore,setHasMore]=useState(false),[filter,setFilter]=useState('');
  const [tags,setTags]=useState([]),[approval,setApproval]=useState({basis:'',evidence:'',attest:false,gps:false,noChildren:false});
  const [privacy,setPrivacy]=useState({player:'',basis:'',evidence:'',attest:false});
@@ -37,10 +39,12 @@ export default function ReviewClient({event,players,retentionMonths,uploadKey=0,
  const copy=text=>navigator.clipboard?.writeText(text).then(()=>setInfo('คัดลอกแล้ว'),()=>setError('คัดลอกไม่สำเร็จ'));
  const originals=f=>['JPEG','RAW','VIDEO_ORIGINAL'].includes(f.variant);
  const selectedPlayer=players.find(p=>p.id===privacy.player);
+ const publishedCount=items.filter(i=>i.status==='published').length;
  return <div className="fga-review">
-  <h2>ตรวจภาพก่อนเผยแพร่</h2><p>ทุกไฟล์ถูกปิดไว้จนกว่าตรวจสิทธิ์เด็ก Metadata และ SHA-256 เสร็จ</p>
   {error&&<div className="fga-message" role="alert">{error}</div>}
   {info&&<div className="fga-message fga-ok" role="status">{info}</div>}
+  {show('review')&&<>
+  <h2>ตรวจภาพก่อนเผยแพร่</h2><p>ทุกไฟล์ถูกปิดไว้จนกว่าตรวจสิทธิ์เด็ก Metadata และ SHA-256 เสร็จ เลือกภาพเพื่อแท็กนักฟุตบอลและอนุมัติ</p>
   {active?<div className="fga-review-detail">
    <button className="fga-link" onClick={()=>setActive(null)}>‹ กลับรายการ</button>
    {active.thumb&&<img className="fga-review-photo" src={active.thumb} alt="ภาพสำหรับผู้ดูแลตรวจสอบก่อนเผยแพร่"/>}
@@ -64,18 +68,21 @@ export default function ReviewClient({event,players,retentionMonths,uploadKey=0,
   </div>:<>
    <div className="fga-actions">{[['','ทั้งหมด'],['review','รอตรวจ'],['published','เผยแพร่'],['hidden','ซ่อน']].map(([v,l])=><button key={v} className={filter===v?'fga-chip active':'fga-chip'} onClick={()=>{setFilter(v);load(1,v)}}>{l}</button>)}</div>
    <div className="fga-review-grid">{items.map(item=><button key={item.id} className="fga-review-tile" onClick={()=>select(item)}>{item.thumb?<img src={item.thumb} alt="ภาพรอตรวจ" loading="lazy"/>:<div className="fga-review-placeholder">ยังไม่มี Preview</div>}<strong>{item.title||(item.kind==='photo'?'รูปภาพ':'วิดีโอ')}</strong><span>{STATUS[item.status]||item.status} · {item.files.filter(originals).map(f=>f.variant==='VIDEO_ORIGINAL'?'VIDEO':f.variant).join('+')}{item.has_gps?' · GPS':''}</span></button>)}</div>
-   {loading&&<p>กำลังโหลด…</p>}{items.length===0&&!loading&&<p>ยังไม่มีไฟล์ในหมวดนี้</p>}{hasMore&&<button onClick={()=>load(page+1)} disabled={loading}>โหลดเพิ่ม</button>}
+   {loading&&<p>กำลังโหลด…</p>}{items.length===0&&!loading&&<p>ยังไม่มีไฟล์ในหมวดนี้{onNavigate&&filter===''?' ':''}{onNavigate&&filter===''&&<button className="fga-link" onClick={()=>onNavigate('upload')}>ไปอัปโหลด ›</button>}</p>}{hasMore&&<button className="fga-quiet" onClick={()=>load(page+1)} disabled={loading}>โหลดเพิ่ม</button>}
+   {onNavigate&&event.status==='draft'&&publishedCount>0&&<button className="fga-next" onClick={()=>onNavigate('publish')}>อนุมัติภาพแล้ว ไปเผยแพร่ & แชร์ ›</button>}
+  </>}
   </>}
 
-  <div className="fga-review-policy">
+  {show('players')&&<div className="fga-review-policy">
    <h3>สิทธิ์ของนักฟุตบอล</h3><p>บันทึกฐานกฎหมายของเด็กแต่ละคนก่อนอนุมัติภาพที่แท็กเด็กคนนั้น หากผู้ปกครองถอนความยินยอม ให้ถอนสิทธิ์ ภาพที่แท็กเด็กคนนั้นจะถูกปิดทันที</p>
    <select value={privacy.player} onChange={e=>setPrivacy(p=>({...p,player:e.target.value}))}><option value="">เลือกนักฟุตบอล</option>{players.map(p=><option key={p.id} value={p.id}>{p.name} {p.jersey&&'#'+p.jersey} · {p.privacy_recorded?'บันทึกแล้ว':'ยังไม่บันทึก'}</option>)}</select>
    {selectedPlayer?.privacy_recorded?<button className="fga-danger" disabled={busy} onClick={()=>confirm('ถอนสิทธิ์ของ '+selectedPlayer.name+'?')&&savePrivacy('revoke-player-privacy')}>ถอนสิทธิ์ / ผู้ปกครองถอนความยินยอม</button>:<>
    <label>ฐานการอนุญาต<input value={privacy.basis} onChange={e=>setPrivacy(p=>({...p,basis:e.target.value}))}/></label><label>หลักฐานอ้างอิง<input value={privacy.evidence} onChange={e=>setPrivacy(p=>({...p,evidence:e.target.value}))}/></label>
    <label className="fga-check"><input type="checkbox" checked={privacy.attest} onChange={e=>setPrivacy(p=>({...p,attest:e.target.checked}))}/>ยืนยันว่าได้ตรวจฐานทางกฎหมายและผู้มีอำนาจอนุญาตแล้ว</label>
    <button disabled={busy||!privacy.player||privacy.basis.trim().length<5||privacy.evidence.trim().length<5||!privacy.attest} onClick={()=>savePrivacy('player-privacy')}>บันทึกสิทธิ์นักฟุตบอล</button></>}
-  </div>
+  </div>}
 
+  {show('publish')&&<>
   <div className="fga-review-policy">
    <h3>เปิดงานให้ผู้ปกครอง</h3>
    {event.status==='published'?<><p>เผยแพร่แล้ว{event.retention_until?' · เข้าถึงถึง '+new Date(event.retention_until).toLocaleDateString('th-TH',{dateStyle:'medium',timeZone:'UTC'}):''} ระงับได้ทันทีหากพบปัญหา</p>{(event.deletion_after||oneYearAfterEvent(event.event_date))&&<p>เตรียมตรวจเพื่อลบได้หลังวันที่ {new Date(event.deletion_after||oneYearAfterEvent(event.event_date)).toLocaleDateString('th-TH',{dateStyle:'medium',timeZone:'UTC'})} และต้องรอเจ้าของยืนยัน</p>}<button className="fga-danger" disabled={busy} onClick={()=>confirm('ระงับการเผยแพร่ทั้งงาน? ผู้ปกครองทุกคนจะเข้าไม่ได้จนกว่าจะเปิดอีกครั้ง')&&review('suspend-event',{},'ระงับการเผยแพร่แล้ว')}>ระงับการเผยแพร่ทั้งงาน</button></>
@@ -98,14 +105,18 @@ export default function ReviewClient({event,players,retentionMonths,uploadKey=0,
    </div>}
    {grants.length>0&&<div className="fga-items">{grants.map(g=><div key={g.id}><strong>{g.type==='invite'?'ลิงก์ LINE':'รหัสเข้างาน'}{g.label?' · '+g.label:''}</strong><span>สร้าง {fmtDate(g.created_at)} · {g.revoked_at?'ยกเลิกแล้ว':g.active?'ใช้ได้ถึง '+fmtDate(g.expires_at):'หมดอายุ'}</span>{g.active&&<button className="fga-danger" disabled={busy} onClick={()=>revokeGrant(g)}>ยกเลิกสิทธิ์</button>}</div>)}</div>}
   </div>}
+  {event.status==='draft'&&<p className="fga-meta">หลังเผยแพร่แล้ว จะสร้างลิงก์เชิญ LINE หรือรหัสเข้างานให้ผู้ปกครองได้ที่หน้านี้</p>}
+  </>}
 
+  {show('requests')&&<>
   <div className="fga-review-policy"><h3>คำขอถอดภาพ ({removals.filter(r=>['new','in_review'].includes(r.state)).length})</h3>
    {removals.length===0?<p>ยังไม่มีคำขอ</p>:<div className="fga-items">{removals.map(r=><div key={r.id}><strong>{r.media_title?'ไฟล์ '+r.media_title:'ทั้งงาน / ไม่ระบุไฟล์'} · {({new:'ใหม่',in_review:'กำลังตรวจ',done:'ดำเนินการแล้ว',rejected:'ไม่ดำเนินการ'})[r.state]}</strong><span>{fmtDate(r.created_at)}{r.contact?' · ติดต่อ: '+r.contact:''}</span><span>{r.description}</span>{r.resolution&&<span>ผลที่บันทึก: {r.resolution}</span>}
     {['new','in_review'].includes(r.state)&&<div className="fga-actions">{r.state==='new'&&<button className="fga-quiet" disabled={busy} onClick={()=>resolveRemoval(r,'in_review')}>รับเรื่อง</button>}<button disabled={busy} onClick={()=>resolveRemoval(r,'done')}>{r.media_id?'ถอดภาพนี้':'ดำเนินการแล้ว'}</button><button className="fga-quiet" disabled={busy} onClick={()=>resolveRemoval(r,'rejected')}>ไม่ดำเนินการ</button></div>}</div>)}</div>}
   </div>
 
-  <details className="fga-review-policy"><summary>ประวัติการดำเนินการล่าสุด (Audit Log)</summary>
+  <details className="fga-review-policy" open={view==='requests'}><summary>ประวัติการดำเนินการล่าสุด (Audit Log)</summary>
    <div className="fga-items">{auditLog.map(a=><div key={a.id}><strong>{a.action}</strong><span>{fmtDate(a.created_at)} · {a.admin||'ผู้ปกครอง/ระบบ'}</span></div>)}</div>
   </details>
+  </>}
  </div>
 }
