@@ -1,5 +1,6 @@
 'use client';
 import {useEffect,useState} from 'react';
+import {oneYearAfterEvent} from '../../../lib/football-gallery-retention';
 const api='/api/football-gallery/admin';
 async function post(path,body){const r=await fetch(api+path,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});let d={};try{d=await r.json()}catch{}if(!r.ok&&r.status!==202)throw Error(d.message||'ดำเนินการไม่สำเร็จ');return {status:r.status,...d}}
 async function get(path){const r=await fetch(api+path,{cache:'no-store'});const d=await r.json();if(!r.ok)throw Error(d.message||'โหลดข้อมูลไม่สำเร็จ');return d}
@@ -11,12 +12,12 @@ export default function ReviewClient({event,players,onUpdated,onPlayersChanged})
  const [items,setItems]=useState([]),[active,setActive]=useState(null),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false),[error,setError]=useState(''),[info,setInfo]=useState(''),[page,setPage]=useState(1),[hasMore,setHasMore]=useState(false),[filter,setFilter]=useState('');
  const [tags,setTags]=useState([]),[approval,setApproval]=useState({basis:'',evidence:'',attest:false});
  const [privacy,setPrivacy]=useState({player:'',basis:'',evidence:'',attest:false});
- const [publish,setPublish]=useState({notice:'',retention:inDays(365),attest:false});
+ const [publish,setPublish]=useState({notice:'',retention:oneYearAfterEvent(event.event_date),attest:false});
  const [grants,setGrants]=useState([]),[grantLabel,setGrantLabel]=useState(''),[grantDays,setGrantDays]=useState(14),[issued,setIssued]=useState(null);
  const [removals,setRemovals]=useState([]),[auditLog,setAuditLog]=useState([]),[verifying,setVerifying]=useState({});
  const load=async(p=1,f=filter)=>{setLoading(true);try{const d=await get('/media?event='+encodeURIComponent(event.id)+'&page='+p+(f?'&status='+f:''));setItems(old=>p===1?d.items:[...old,...d.items]);setHasMore(d.hasMore);setPage(p);setError('')}catch(e){setError(e.message)}finally{setLoading(false)}};
  const loadSide=async()=>{try{const [g,r,a]=await Promise.all([get('/grants?event='+event.id),get('/removals?event='+event.id),get('/audit?event='+event.id)]);setGrants(g.grants);setRemovals(r.requests);setAuditLog(a.entries.slice(0,20))}catch(e){setError(e.message)}};
- useEffect(()=>{setActive(null);setItems([]);setPage(1);setIssued(null);load(1);loadSide()},[event.id]);
+ useEffect(()=>{setActive(null);setItems([]);setPage(1);setIssued(null);setPublish({notice:'',retention:oneYearAfterEvent(event.event_date),attest:false});load(1);loadSide()},[event.id]);
  const select=item=>{setActive(item);setTags(item.players||[]);setApproval({basis:'',evidence:'',attest:false});setError('');setInfo('')};
  const run=async(task,ok)=>{if(busy)return;setBusy(true);setError('');setInfo('');try{await task();if(ok)setInfo(ok)}catch(e){setError(e.message)}finally{setBusy(false)}};
  const review=(action,data={},ok)=>run(async()=>{await post('/review',{action,eventId:event.id,mediaId:active?.id,...data});await load(1);setActive(null);await onUpdated?.();await loadSide()},ok);
@@ -73,7 +74,8 @@ export default function ReviewClient({event,players,onUpdated,onPlayersChanged})
    :event.status==='suspended'?<><p>งานนี้ถูกระงับอยู่ ผู้ปกครองเข้าไม่ได้</p><button disabled={busy} onClick={()=>review('resume-event',{},'เปิดการเผยแพร่อีกครั้งแล้ว')}>เปิดการเผยแพร่อีกครั้ง</button></>
    :<><p>ใส่ Privacy Notice ที่ใช้กับงานนี้จริง และวันสิ้นสุดการเก็บรักษา หลังวันดังกล่าวลิงก์และรหัสทั้งหมดจะใช้ไม่ได้ หากยังไม่ได้รับความยินยอม/ฐานกฎหมาย ไม่ควรเผยแพร่</p>
     <textarea rows={5} value={publish.notice} onChange={e=>setPublish(p=>({...p,notice:e.target.value}))} placeholder="ผู้ควบคุมข้อมูล วัตถุประสงค์ สิทธิ์ ระยะเก็บและช่องทางขอถอดรูป"/>
-    <label>เก็บรักษาและเปิดให้ดาวน์โหลดถึงวันที่<input type="date" value={publish.retention} min={inDays(1)} onChange={e=>setPublish(p=>({...p,retention:e.target.value}))}/></label>
+    <label>เปิดให้เข้าถึงถึงวันที่<input type="date" value={publish.retention} min={inDays(1)} onChange={e=>setPublish(p=>({...p,retention:e.target.value}))}/></label>
+    <p>{event.event_date?'ค่าเริ่มต้นคือ 1 ปีหลังวันจัดงาน':'งานนี้ไม่มีวันจัดงาน กรุณากำหนดวันสิ้นสุดด้วยตนเอง'} เมื่อครบกำหนดระบบจะปิดการเข้าถึง แต่ไฟล์ยังอยู่ในที่เก็บจนกว่าเจ้าของจะยืนยันและดำเนินการลบ</p>
     <label className="fga-check"><input type="checkbox" checked={publish.attest} onChange={e=>setPublish(p=>({...p,attest:e.target.checked}))}/>ยืนยันว่าภาพที่อนุมัติมีฐานกฎหมายครบ และ Privacy Notice ถูกต้อง</label>
     <button disabled={busy||publish.notice.trim().length<40||!publish.retention||!publish.attest} onClick={()=>review('publish-event',{notice:publish.notice,retentionUntil:publish.retention,confirmed:publish.attest},'เผยแพร่อัลบั้มส่วนตัวแล้ว')}>เผยแพร่อัลบั้มส่วนตัว</button></>}
   </div>
