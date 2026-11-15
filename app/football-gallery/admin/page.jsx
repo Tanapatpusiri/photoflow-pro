@@ -15,6 +15,7 @@ export default function FootballAdmin(){
  const [title,setTitle]=useState(''),[venue,setVenue]=useState(''),[date,setDate]=useState('');
  const [missingDate,setMissingDate]=useState('');
  const [retentionRefresh,setRetentionRefresh]=useState(0);
+ const [uploadKey,setUploadKey]=useState(0);
  const [retentionMonths,setRetentionMonths]=useState(null);
  const [activeId,setActiveId]=useState(null),[players,setPlayers]=useState([]),[name,setName]=useState(''),[jersey,setJersey]=useState(''),[team,setTeam]=useState('');
  // The selected event is always read from the latest list, so status changes (e.g. publish) show immediately.
@@ -42,8 +43,8 @@ export default function FootballAdmin(){
     {active&&!active.event_date&&['draft','published','suspended'].includes(active.status)&&<section className="fga-card"><h2>วันจัดงาน</h2><p>ระบุวันจัดงานที่ตรวจสอบแล้ว เพื่อกำหนดวันสิ้นสุดการเข้าถึงไม่เกิน 1 ปีหลังงาน{active.status==='published'?' การบันทึกอาจเปิดให้ผู้มีสิทธิ์เข้าถึงอัลบั้มอีกครั้งทันทีหากยังไม่หมดอายุ':''}</p><form onSubmit={saveEventDate}><label>วันที่จัดงาน<input type="date" value={missingDate} onChange={e=>setMissingDate(e.target.value)} required/></label><button disabled={busy||!missingDate}>บันทึกวันจัดงาน</button></form></section>}
     {active&&<RetentionDeletionReview key={active.id} event={active}/>}
     {active&&<section className="fga-card"><h2>นักฟุตบอล — {active.title}</h2><div className="fga-items">{players.map(p=><div key={p.id}><strong>{p.name} {p.jersey?'#'+p.jersey:''}</strong><span>{p.team||'ไม่ระบุทีม'} · {p.visible?'แสดงในอัลบั้ม':'รอบันทึกสิทธิ์'}</span></div>)}</div><form onSubmit={addPlayer}><label>ชื่อเล่น/ชื่อแสดง<input value={name} onChange={e=>setName(e.target.value)} required maxLength={100}/></label><label>หมายเลขเสื้อ<input value={jersey} onChange={e=>setJersey(e.target.value)} maxLength={12} inputMode="numeric"/></label><label>ทีม<input value={team} onChange={e=>setTeam(e.target.value)} maxLength={100}/></label><button disabled={busy||!name.trim()}>เพิ่มนักฟุตบอล</button></form></section>}
-    <section className="fga-card"><h2>อัปโหลด JPEG / RAW / วิดีโอ</h2>{active?(['draft','published'].includes(active.status)?<Uploader eventId={active.id} onUploaded={load}/>:<p>งานที่ระงับหรือเก็บถาวรไม่เปิดรับอัปโหลด</p>):<p>เลือกงานที่ต้องการอัปโหลดก่อน</p>}</section>
-    {active&&<section className="fga-card"><ReviewClient event={active} players={players} retentionMonths={retentionMonths} onUpdated={load} onPlayersChanged={()=>loadPlayers()}/></section>}
+    <section className="fga-card"><h2>อัปโหลด JPEG / RAW / วิดีโอ</h2>{active?(['draft','published'].includes(active.status)?<Uploader eventId={active.id} onUploaded={()=>{setUploadKey(n=>n+1);return load()}}/>:<p>งานที่ระงับหรือเก็บถาวรไม่เปิดรับอัปโหลด</p>):<p>เลือกงานที่ต้องการอัปโหลดก่อน</p>}</section>
+    {active&&<section className="fga-card"><ReviewClient event={active} players={players} retentionMonths={retentionMonths} uploadKey={uploadKey} onUpdated={load} onPlayersChanged={()=>loadPlayers()}/></section>}
   </>}
  </div></main>
 }

@@ -1,6 +1,7 @@
 'use client';
 import {useEffect,useState} from 'react';
 import {addRetentionMonths,oneYearAfterEvent} from '../../../lib/football-gallery-retention';
+import {formatBytes,formatCaptureTime} from '../../../lib/football-gallery-format';
 const api='/api/football-gallery/admin';
 async function post(path,body){const r=await fetch(api+path,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});let d={};try{d=await r.json()}catch{}if(!r.ok&&r.status!==202)throw Error(d.message||'ดำเนินการไม่สำเร็จ');return {status:r.status,...d}}
 async function get(path){const r=await fetch(api+path,{cache:'no-store'});const d=await r.json();if(!r.ok)throw Error(d.message||'โหลดข้อมูลไม่สำเร็จ');return d}
@@ -8,7 +9,7 @@ const STATUS={uploading:'กำลังอัปโหลด',review:'รอต
 const fmtDate=v=>v?new Date(v).toLocaleString('th-TH',{dateStyle:'medium',timeStyle:'short'}):'';
 const inDays=n=>new Date(Date.now()+n*86400000).toISOString().slice(0,10);
 
-export default function ReviewClient({event,players,retentionMonths,onUpdated,onPlayersChanged}){
+export default function ReviewClient({event,players,retentionMonths,uploadKey=0,onUpdated,onPlayersChanged}){
  const [items,setItems]=useState([]),[active,setActive]=useState(null),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false),[error,setError]=useState(''),[info,setInfo]=useState(''),[page,setPage]=useState(1),[hasMore,setHasMore]=useState(false),[filter,setFilter]=useState('');
  const [tags,setTags]=useState([]),[approval,setApproval]=useState({basis:'',evidence:'',attest:false,gps:false,noChildren:false});
  const [privacy,setPrivacy]=useState({player:'',basis:'',evidence:'',attest:false});
@@ -18,6 +19,8 @@ export default function ReviewClient({event,players,retentionMonths,onUpdated,on
  const load=async(p=1,f=filter)=>{setLoading(true);try{const d=await get('/media?event='+encodeURIComponent(event.id)+'&page='+p+(f?'&status='+f:''));setItems(old=>p===1?d.items:[...old,...d.items]);setHasMore(d.hasMore);setPage(p);setError('')}catch(e){setError(e.message)}finally{setLoading(false)}};
  const loadSide=async()=>{try{const [g,r,a]=await Promise.all([get('/grants?event='+event.id),get('/removals?event='+event.id),get('/audit?event='+event.id)]);setGrants(g.grants);setRemovals(r.requests);setAuditLog(a.entries.slice(0,20))}catch(e){setError(e.message)}};
  useEffect(()=>{setActive(null);setItems([]);setPage(1);setIssued(null);setPublish({notice:'',retention:addRetentionMonths(event.event_date,retentionMonths),attest:false});load(1);loadSide()},[event.id,event.event_date]);
+ // Show newly uploaded files without leaving the current filter or the file being reviewed.
+ useEffect(()=>{if(uploadKey)load(1)},[uploadKey]);
  useEffect(()=>{if(retentionMonths)setPublish(p=>p.retention?p:{...p,retention:addRetentionMonths(event.event_date,retentionMonths)})},[retentionMonths,event.event_date]);
  const select=item=>{setActive(item);setTags(item.players||[]);setApproval({basis:'',evidence:'',attest:false,gps:false,noChildren:false});setError('');setInfo('')};
  const run=async(task,ok)=>{if(busy)return;setBusy(true);setError('');setInfo('');try{await task();if(ok)setInfo(ok)}catch(e){setError(e.message)}finally{setBusy(false)}};
@@ -41,9 +44,9 @@ export default function ReviewClient({event,players,retentionMonths,onUpdated,on
    <button className="fga-link" onClick={()=>setActive(null)}>‹ กลับรายการ</button>
    {active.thumb&&<img className="fga-review-photo" src={active.thumb} alt="ภาพสำหรับผู้ดูแลตรวจสอบก่อนเผยแพร่"/>}
    <h3>{active.title||active.id.slice(0,8)} · {active.kind==='photo'?'รูปภาพ':'วิดีโอ'}</h3>
-   <p>สถานะ: {STATUS[active.status]||active.status}{active.captured_at?' · ถ่ายเมื่อ '+fmtDate(active.captured_at):''}</p>
+   <p>สถานะ: {STATUS[active.status]||active.status}{active.captured_at?' · ถ่ายเมื่อ '+formatCaptureTime(active.captured_at):''}</p>
    {active.has_gps&&<div className="fga-message" role="note">ไฟล์ต้นฉบับมีพิกัด GPS ใน Metadata ระบบไม่แก้ไขต้นฉบับ ผู้ที่ดาวน์โหลดจะเห็นพิกัดนี้ ตรวจว่าเผยแพร่ได้ก่อนอนุมัติ</div>}
-   <div className="fga-items">{active.files.map(f=><div key={f.id}><strong>{f.variant} · {f.filename}</strong><span>{(f.bytes/1e6).toFixed(1)} MB · {f.pending?'อัปโหลดยังไม่ครบ':!originals(f)?'ภาพตัวอย่าง (ไฟล์แยก)':f.verifiedHash?'SHA-256 ผ่าน':verifying[f.id]!==undefined?'กำลังตรวจ '+verifying[f.id]+'%':'รอตรวจ SHA-256'}</span>{!f.verifiedHash&&!f.pending&&originals(f)&&<button onClick={()=>verify(f)} disabled={busy}>ตรวจสอบ SHA-256</button>}</div>)}</div>
+   <div className="fga-items">{active.files.map(f=><div key={f.id}><strong>{f.variant} · {f.filename}</strong><span>{formatBytes(f.bytes)} · {f.pending?'อัปโหลดยังไม่ครบ':!originals(f)?'ภาพตัวอย่าง (ไฟล์แยก)':f.verifiedHash?'SHA-256 ผ่าน':verifying[f.id]!==undefined?'กำลังตรวจ '+verifying[f.id]+'%':'รอตรวจ SHA-256'}</span>{!f.verifiedHash&&!f.pending&&originals(f)&&<button onClick={()=>verify(f)} disabled={busy}>ตรวจสอบ SHA-256</button>}</div>)}</div>
    {active.status==='hidden'?<button className="fga-quiet" disabled={busy} onClick={()=>review('restore',{},'กู้คืนแล้ว ต้องตรวจใหม่ก่อนเผยแพร่')}>กู้คืนเพื่อตรวจใหม่</button>:<>
    <h3>แท็กนักฟุตบอล</h3><p>ภาพหนึ่งภาพแท็กเด็กได้หลายคนโดยไม่คัดลอกไฟล์ การเปลี่ยนแท็กจะส่งภาพกลับไปรอตรวจ</p>
    <div className="fga-checkboxes">{players.map(p=><label key={p.id}><input type="checkbox" checked={tags.includes(p.id)} onChange={e=>setTags(s=>e.target.checked?[...s,p.id]:s.filter(x=>x!==p.id))}/>{p.name} {p.jersey&&'#'+p.jersey}{!p.privacy_recorded&&' (ยังไม่บันทึกสิทธิ์)'}</label>)}</div>

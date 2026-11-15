@@ -18,7 +18,7 @@ export default function FootballGallery() {
  const [busy,setBusy]=useState(false);
  const [message,setMessage]=useState('');
  const [status,setStatus]=useState('idle');
- useEffect(()=>{if(new URLSearchParams(window.location.search).get('invite')==='invalid'){setStatus('error');setMessage('ลิงก์เชิญหมดอายุหรือถูกยกเลิก กรุณาขอลิงก์ใหม่จากผู้จัดงาน หรือกรอกรหัสอัลบั้ม')}},[]);
+ useEffect(()=>{const invite=new URLSearchParams(window.location.search).get('invite');if(invite==='invalid'){setStatus('error');setMessage('ลิงก์เชิญหมดอายุหรือถูกยกเลิก กรุณาขอลิงก์ใหม่จากผู้จัดงาน หรือกรอกรหัสอัลบั้ม')}else if(invite==='suspended'){setStatus('error');setMessage('ผู้จัดงานปิดอัลบั้มนี้ไว้ชั่วคราว กรุณาติดต่อผู้จัดงาน')}},[]);
  async function enter(e){
   e.preventDefault();
   if(busy)return;

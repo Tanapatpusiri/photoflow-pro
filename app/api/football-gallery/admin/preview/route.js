@@ -1,10 +1,27 @@
 import {randomUUID} from 'node:crypto';
-import {db,isUuid,storageDriver,presignUpload,verifyObject,streamPrivateObject} from '../../../../../lib/football-gallery-server';
+import {NextResponse} from 'next/server';
+import {db,isUuid,storageDriver,presignUpload,presignInline,verifyObject,streamPrivateObject,privateHeaders} from '../../../../../lib/football-gallery-server';
 import {adminGuard,adminReply as reply} from '../../../../../lib/football-gallery-admin';
+import {adminThumbUrl} from '../../../../../lib/football-gallery-tickets';
 import {ensurePreviewFolder,createUploadSession,sessionStatus,readRange,deleteFile} from '../../../../../lib/football-gallery-drive';
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
 const isJpeg=b=>b.length>=3&&b[0]===0xff&&b[1]===0xd8&&b[2]===0xff;
+// Admin preview image: checks the admin session on every load, then redirects to a link that
+// expires in two minutes, so a copied or leaked preview URL stops working quickly.
+export async function GET(request){
+ const {error}=await adminGuard(request);if(error)return error;
+ const media=request.nextUrl.searchParams.get('media');
+ if(!isUuid(media))return reply({message:'ข้อมูลไม่ถูกต้อง'},400);
+ try{
+  const q=await db().query(`SELECT r2_key,storage FROM fg_media_files WHERE media_id=$1 AND variant='THUMB' AND verified_bytes=true LIMIT 1`,[media]);
+  if(!q.rowCount)return reply({message:'ไม่พบภาพตัวอย่าง'},404);
+  const {r2_key,storage}=q.rows[0];
+  const target=storage==='drive'?adminThumbUrl(r2_key):await presignInline(r2_key);
+  return NextResponse.redirect(target,{status:302,headers:privateHeaders});
+ }catch(e){console.error('fg admin preview',e?.code||'unknown');return reply({message:'โหลดภาพตัวอย่างไม่สำเร็จ'},503)}
+}
+
 // Previews are separate small JPEG files (photo thumbnails or video poster frames).
 // Originals are never touched; a preview can be replaced until it is verified.
 export async function POST(request){

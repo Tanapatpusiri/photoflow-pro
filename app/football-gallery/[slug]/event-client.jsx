@@ -1,5 +1,6 @@
 'use client';
 import {useEffect,useMemo,useState} from 'react';
+import {formatBytes as fmtBytes} from '../../../lib/football-gallery-format';
 import './event.css';
 const paths={
  back:<path d="m15 5-7 7 7 7"/>,next:<path d="m9 5 7 7-7 7"/>,
@@ -15,7 +16,6 @@ const paths={
 };
 const Icon=({name,size=22,filled=false})=><svg className="fg-icon" width={size} height={size} viewBox="0 0 24 24" fill={filled?'currentColor':'none'} stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>;
 const fmt=n=>Number(n||0).toLocaleString('th-TH');
-const fmtBytes=n=>Number(n)>=1e9?(Number(n)/1e9).toFixed(2)+' GB':(Number(n)/1e6).toFixed(1)+' MB';
 const base=slug=>'/api/football-gallery/events/'+encodeURIComponent(slug);
 const ORIGINAL=['JPEG','RAW','VIDEO_ORIGINAL'];
 const OPTIONS=[['jpeg','JPEG Original',{jpeg:true}],['raw','RAW Original',{raw:true}],['jpegraw','JPEG + RAW',{jpeg:true,raw:true}],['video','Video Original',{video:true}],['all','ทั้งหมด รวมรูปและคลิป',{jpeg:true,raw:true,video:true}]];

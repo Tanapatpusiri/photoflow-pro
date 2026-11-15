@@ -1,10 +1,10 @@
 'use client';
 import {useRef,useState} from 'react';
 import {probeExif} from '../../../lib/football-gallery-exif';
+import {formatBytes as fmtBytes} from '../../../lib/football-gallery-format';
 const endpoint='/api/football-gallery/admin/upload';
 const RESUME_KEY='fg_upload_resume_v1';
 const post=async(url,body)=>{const r=await fetch(url,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});let d={};try{d=await r.json()}catch{}return {ok:r.ok,status:r.status,data:d}};
-const fmtBytes=n=>n>=1e9?(n/1e9).toFixed(2)+' GB':(n/1e6).toFixed(1)+' MB';
 const fingerprint=(eventId,f)=>[eventId,f.name,f.size,f.lastModified].join('|');
 const readResume=()=>{try{return JSON.parse(localStorage.getItem(RESUME_KEY)||'{}')}catch{return {}}};
 const writeResume=(key,value)=>{try{const all=readResume();if(value)all[key]=value;else delete all[key];localStorage.setItem(RESUME_KEY,JSON.stringify(all))}catch{}};

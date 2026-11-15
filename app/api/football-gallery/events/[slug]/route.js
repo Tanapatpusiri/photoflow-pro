@@ -1,5 +1,5 @@
 import {NextResponse} from 'next/server';
-import {db,configured,grantFor,privateHeaders} from '../../../../../lib/football-gallery-server';
+import {db,configured,grantFor,suspendedForGrant,SUSPENDED_MESSAGE,privateHeaders} from '../../../../../lib/football-gallery-server';
 import {thumbUrl} from '../../../../../lib/football-gallery-tickets';
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
@@ -10,9 +10,10 @@ export async function GET(request,{params}){
  try{
   const {slug}=await params;
   if(typeof slug!=='string'||slug.length>140)return reply({message:'ไม่พบอัลบั้ม'},404);
-  const q=await db().query(`SELECT id,slug,title,venue,event_date,privacy_notice,retention_until FROM fg_events WHERE slug=$1 AND status='published'`,[slug]);
+  const q=await db().query(`SELECT id,slug,title,venue,event_date,privacy_notice,retention_until,status FROM fg_events WHERE slug=$1 AND status IN('published','suspended')`,[slug]);
   if(!q.rowCount)return reply({message:'ไม่พบอัลบั้ม'},404);
   const e=q.rows[0];
+  if(e.status==='suspended')return await suspendedForGrant(request,e.id)?reply({message:SUSPENDED_MESSAGE,suspended:true},403):reply({message:'ไม่พบอัลบั้ม'},404);
   const grant=await grantFor(request,e.id);
   if(!grant)return reply({message:'ไม่มีสิทธิ์เข้าชมอัลบั้ม',needsAccess:true},403);
   const [count,players,cover]=await Promise.all([
