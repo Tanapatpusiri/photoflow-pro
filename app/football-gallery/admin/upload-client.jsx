@@ -111,8 +111,15 @@ export default function Uploader({eventId,onUploaded}){
    const capturedAt=exif?.capturedAt||(f.lastModified?new Date(f.lastModified).toISOString():undefined);
    const init=await post(endpoint,{action:'init',event:eventId,filename:f.name,bytes:f.size,sha256,crc32,batch,camera,capturedAt,hasGps:typeof exif?.hasGps==='boolean'?exif.hasGps:undefined});
    if(init.status===409&&init.data.duplicate){set(key,'มีไฟล์นี้ในงานแล้ว · ข้าม');return 'duplicate'}
-   if(!init.ok)throw Error(init.data.message||'เริ่มอัปโหลดไม่สำเร็จ');
-   info=init.data;writeResume(resumeKey,{fileId:info.fileId,sha256,crc32});
+   if(init.status===409&&init.data.resumable){
+    const r=await post(endpoint,{action:'list-parts',fileId:init.data.fileId});
+    if(!r.ok)throw Error(r.data.message||'ตรวจสถานะอัปโหลดไม่สำเร็จ');
+    info=r.data.completed?{fileId:init.data.fileId,mediaId:r.data.mediaId,done:true}:{...r.data,resumed:true};
+   }else{
+    if(!init.ok)throw Error(init.data.message||'เริ่มอัปโหลดไม่สำเร็จ');
+    info=init.data;
+   }
+   writeResume(resumeKey,{fileId:info.fileId,sha256,crc32});
   }
   if(!info.done){
    if(info.mode==='drive'){
