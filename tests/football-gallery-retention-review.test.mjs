@@ -8,6 +8,7 @@ const reason=RETENTION_REVIEW_REASON_SQL.replaceAll('CURRENT_DATE',"DATE '2025-0
 const sql=`SELECT label FROM (VALUES
  ('missing-date','draft',NULL::date,NULL::date,'missing_event_date'),
  ('missing-retention','published',DATE '2025-02-28',NULL::date,'missing_retention'),
+ ('old-draft-missing-retention','draft',DATE '2023-02-01',NULL::date,'missing_retention'),
  ('leap-invalid','published',DATE '2024-02-29',DATE '2025-03-01','invalid_retention'),
  ('expired','published',DATE '2024-02-01',DATE '2025-02-01','expired'),
  ('due-today','published',DATE '2024-02-29',DATE '2025-02-28','upcoming'),
