@@ -10,7 +10,7 @@ export async function GET(request){
  if(event!==null&&!isUuid(event))return send({message:'รหัสงานไม่ถูกต้อง'},400);
  try{
   // Correlated counts instead of joining players x media, which multiplied rows per event.
-  const q=await db().query(`SELECT e.id,e.title,e.slug,e.venue,e.event_date,e.status,e.privacy_approved_at,e.retention_until,e.deletion_after,
+  const q=await db().query(`SELECT e.id,e.title,e.slug,e.venue,e.event_date,e.status,e.privacy_approved_at,e.retention_until,e.deletion_after,e.locked,e.cover_media_id,(e.cover_drive_id IS NOT NULL) AS has_custom_cover,
    (SELECT COUNT(*)::int FROM fg_players p WHERE p.event_id=e.id) AS players,
    (SELECT COUNT(*)::int FROM fg_media m WHERE m.event_id=e.id AND m.status<>'hidden') AS media,
    (SELECT COUNT(*)::int FROM fg_media m WHERE m.event_id=e.id AND m.status='published') AS published,

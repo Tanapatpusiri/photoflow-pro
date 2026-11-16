@@ -5,6 +5,7 @@ import './admin.css';
 import Uploader from './upload-client';
 import ReviewClient from './review-client';
 import ChildrenManager from './children-client';
+import AlbumFront from './album-front-client';
 import StorageCard from './storage-client';
 import RetentionReview from './retention-client';
 import RetentionDeletionReview from './retention-deletion-client';
@@ -114,6 +115,7 @@ export default function FootballAdmin(){
     </section>}
     {albumTab==='upload'&&<section className="fga-card"><h2>อัปโหลด JPEG / RAW / วิดีโอ</h2>{canUpload?<Uploader eventId={active.id} album={{media:active.media||0,pending:pending(active),live:active.status==='published'}} onUploaded={()=>{setUploadKey(n=>n+1);return load()}} onReview={()=>setAlbumTab('review')} onPublish={()=>setAlbumTab('publish')}/>:<p>อัลบั้มที่ระงับหรือเก็บถาวรไม่เปิดรับอัปโหลด</p>}
     </section>}
+    {albumTab==='publish'&&<AlbumFront event={active} onChanged={()=>load()}/>}
     {['players','review','publish','requests'].includes(albumTab)&&<section className="fga-card"><ReviewClient view={albumTab} event={active} players={players} retentionMonths={retentionMonths} uploadKey={uploadKey} onUpdated={load} onPlayersChanged={()=>loadPlayers()} onNavigate={setAlbumTab}/></section>}
     {albumTab==='retention'&&<RetentionDeletionReview key={active.id} event={active}/>}
    </>}

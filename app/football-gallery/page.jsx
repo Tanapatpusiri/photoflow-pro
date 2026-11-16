@@ -1,5 +1,5 @@
 'use client';
-import {useEffect,useState} from 'react';
+import {useEffect,useRef,useState} from 'react';
 import './gallery.css';
 
 const Icon=({name,size=22})=>{
@@ -18,6 +18,12 @@ export default function FootballGallery() {
  const [busy,setBusy]=useState(false);
  const [message,setMessage]=useState('');
  const [status,setStatus]=useState('idle');
+ const [albums,setAlbums]=useState(null),[broken,setBroken]=useState({});
+ const codeInput=useRef(null);
+ useEffect(()=>{fetch('/api/football-gallery/albums',{cache:'no-store'}).then(r=>r.json()).then(d=>setAlbums(d.albums||[])).catch(()=>setAlbums([]))},[]);
+ // A locked album needs the code from the organiser: take the visitor to the code box.
+ const askCode=title=>{setStatus('error');setMessage(`อัลบั้ม "${title}" ล็อกไว้ กรอกรหัสจากผู้จัดงาน`);codeInput.current?.scrollIntoView({behavior:'smooth',block:'center'});setTimeout(()=>codeInput.current?.focus(),300)};
+ const fmtDate=v=>v?new Date(v).toLocaleDateString('th-TH',{day:'numeric',month:'short',year:'numeric',timeZone:'Asia/Bangkok'}):'';
  useEffect(()=>{const invite=new URLSearchParams(window.location.search).get('invite');if(invite==='invalid'){setStatus('error');setMessage('ลิงก์เชิญหมดอายุหรือถูกยกเลิก กรุณาขอลิงก์ใหม่จากผู้จัดงาน หรือกรอกรหัสอัลบั้ม')}else if(invite==='suspended'){setStatus('error');setMessage('ผู้จัดงานปิดอัลบั้มนี้ไว้ชั่วคราว กรุณาติดต่อผู้จัดงาน')}},[]);
  async function enter(e){
   e.preventDefault();
@@ -41,22 +47,25 @@ export default function FootballGallery() {
     <a className="fg-admin-link" href="/admin">จัดการหลังบ้าน</a>
    </header>
    <div className="fg-content">
-    <section className="fg-title-section" aria-labelledby="fg-title"><p className="fg-overline">PRIVATE PHOTO GALLERY</p><h1 id="fg-title">ทุกโมเมนต์สำคัญ<br/>อยู่ในภาพถ่าย</h1><p>เลือกรูปการแข่งขันของลูกได้ง่าย ๆ ดาวน์โหลด JPEG, RAW และวิดีโอในคุณภาพต้นฉบับ</p></section>
-    <section className="fg-cover" aria-label="แกลเลอรีส่วนตัว">
-     <div className="fg-cover-art"><Icon name="image" size={56}/></div>
-     <div className="fg-cover-bottom"><span className="fg-private"><Icon name="lock" size={15}/> Private Album</span><h2>ภาพการแข่งขันฟุตบอล</h2><p>เฉพาะผู้ได้รับสิทธิ์เข้าชม</p></div>
+    <section className="fg-albums" aria-label="อัลบั้ม">
+     {albums===null?<div className="fg-album-grid">{[0,1].map(i=><div key={i} className="fg-album-card fg-album-loading"/>)}</div>
+     :albums.length===0?<div className="fg-cover"><div className="fg-cover-art"><Icon name="image" size={56}/></div><div className="fg-cover-bottom"><h2>ภาพการแข่งขันฟุตบอล</h2><p>ยังไม่มีอัลบั้มที่เปิดให้ชม</p></div></div>
+     :<div className="fg-album-grid">{albums.map(a=>{const body=<>
+       <div className="fg-album-cover">{a.cover&&!broken[a.slug]?<img src={a.cover} alt="" loading="lazy" onError={()=>setBroken(b=>({...b,[a.slug]:true}))}/>:<Icon name="image" size={34}/>}{a.locked&&<span className="fg-album-lock" aria-label="ล็อก ต้องใช้รหัส"><Icon name="lock" size={14}/></span>}</div>
+       <strong>{a.title}</strong><span>{[fmtDate(a.date),a.venue].filter(Boolean).join(' · ')}</span></>;
+      return a.locked?<button key={a.slug} type="button" className="fg-album-card" onClick={()=>askCode(a.title)}>{body}</button>:<a key={a.slug} className="fg-album-card" href={'/football-gallery/'+encodeURIComponent(a.slug)}>{body}</a>})}</div>}
     </section>
     <section className="fg-access" aria-label="เข้าชมอัลบั้ม">
-     <h2>เข้าชมอัลบั้ม</h2><p className="fg-subtitle">เปิดลิงก์ที่ได้รับทาง LINE หรือกรอกรหัสประจำงาน</p>
-     <form onSubmit={enter} noValidate><label htmlFor="fg-code">รหัสอัลบั้ม</label><input id="fg-code" name="code" autoComplete="off" autoCapitalize="characters" spellCheck="false" placeholder="กรอกรหัสจากผู้จัดงาน" value={code} onChange={e=>{setCode(e.target.value);setMessage('');}} aria-invalid={status==='error'}/>
+     <h2>เข้าอัลบั้มที่ล็อก</h2><p className="fg-subtitle">อัลบั้มที่มีรูปกุญแจ ใช้ลิงก์ที่ได้รับทาง LINE หรือกรอกรหัสประจำงาน</p>
+     <form onSubmit={enter} noValidate><label htmlFor="fg-code">รหัสอัลบั้ม</label><input ref={codeInput} id="fg-code" name="code" autoComplete="off" autoCapitalize="characters" spellCheck="false" placeholder="กรอกรหัสจากผู้จัดงาน" value={code} onChange={e=>{setCode(e.target.value);setMessage('');}} aria-invalid={status==='error'}/>
       {message&&<p className="fg-error" role="alert">{message}</p>}
       <button type="submit" disabled={busy} className="fg-primary">{busy?'กำลังตรวจสอบ…':'เข้าสู่อัลบั้ม'}<Icon name="arrow" size={20}/></button>
      </form>
     </section>
-    <div className="fg-features"><span><Icon name="lock" size={18}/> Private</span><span><Icon name="image" size={18}/> JPEG + RAW</span><span><Icon name="video" size={18}/> Videos</span></div>
-    <div className="fg-notice"><Icon name="shield" size={23}/><div><strong>ความเป็นส่วนตัวของเด็กสำคัญที่สุด</strong><p>ไม่ต้องสมัครสมาชิก ภาพและไฟล์ต้นฉบับจะเข้าถึงได้เมื่อได้รับสิทธิ์จากผู้ดูแลเท่านั้น</p></div></div>
+    <div className="fg-features"><span><Icon name="image" size={18}/> JPEG + RAW</span><span><Icon name="video" size={18}/> Videos</span></div>
+    <div className="fg-notice"><Icon name="shield" size={23}/><div><strong>ความเป็นส่วนตัวของเด็กสำคัญที่สุด</strong><p>ไม่ต้องสมัครสมาชิก อัลบั้มที่มีรูปกุญแจเปิดได้เฉพาะผู้ที่ได้รับรหัสหรือลิงก์จากผู้จัดงาน</p></div></div>
    </div>
-   <footer className="fg-footer">หากไม่พบรหัส โปรดติดต่อผู้จัดงานหรือช่างภาพ<br/>เว็บไซต์นี้ยังไม่เปิดเผยอัลบั้มสาธารณะ</footer>
+   <footer className="fg-footer">หากไม่พบรหัส โปรดติดต่อผู้จัดงานหรือช่างภาพ</footer>
   </div>
  </main>
 }

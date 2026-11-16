@@ -84,6 +84,15 @@ assert.match(reviewRoute,/if\(!withdrawn\.rowCount\)await client\.query\(`INSERT
 const front=await readFile('app/football-gallery/page.jsx','utf8');
 assert.match(front,/<a className="fg-admin-link" href="\/admin">จัดการหลังบ้าน<\/a>/);
 assert.match(await readFile('app/admin/page.js','utf8'),/redirect\('\/football-gallery\/admin'\)/);
+// Photos can be deleted for good one at a time or all in a filter, after a confirmation.
+assert.match(review,/post\('\/media-delete',\{event:event\.id,mediaIds:ids\}\)/);
+assert.match(review,/post\('\/media-delete',\{event:event\.id,all:true/);
+assert.match(review,/confirm\(`ลบถาวร /);
+assert.match(review,/removeForever\(\{ids:\[active\.id\],label:'ภาพนี้'\}\)/);
+// The publish step sets the album's front-page card: lock and cover.
+assert.match(page,/albumTab==='publish'&&<AlbumFront event=\{active\}/);
+const frontCard=await readFile('app/football-gallery/admin/album-front-client.jsx','utf8');
+for(const action of ["action:locked?'lock':'unlock'","action:'cover-init'","action:'cover-complete'","action:'cover-media'","action:'cover-clear'"])assert.ok(frontCard.includes(action),action);
 // The site root opens Football Gallery; the old PhotoFlow demo is no longer the front page.
 const root=await readFile('app/page.js','utf8');
 assert.match(root,/redirect\('\/football-gallery'\)/);

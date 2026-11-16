@@ -1,5 +1,5 @@
 import {randomBytes} from 'node:crypto';
-import {db,isUuid,sha256} from '../../../../../lib/football-gallery-server';
+import {db,isUuid,sha256,PUBLIC_GRANT_LABEL} from '../../../../../lib/football-gallery-server';
 import {adminGuard,adminReply as reply,audit} from '../../../../../lib/football-gallery-admin';
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
@@ -17,7 +17,7 @@ export async function GET(request){
  try{
   // Only metadata is listed: tokens and codes are stored as hashes and can never be shown again.
   const q=await db().query(`SELECT id,'invite' AS type,label,created_at,expires_at,revoked_at FROM fg_invites WHERE event_id=$1
-   UNION ALL SELECT id,'code',label,created_at,expires_at,revoked_at FROM fg_event_codes WHERE event_id=$1 ORDER BY created_at DESC LIMIT 200`,[event]);
+   UNION ALL SELECT id,'code',label,created_at,expires_at,revoked_at FROM fg_event_codes WHERE event_id=$1 AND label IS DISTINCT FROM $2 ORDER BY created_at DESC LIMIT 200`,[event,PUBLIC_GRANT_LABEL]);
   return reply({grants:q.rows.map(g=>({...g,active:!g.revoked_at&&new Date(g.expires_at)>new Date()}))});
  }catch(e){console.error('fg grant list',e?.code||'unknown');return reply({message:'โหลดลิงก์เข้าชมไม่สำเร็จ'},503)}
 }
@@ -35,7 +35,7 @@ export async function POST(request){
    return reply({ok:true});
   }
   if(!['code','invite'].includes(body.type))return reply({message:'ข้อมูลไม่ถูกต้อง'},400);
-  const label=typeof body.label==='string'&&body.label.trim()?body.label.trim().slice(0,80):null;
+  const label=typeof body.label==='string'&&body.label.trim()&&body.label.trim()!==PUBLIC_GRANT_LABEL?body.label.trim().slice(0,80):null;
   const e=await db().query("SELECT id FROM fg_events WHERE id=$1 AND status='published' AND privacy_approved_at IS NOT NULL",[body.event]);
   if(!e.rowCount)return reply({message:'ต้องตรวจ PDPA และเผยแพร่งานก่อนสร้างลิงก์'},409);
   const days=Number.isFinite(Number(body.days))?Math.max(1,Math.min(90,Math.round(Number(body.days)))):14;

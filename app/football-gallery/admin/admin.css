@@ -137,3 +137,26 @@
  .fga-children-edit .fga-actions{grid-column:1/-1}
  .fga-children-album select{max-width:100%}
 }
+.fga-pick-bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;font-size:13px}
+.fga-pick-bar span{color:#606066}
+.fga-review-tile{position:relative}
+.fga-review-tile.picked{outline:3px solid #9a3a2c;outline-offset:-3px}
+.fga-tile-check{position:absolute;top:14px;left:14px;width:26px;height:26px;border-radius:50%;background:#fff;border:2px solid #303033;display:grid;place-items:center;font-size:14px;font-weight:700;z-index:1}
+.fga-review-tile.picked .fga-tile-check{background:#9a3a2c;border-color:#9a3a2c;color:#fff}
+.fga-review-detail .fga-delete-link{justify-self:start;color:#9a3a2c;font-size:13px;text-decoration:underline;min-height:0}
+.fga-front{display:grid;gap:12px}
+.fga-front-row{display:grid;grid-template-columns:minmax(0,200px) minmax(0,1fr);gap:16px;align-items:start}
+.fga-front-card{display:grid;gap:6px;background:#f7f7f8;border-radius:18px;padding:8px}
+.fga-front-card img,.fga-front-empty{width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:12px;background:#ececef}
+.fga-front-empty{display:grid;place-items:center;font-size:12px;color:#88888e;text-align:center;padding:8px}
+.fga-front-card strong{font-size:14px;padding:0 4px}
+.fga-front-card span{font-size:12px;color:#606066;padding:0 4px 4px}
+.fga-front-controls{display:grid;gap:12px}
+.fga-front-lock{border:0;margin:0;padding:0;display:grid;gap:8px}
+.fga-front-lock legend{font-size:14px;font-weight:600;margin-bottom:6px}
+.fga-front-lock .fga-check{font-size:13px;line-height:1.45}
+.fga-card .fga-front-lock input{width:18px;height:18px;flex-shrink:0;margin-top:1px}
+.fga-file-chip{position:relative;overflow:hidden;display:inline-flex!important;flex-direction:row!important;font-weight:400!important}
+.fga-file-chip input{position:absolute;inset:0;opacity:0;cursor:pointer;height:auto!important}
+.fga-front-chooser{display:grid;gap:10px;border-top:1px solid #f0f0f2;padding-top:12px}
+@media(max-width:560px){.fga-front-row{grid-template-columns:1fr}.fga-front-card{max-width:260px}}
