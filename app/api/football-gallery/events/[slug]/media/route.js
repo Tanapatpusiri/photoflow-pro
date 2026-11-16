@@ -1,5 +1,5 @@
 import {NextResponse} from 'next/server';
-import {db,configured,grantFor,isUuid,privateHeaders} from '../../../../../../lib/football-gallery-server';
+import {db,configured,grantFor,isUuid,privateHeaders,publicLimitOk,PUBLIC_LIMIT_MESSAGE} from '../../../../../../lib/football-gallery-server';
 import {thumbUrl} from '../../../../../../lib/football-gallery-tickets';
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
@@ -14,6 +14,7 @@ export async function GET(request,{params}){
   const id=event.rows[0].id;
   const grant=await grantFor(request,id);
   if(!grant)return reply({message:'ไม่มีสิทธิ์',needsAccess:true},403);
+  if(!await publicLimitOk(request,grant,'list'))return reply({message:PUBLIC_LIMIT_MESSAGE},429);
   const u=new URL(request.url),kind=u.searchParams.get('kind'),player=u.searchParams.get('player'),page=Math.max(1,Math.min(100000,Number(u.searchParams.get('page'))||1));
   if(kind&&!['photo','video'].includes(kind))return reply({message:'ประเภทไฟล์ไม่ถูกต้อง'},400);
   if(player&&!isUuid(player))return reply({message:'ข้อมูลนักฟุตบอลไม่ถูกต้อง'},400);

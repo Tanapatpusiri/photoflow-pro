@@ -1,5 +1,5 @@
 import {NextResponse} from 'next/server';
-import {db,configured,grantFor,isUuid,streamPrivateObject,contentDisposition,privateHeaders} from '../../../../../../../../lib/football-gallery-server';
+import {db,configured,grantFor,isUuid,streamPrivateObject,contentDisposition,privateHeaders,publicLimitOk,PUBLIC_LIMIT_MESSAGE} from '../../../../../../../../lib/football-gallery-server';
 import {grantFingerprint,partLayout,archiveName} from '../../../../../../../../lib/football-gallery-archive';
 import {zipRangeStream,parseRange} from '../../../../../../../../lib/football-gallery-zip';
 import {archiveUrl} from '../../../../../../../../lib/football-gallery-tickets';
@@ -23,6 +23,7 @@ export async function GET(request,{params}){
   const job=j.rows[0];
   const grant=await grantFor(request,job.event_id);
   if(!grant||grantFingerprint(grant)!==job.grant_fingerprint)return deny('ไม่มีสิทธิ์ดาวน์โหลด',403);
+  if(!await publicLimitOk(request,grant,'part'))return deny(PUBLIC_LIMIT_MESSAGE,429);
   const ids=job.manifest?.parts?.[index];
   if(!Array.isArray(ids)||!ids.length)return deny('ไม่พบไฟล์',404);
   // Re-check publication now: a file hidden after the job was prepared is never streamed.
