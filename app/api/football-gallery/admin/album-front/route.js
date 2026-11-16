@@ -34,8 +34,8 @@ export async function POST(request){
   if(d.action==='unlock'||d.action==='lock')return await setLock(e,d.action==='unlock',log);
   if(d.action==='cover-media'){
    if(!isUuid(d.mediaId))return reply({message:'ข้อมูลไม่ถูกต้อง'},400);
-   const m=await db().query(`SELECT 1 FROM fg_media m JOIN fg_media_files f ON f.media_id=m.id AND f.variant='THUMB' AND f.verified_bytes=true WHERE m.id=$1 AND m.event_id=$2 AND m.status<>'hidden'`,[d.mediaId,e.id]);
-   if(!m.rowCount)return reply({message:'ภาพนี้ยังไม่มีภาพตัวอย่าง เลือกภาพอื่น'},409);
+   const m=await db().query(`SELECT 1 FROM fg_media m JOIN fg_media_files f ON f.media_id=m.id AND f.variant='THUMB' AND f.verified_bytes=true WHERE m.id=$1 AND m.event_id=$2 AND m.kind='photo' AND m.status='published' AND m.publish_allowed=true AND m.metadata_reviewed=true`,[d.mediaId,e.id]);
+   if(!m.rowCount)return reply({message:'เลือกได้เฉพาะรูปที่ผ่านการอนุมัติเผยแพร่และมีภาพตัวอย่างแล้ว'},409);
    return await tx(async client=>{await client.query('UPDATE fg_events SET cover_media_id=$2,cover_drive_id=NULL,cover_pending=NULL,updated_at=NOW() WHERE id=$1',[e.id,d.mediaId]);await log(client,'album.cover.media',d.mediaId)},async()=>{await removeDriveFile(e.cover_drive_id);return reply({ok:true})});
   }
   if(d.action==='cover-clear')return await tx(async client=>{await client.query('UPDATE fg_events SET cover_media_id=NULL,cover_drive_id=NULL,cover_pending=NULL,updated_at=NOW() WHERE id=$1',[e.id]);await log(client,'album.cover.clear',null)},async()=>{await removeDriveFile(e.cover_drive_id);return reply({ok:true})});
