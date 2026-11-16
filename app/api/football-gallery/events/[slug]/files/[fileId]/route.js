@@ -1,5 +1,5 @@
 import {NextResponse} from 'next/server';
-import {db,configured,grantFor,isUuid,presignOriginal,presignInline,privateHeaders} from '../../../../../../../lib/football-gallery-server';
+import {db,configured,grantFor,isUuid,presignOriginal,presignInline,privateHeaders,publicLimitOk,PUBLIC_LIMIT_MESSAGE} from '../../../../../../../lib/football-gallery-server';
 import {thumbUrl,originalUrl} from '../../../../../../../lib/football-gallery-tickets';
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
@@ -16,6 +16,7 @@ export async function GET(request,{params}){
   if(!grant)return deny('ไม่มีสิทธิ์ดาวน์โหลด',403);
   const preview=['THUMB','PREVIEW','VIDEO_PREVIEW'].includes(file.variant);
   if(preview?!file.verified_bytes:!file.verified_hash)return deny('ไฟล์ยังไม่พร้อม',404);
+  if(!await publicLimitOk(request,grant,preview?'preview':'original'))return deny(PUBLIC_LIMIT_MESSAGE,429);
   if(!preview)await db().query('INSERT INTO fg_audit(event_id,action,resource_id,detail) VALUES($1,$2,$3,$4)',[file.event_id,'download.original',fileId,JSON.stringify({grant:grant.codeId})]);
   // Google Drive files are streamed by the download Worker (no file bytes pass through this app).
   const signed=file.storage==='drive'?(preview?thumbUrl(fileId,grant.codeId,file.event_id):originalUrl(fileId,grant.codeId,file.event_id))
