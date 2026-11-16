@@ -33,7 +33,7 @@ function Stats({e}){return <div className="fga-stats"><span>{e.media||0} รา�
 
 export default function FootballAdmin(){
  const [email,setEmail]=useState(''),[password,setPassword]=useState(''),[events,setEvents]=useState([]),[authorized,setAuthorized]=useState(false),[loading,setLoading]=useState(true),[message,setMessage]=useState(''),[busy,setBusy]=useState(false);
- const [title,setTitle]=useState(''),[venue,setVenue]=useState(''),[date,setDate]=useState(''),[showCreate,setShowCreate]=useState(false);
+ const [title,setTitle]=useState(''),[venue,setVenue]=useState(''),[date,setDate]=useState(''),[newLocked,setNewLocked]=useState(false),[showCreate,setShowCreate]=useState(false);
  const [missingDate,setMissingDate]=useState('');
  const [retentionRefresh,setRetentionRefresh]=useState(0);
  const [uploadKey,setUploadKey]=useState(0);
@@ -66,7 +66,7 @@ export default function FootballAdmin(){
  // The publish step needs the retention period, so it is loaded on sign-in rather than only when Settings is opened.
  useEffect(()=>{if(!authorized)return;fetch(api+'/retention-settings',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>{if(d&&Number.isInteger(d.months))setRetentionMonths(m=>m??d.months)}).catch(()=>{})},[authorized,retentionRefresh]);
  async function logout(){await fetch(api+'/login',{method:'DELETE'}).catch(()=>{});setAuthorized(false);setEvents([]);setActiveId(null);setRetentionMonths(null);setView('albums');history.replaceState(null,'',location.pathname)}
- async function createEvent(e){e.preventDefault();if(busy)return;setBusy(true);try{const r=await fetch(api+'/events',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({title,venue,date})}),d=await r.json();if(!r.ok)throw Error(d.message||'สร้างงานไม่สำเร็จ');setTitle('');setVenue('');setDate('');setShowCreate(false);setMessage('');await load(d.event.id);await selectEvent(d.event.id,'players')}catch(e){setMessage(e.message)}finally{setBusy(false)}}
+ async function createEvent(e){e.preventDefault();if(busy)return;setBusy(true);try{const r=await fetch(api+'/events',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({title,venue,date,locked:newLocked})}),d=await r.json();if(!r.ok)throw Error(d.message||'สร้างงานไม่สำเร็จ');setTitle('');setVenue('');setDate('');setNewLocked(false);setShowCreate(false);setMessage('');await load(d.event.id);await selectEvent(d.event.id,'players')}catch(e){setMessage(e.message)}finally{setBusy(false)}}
  async function selectEvent(id,tab){setView('albums');setActiveId(id);setAlbumTab(tab||defaultTab(events.find(e=>e.id===id)));setMessage('');setPlayers([]);setMissingDate('');window.scrollTo({top:0});await loadPlayers(id)}
  function closeAlbum(){setActiveId(null);setMessage('');setMissingDate('')}
  async function selectRetentionEvent(event){setEvents(old=>old.some(e=>e.id===event.id)?old:[...old,event]);await selectEvent(event.id,'retention')}
@@ -91,7 +91,7 @@ export default function FootballAdmin(){
    </>:view==='children'?<ChildrenManager events={events} initialEvent={activeId} onChanged={id=>{if(id===activeId)loadPlayers(id);return load()}}/>
    :!active?<>
     <div className="fga-row"><h2 className="fga-section-title">อัลบั้มทั้งหมด</h2><button className="fga-primary" onClick={()=>setShowCreate(s=>!s)} aria-expanded={showCreate}>{showCreate?'ปิด':'+ สร้างอัลบั้ม'}</button></div>
-    {showCreate&&<section className="fga-card"><h2>สร้างอัลบั้มใหม่</h2><p>อัลบั้มใหม่จะเป็น Draft และผู้ปกครองยังเข้าไม่ได้ จนกว่าจะตรวจสิทธิ์และกดเผยแพร่</p><form onSubmit={createEvent}><label>ชื่องาน<input value={title} onChange={e=>setTitle(e.target.value)} required maxLength={180} placeholder="ชื่อการแข่งขัน"/></label><label>สถานที่<input value={venue} onChange={e=>setVenue(e.target.value)} maxLength={180} placeholder="สถานที่ (ไม่บังคับ)"/></label><label>วันที่งาน<input type="date" value={date} onChange={e=>setDate(e.target.value)}/></label><button disabled={busy||!title.trim()}>{busy?'กำลังบันทึก…':'สร้างอัลบั้ม'}</button></form></section>}
+    {showCreate&&<section className="fga-card"><h2>สร้างอัลบั้มใหม่</h2><p>อัลบั้มใหม่จะเป็น Draft และผู้ปกครองยังเข้าไม่ได้ จนกว่าจะตรวจสิทธิ์และกดเผยแพร่</p><form onSubmit={createEvent}><label>ชื่องาน<input value={title} onChange={e=>setTitle(e.target.value)} required maxLength={180} placeholder="ชื่อการแข่งขัน"/></label><label>สถานที่<input value={venue} onChange={e=>setVenue(e.target.value)} maxLength={180} placeholder="สถานที่ (ไม่บังคับ)"/></label><label>วันที่งาน<input type="date" value={date} onChange={e=>setDate(e.target.value)}/></label><label className="fga-check fga-new-lock"><input type="checkbox" checked={newLocked} onChange={e=>setNewLocked(e.target.checked)}/><span><b>ล็อกอัลบั้มนี้</b> · หากเลือก ผู้ชมต้องมีรหัสหรือลิงก์เชิญ อัลบั้มที่ไม่เลือกจะเปิดให้เข้าชมได้หลังอนุมัติเผยแพร่</span></label><button disabled={busy||!title.trim()}>{busy?'กำลังบันทึก…':'สร้างอัลบั้ม'}</button></form></section>}
     {events.length===0?<section className="fga-card fga-empty"><h2>ยังไม่มีอัลบั้ม</h2><p>เริ่มจากกด "สร้างอัลบั้ม" แล้วเพิ่มนักฟุตบอลและอัปโหลดรูป</p></section>
     :<div className="fga-album-grid">{events.map(e=><button key={e.id} className="fga-album-card" onClick={()=>selectEvent(e.id)}>
       <span className="fga-row"><strong>{e.title}</strong><Badge status={e.status}/></span>

@@ -37,6 +37,7 @@ export async function PATCH(request){
 export async function POST(request){
  const {admin,error}=await adminGuard(request,{mutation:true});if(error)return error;
  let d;try{d=await request.json()}catch{return send({message:'ข้อมูลไม่ถูกต้อง'},400)}
+ const locked=d?.locked===true;
  const title=typeof d?.title==='string'?d.title.trim():'';const venue=typeof d?.venue==='string'&&d.venue.trim()?d.venue.trim():null;
  // Date.parse accepts impossible dates such as 2025-02-30, which PostgreSQL then rejects with a 503.
  const rawDate=typeof d?.date==='string'?d.date.trim():'';
@@ -47,7 +48,7 @@ export async function POST(request){
  const client=await db().connect();
  try{
   await client.query('BEGIN');
-  const q=await client.query(`INSERT INTO fg_events(slug,title,venue,event_date,status) VALUES($1,$2,$3,$4,'draft') RETURNING id,slug,title,venue,event_date,status`,[slug,title,venue,date]);
+  const q=await client.query(`INSERT INTO fg_events(slug,title,venue,event_date,status,locked) VALUES($1,$2,$3,$4,'draft',$5) RETURNING id,slug,title,venue,event_date,status,locked`,[slug,title,venue,date,locked]);
   await audit(client,{adminId:admin.id,eventId:q.rows[0].id,action:'event.create'});
   await client.query('COMMIT');
   return send({event:q.rows[0]},201);

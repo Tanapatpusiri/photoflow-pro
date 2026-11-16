@@ -13,9 +13,9 @@ const hex=buf=>[...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,'0')).j
 
 // Front-page card of one album: lock setting and cover (uploaded, or chosen from the album).
 export default function AlbumFront({event,onChanged}){
- const [busy,setBusy]=useState(false),[error,setError]=useState(''),[info,setInfo]=useState(''),[choosing,setChoosing]=useState(false),[photos,setPhotos]=useState([]),[version,setVersion]=useState(0),[coverOk,setCoverOk]=useState(true);
+ const [busy,setBusy]=useState(false),[error,setError]=useState(''),[info,setInfo]=useState(''),[choosing,setChoosing]=useState(false),[photos,setPhotos]=useState([]),[photoPage,setPhotoPage]=useState(0),[hasMorePhotos,setHasMorePhotos]=useState(false),[version,setVersion]=useState(0),[coverOk,setCoverOk]=useState(true);
  const hasCover=!!(event.cover_media_id||event.has_custom_cover);
- useEffect(()=>{setChoosing(false);setError('');setInfo('');setCoverOk(true)},[event.id]);
+ useEffect(()=>{setChoosing(false);setPhotos([]);setPhotoPage(0);setHasMorePhotos(false);setError('');setInfo('');setCoverOk(true)},[event.id]);
  useEffect(()=>{setCoverOk(true)},[version,event.cover_media_id,event.has_custom_cover]);
  const run=async(task,ok)=>{if(busy)return;setBusy(true);setError('');setInfo('');try{await task();await onChanged?.();setVersion(v=>v+1);if(ok)setInfo(ok)}catch(e){setError(e.message)}finally{setBusy(false)}};
  const setLocked=locked=>{
@@ -30,7 +30,8 @@ export default function AlbumFront({event,onChanged}){
   if(!r.ok)throw Error('อัปโหลดหน้าปกไม่สำเร็จ ('+r.status+')');
   await send({action:'cover-complete',event:event.id});
  },'ตั้งรูปหน้าปกแล้ว');
- const openChooser=()=>run(async()=>{const r=await fetch(api+'/media?event='+encodeURIComponent(event.id)+'&page=1',{cache:'no-store'});const d=await r.json();if(!r.ok)throw Error(d.message||'โหลดภาพไม่สำเร็จ');setPhotos((d.items||[]).filter(i=>i.thumb&&i.status!=='hidden'));setChoosing(true)});
+ const loadPhotos=(page=1)=>run(async()=>{const r=await fetch(api+'/media?event='+encodeURIComponent(event.id)+'&page='+page,{cache:'no-store'});const d=await r.json();if(!r.ok)throw Error(d.message||'โหลดภาพไม่สำเร็จ');const approved=(d.items||[]).filter(i=>i.thumb&&i.status==='published'&&i.publish_allowed!==false);setPhotos(previous=>page===1?approved:[...previous,...approved]);setPhotoPage(page);setHasMorePhotos(!!d.hasMore);setChoosing(true)});
+ const openChooser=()=>loadPhotos(1);
  const choose=id=>run(async()=>{await send({action:'cover-media',event:event.id,mediaId:id});setChoosing(false)},'ตั้งรูปหน้าปกแล้ว');
  return <section className="fga-card fga-front">
   <h2>การ์ดบนหน้าแรก</h2>
@@ -47,6 +48,7 @@ export default function AlbumFront({event,onChanged}){
      <label className="fga-check"><input type="radio" name={'lock-'+event.id} checked={!!event.locked} disabled={busy} onChange={()=>setLocked(true)}/><span><b>ล็อก</b> · ต้องใช้รหัสหรือลิงก์จากผู้จัดงาน</span></label>
      <label className="fga-check"><input type="radio" name={'lock-'+event.id} checked={!event.locked} disabled={busy} onChange={()=>setLocked(false)}/><span><b>เปิดให้ทุกคน</b> · ใครก็ดูและดาวน์โหลดได้ ไม่ต้องใช้รหัส</span></label>
     </fieldset>
+    <p className="fga-hint">รูปปกจะแสดงบนหน้าแรกของเว็บไซต์แม้อัลบั้มจะล็อกอยู่ กรุณาเลือกรูปที่ได้รับอนุญาตให้เผยแพร่เป็นหน้าปกแล้วเท่านั้น</p>
     <div className="fga-actions">
      <label className="fga-chip fga-file-chip">{busy?'กำลังบันทึก…':'อัปโหลดรูปหน้าปก'}<input type="file" accept="image/jpeg,image/png,image/webp,image/heic" disabled={busy} onChange={e=>{upload(e.target.files?.[0]);e.target.value=''}}/></label>
      <button className="fga-chip" disabled={busy} onClick={openChooser}>เลือกจากภาพในอัลบั้ม</button>
@@ -57,7 +59,7 @@ export default function AlbumFront({event,onChanged}){
   </div>
   {choosing&&<div className="fga-front-chooser">
    <div className="fga-row"><strong>แตะภาพที่ต้องการใช้เป็นหน้าปก</strong><button className="fga-chip" onClick={()=>setChoosing(false)}>ปิด</button></div>
-   {photos.length===0?<p>ยังไม่มีภาพที่มีภาพตัวอย่างในอัลบั้มนี้</p>:<div className="fga-review-grid">{photos.map(p=><button key={p.id} className={'fga-review-tile'+(event.cover_media_id===p.id?' picked':'')} disabled={busy} onClick={()=>choose(p.id)}><img src={p.thumb} alt="" loading="lazy"/><strong>{p.title||'รูปภาพ'}</strong></button>)}</div>}
+   {photos.length===0?<p>ยังไม่มีภาพที่มีภาพตัวอย่างในอัลบั้มนี้</p>:<div className="fga-review-grid">{photos.map(p=><button key={p.id} className={'fga-review-tile'+(event.cover_media_id===p.id?' picked':'')} disabled={busy} onClick={()=>choose(p.id)}><img src={p.thumb} alt="" loading="lazy"/><strong>{p.title||'รูปภาพ'}</strong></button>)}</div>}{hasMorePhotos&&<button className="fga-chip" disabled={busy} onClick={()=>loadPhotos(photoPage+1)}>โหลดภาพเพิ่ม</button>}
   </div>}
  </section>;
 }

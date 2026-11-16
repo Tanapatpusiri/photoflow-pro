@@ -10,7 +10,7 @@ export async function GET(request,{params}){
  try{
   const {slug}=await params;
   if(typeof slug!=='string'||slug.length>140)return reply({message:'ไม่พบอัลบั้ม'},404);
-  const q=await db().query(`SELECT id,slug,title,venue,event_date,privacy_notice,retention_until,status FROM fg_events WHERE slug=$1 AND status IN('published','suspended')`,[slug]);
+  const q=await db().query(`SELECT id,slug,title,venue,event_date,privacy_notice,retention_until,status,locked FROM fg_events WHERE slug=$1 AND status IN('published','suspended')`,[slug]);
   if(!q.rowCount)return reply({message:'ไม่พบอัลบั้ม'},404);
   const e=q.rows[0];
   if(e.status==='suspended')return await suspendedForGrant(request,e.id)?reply({message:SUSPENDED_MESSAGE,suspended:true},403):reply({message:'ไม่พบอัลบั้ม'},404);
@@ -29,6 +29,6 @@ export async function GET(request,{params}){
   const c=cover.rows[0];
   const eventCover=!c?{}:c.storage==='drive'?{coverUrl:thumbUrl(c.id,grant.codeId,e.id)}:{cover:c.id};
   const playerRows=players.rows.map(({cover,...p})=>({...p,...coverOf(cover)}));
-  return reply({event:{slug:e.slug,title:e.title,venue:e.venue,date:e.event_date,photos:by('photo')?.total||0,videos:by('video')?.total||0,bytes:Number(by('photo')?.bytes||0)+Number(by('video')?.bytes||0),...eventCover,privacyNotice:e.privacy_notice,retentionUntil:e.retention_until},players:playerRows});
+  return reply({event:{slug:e.slug,title:e.title,venue:e.venue,date:e.event_date,photos:by('photo')?.total||0,videos:by('video')?.total||0,bytes:Number(by('photo')?.bytes||0)+Number(by('video')?.bytes||0),...eventCover,privacyNotice:e.privacy_notice,retentionUntil:e.retention_until,locked:e.locked},players:playerRows});
  }catch(err){console.error('fg event lookup',err?.code||'unknown');return reply({message:'ไม่สามารถโหลดข้อมูลอัลบั้ม'},503)}
 }
