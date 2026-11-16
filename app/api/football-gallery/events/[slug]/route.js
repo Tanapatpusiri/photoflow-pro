@@ -10,7 +10,7 @@ export async function GET(request,{params}){
  try{
   const {slug}=await params;
   if(typeof slug!=='string'||slug.length>140)return reply({message:'ไม่พบอัลบั้ม'},404);
-  const q=await db().query(`SELECT id,slug,title,venue,event_date,privacy_notice,retention_until,status,locked FROM fg_events WHERE slug=$1 AND status IN('published','suspended')`,[slug]);
+  const q=await db().query(`SELECT id,slug,title,venue,event_date,privacy_notice,retention_until,status,locked,cover_drive_id,cover_media_id,updated_at FROM fg_events WHERE slug=$1 AND status IN('published','suspended')`,[slug]);
   if(!q.rowCount)return reply({message:'ไม่พบอัลบั้ม'},404);
   const e=q.rows[0];
   if(e.status==='suspended')return await suspendedForGrant(request,e.id)?reply({message:SUSPENDED_MESSAGE,suspended:true},403):reply({message:'ไม่พบอัลบั้ม'},404);
@@ -26,8 +26,12 @@ export async function GET(request,{params}){
   const by=k=>count.rows.find(x=>x.kind===k);
   // Cover images: a Worker URL for Drive previews, otherwise the app's /files/<id> redirect route.
   const coverOf=v=>!v?null:v.startsWith('d:')?{coverUrl:thumbUrl(v.slice(2),grant.codeId,e.id)}:{cover:v};
-  const c=cover.rows[0];
-  const eventCover=!c?{}:c.storage==='drive'?{coverUrl:thumbUrl(c.id,grant.codeId,e.id)}:{cover:c.id};
+  // Use the exact same cover resolver as the homepage card. It prefers the
+  // admin-selected upload/photo and only falls back to a published photo for
+  // an unlocked album. This also keeps cover changes in sync across pages.
+  const hasCover=!!(e.cover_drive_id||e.cover_media_id||(!e.locked&&cover.rows[0]));
+  const version=Math.floor(new Date(e.updated_at).getTime()/1000);
+  const eventCover=hasCover?{coverUrl:'/api/football-gallery/cover/'+e.id+'?v='+version}:{};
   const playerRows=players.rows.map(({cover,...p})=>({...p,...coverOf(cover)}));
   return reply({event:{slug:e.slug,title:e.title,venue:e.venue,date:e.event_date,photos:by('photo')?.total||0,videos:by('video')?.total||0,bytes:Number(by('photo')?.bytes||0)+Number(by('video')?.bytes||0),...eventCover,privacyNotice:e.privacy_notice,retentionUntil:e.retention_until,locked:e.locked},players:playerRows});
  }catch(err){console.error('fg event lookup',err?.code||'unknown');return reply({message:'ไม่สามารถโหลดข้อมูลอัลบั้ม'},503)}
