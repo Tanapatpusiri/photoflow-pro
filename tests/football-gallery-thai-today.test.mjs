@@ -17,5 +17,5 @@ assert.equal(oneYearAfterEvent('2025-02-30'),'');
 const events=await readFile('app/api/football-gallery/admin/events/route.js','utf8');
 assert.match(events,/if\(rawDate&&\(!\/\^\\d\{4\}-\\d\{2\}-\\d\{2\}\$\/\.test\(rawDate\)\|\|!oneYearAfterEvent\(rawDate\)\)\)return send\(\{message:'วันจัดงานไม่ถูกต้อง'\},400\);/);
 const migrate=await readFile('scripts/migrate-football-gallery.mjs','utf8');
-assert.match(migrate,/'db\/football_gallery_005_retention_deletion\.sql'\]/);
+assert.match(migrate,/'db\/football_gallery_005_retention_deletion\.sql'[,\]]/);
 console.log('PASS: retention uses the Thai calendar date, impossible event dates are rejected, migration 005 is applied');
