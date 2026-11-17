@@ -21,6 +21,13 @@ export async function GET(request,{params}){
   // Google Drive files are streamed by the download Worker (no file bytes pass through this app).
   const signed=file.storage==='drive'?(preview?thumbUrl(fileId,grant.codeId,file.event_id):originalUrl(fileId,grant.codeId,file.event_id))
    :preview?await presignInline(file.r2_key):await presignOriginal(file.r2_key,file.original_filename);
+  // A same-origin, authenticated stream for saving JPEGs to iOS Photos via Web Share.
+  // The standard original download redirect remains unchanged for every other caller.
+  if(request.nextUrl.searchParams.get('share')==='1'&&file.variant==='JPEG'){
+   const upstream=await fetch(signed,{cache:'no-store'});
+   if(!upstream.ok||!upstream.body){upstream.body?.cancel();return deny('ไม่สามารถโหลดรูปต้นฉบับ',502)}
+   return new NextResponse(upstream.body,{status:200,headers:{...privateHeaders,'content-type':'image/jpeg','content-disposition':'inline','x-content-type-options':'nosniff'}});
+  }
   return NextResponse.redirect(signed,{status:302,headers:privateHeaders});
  }catch(err){console.error('fg presign',err?.code||'unknown');return deny('ไม่สามารถดาวน์โหลดไฟล์',503)}
 }
