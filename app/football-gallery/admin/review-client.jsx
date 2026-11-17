@@ -19,6 +19,7 @@ const inDays=n=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Bangkok'}).forma
 export default function ReviewClient({event,players,retentionMonths,uploadKey=0,onUpdated,onPlayersChanged,view='all',onNavigate}){
  const show=part=>view==='all'||view===part;
  const [items,setItems]=useState([]),[active,setActive]=useState(null),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false),[error,setError]=useState(''),[info,setInfo]=useState(''),[page,setPage]=useState(1),[hasMore,setHasMore]=useState(false),[filter,setFilter]=useState('');
+ const [counts,setCounts]=useState({total:0,ready:0,published:0,uploading:0,hidden:0,filtered:0});
  const [picking,setPicking]=useState(false),[picked,setPicked]=useState([]),[pickAll,setPickAll]=useState(false);
  const [bulkPlayer,setBulkPlayer]=useState('');
  const holdTimer=useRef(null),holdTriggered=useRef(false),holdStart=useRef(null);
@@ -46,7 +47,7 @@ export default function ReviewClient({event,players,retentionMonths,uploadKey=0,
  const [publish,setPublish]=useState({notice:'',edited:false,retention:addRetentionMonths(event.event_date,retentionMonths),attest:false});
  const [grants,setGrants]=useState([]),[grantLabel,setGrantLabel]=useState(''),[grantDays,setGrantDays]=useState(14),[issued,setIssued]=useState(null);
  const [thumbFailed,setThumbFailed]=useState({}),[removals,setRemovals]=useState([]),[auditLog,setAuditLog]=useState([]),[verifying,setVerifying]=useState({});
- const load=async(p=1,f=filter)=>{setLoading(true);try{const d=await get('/media?event='+encodeURIComponent(event.id)+'&page='+p+(f?'&status='+f:''));setItems(old=>p===1?d.items:[...old,...d.items]);setHasMore(d.hasMore);setPage(p);setError('')}catch(e){setError(e.message)}finally{setLoading(false)}};
+ const load=async(p=1,f=filter)=>{setLoading(true);try{const d=await get('/media?event='+encodeURIComponent(event.id)+'&page='+p+(f?'&status='+f:''));setItems(old=>p===1?d.items:[...old,...d.items]);if(d.counts)setCounts(d.counts);setHasMore(d.hasMore);setPage(p);setError('')}catch(e){setError(e.message)}finally{setLoading(false)}};
  const loadSide=async()=>{try{const [g,r,a]=await Promise.all([get('/grants?event='+event.id),get('/removals?event='+event.id),get('/audit?event='+event.id)]);setGrants(g.grants);setRemovals(r.requests);setAuditLog(a.entries.slice(0,20))}catch(e){setError(e.message)}};
  useEffect(()=>{setActive(null);setItems([]);setPage(1);setPicking(false);setPicked([]);setPickAll(false);setIssued(null);setPublish({notice:'',edited:false,retention:addRetentionMonths(event.event_date,retentionMonths),attest:false});load(1);loadSide()},[event.id,event.event_date]);
  // Show newly uploaded files without leaving the current filter or the file being reviewed.
@@ -86,6 +87,15 @@ export default function ReviewClient({event,players,retentionMonths,uploadKey=0,
  };
  const filterLabel={'':'ทั้งหมด',review:'รอตรวจ',published:'เผยแพร่',hidden:'ซ่อน'}[filter]||'ทั้งหมด';
  const togglePick=id=>{setPickAll(false);setPicked(p=>p.includes(id)?p.filter(x=>x!==id):[...p,id])};
+ const publishReady=()=>{
+  if(event.status!=='published')return onNavigate?.('publish');
+  if(!window.confirm('รูปที่อัปโหลดและตรวจ SHA-256 ครบจะมองเห็นได้ทันทีในอัลบั้มที่เผยแพร่แล้ว รวมถึงผู้ที่มีลิงก์เดิม ยืนยันว่ามีสิทธิ์เผยแพร่ภาพเด็กและตรวจความเสี่ยงจาก GPS แล้ว?'))return;
+  run(async()=>{
+   const result=await post('/review',{action:'publish-ready',eventId:event.id,confirmed:true});
+   await load(1);await onUpdated?.();await loadSide();
+   setInfo('เปิดรูปที่พร้อมให้ผู้ชมแล้ว '+Number(result.published||0).toLocaleString('th-TH')+' รายการ');
+  });
+ };
  const bulkTag=()=>run(async()=>{
   if(!bulkPlayer||picked.length===0)throw Error('เลือกนักฟุตบอลและรูปก่อน');
   const photos=items.filter(x=>picked.includes(x.id)&&x.kind==='photo'&&x.status!=='hidden');
@@ -183,9 +193,11 @@ export default function ReviewClient({event,players,retentionMonths,uploadKey=0,
     <button className="fga-chip fga-chip-danger" disabled={busy||(!pickAll&&picked.length===0)} onClick={()=>removeForever(pickAll?{all:true,label:`ทั้งหมดในหมวด "${filterLabel}" (${items.length.toLocaleString('th-TH')}${hasMore?'+':''} รายการ)`}:{ids:picked,label:`${picked.length.toLocaleString('th-TH')} รายการที่เลือก`})}>ลบถาวร</button>
     <button className="fga-chip" onClick={()=>{setPicking(false);setPicked([]);setPickAll(false)}}>ยกเลิก</button>
    </div>)}
+   <p className="fga-review-count" role="status">แสดง {items.length.toLocaleString('th-TH')} จาก {Number(counts.filtered||0).toLocaleString('th-TH')} รายการในหมวดนี้ · รวมทั้งอัลบั้ม {Number(counts.total||0).toLocaleString('th-TH')} รูป/คลิป ({Number(counts.ready||0).toLocaleString('th-TH')} พร้อมจัดการ, {Number(counts.uploading||0).toLocaleString('th-TH')} กำลังอัปโหลด)</p>
    <div className="fga-review-grid">{items.map((item,index)=><button key={item.id} className={'fga-review-tile'+(picking&&(pickAll||picked.includes(item.id))?' picked':'')} aria-pressed={picking?(pickAll||picked.includes(item.id)):undefined} onPointerDown={e=>beginHold(e,item)} onPointerMove={moveHold} onPointerUp={endHold} onPointerCancel={endHold} onContextMenu={e=>{e.preventDefault();endHold();if(!picking)longPress(item)}} onClick={()=>{if(holdTriggered.current){holdTriggered.current=false;return}picking?togglePick(item.id):select(item)}}>{picking&&<span className="fga-tile-check" aria-hidden="true">{pickAll||picked.includes(item.id)?'✓':''}</span>}{item.thumb?<img src={item.thumb} alt="ภาพรอตรวจ" loading={index<8?"eager":"lazy"} fetchPriority={index<4?"high":"auto"} decoding="async"/>:<div className="fga-review-placeholder">ยังไม่มี Preview</div>}<strong>{item.title||(item.kind==='photo'?'รูปภาพ':'วิดีโอ')}</strong><span>{STATUS[item.status]||item.status} · {item.files.filter(originals).map(f=>f.variant==='VIDEO_ORIGINAL'?'VIDEO':f.variant).join('+')}{item.has_gps?' · GPS':''}</span></button>)}</div>
-   {loading&&<p>กำลังโหลด…</p>}{items.length===0&&!loading&&<p>ยังไม่มีไฟล์ในหมวดนี้{onNavigate&&filter===''?' ':''}{onNavigate&&filter===''&&<button className="fga-link" onClick={()=>onNavigate('upload')}>ไปอัปโหลด ›</button>}</p>}{hasMore&&<button className="fga-quiet" onClick={()=>load(page+1)} disabled={loading}>โหลดเพิ่ม</button>}
-   {onNavigate&&<button className="fga-next" onClick={()=>onNavigate('publish')}>จัดการแท็กแล้ว ไปเผยแพร่รูปและแชร์ ›</button>}
+   {loading&&<p>กำลังโหลด…</p>}{items.length===0&&!loading&&<p>ยังไม่มีไฟล์ในหมวดนี้{onNavigate&&filter===''?' ':''}{onNavigate&&filter===''&&<button className="fga-link" onClick={()=>onNavigate('upload')}>ไปอัปโหลด ›</button>}</p>}{hasMore&&<button className="fga-quiet" onClick={()=>load(page+1)} disabled={loading}>โหลดรูปเพิ่ม ({(counts.filtered-items.length).toLocaleString('th-TH')} รายการที่เหลือ)</button>}
+   {event.status==='published'&&Number(counts.ready)>0&&<div className="fga-release-row"><p>หลังแท็กเสร็จ สามารถเปิดรูปที่พร้อมให้ผู้ชมได้พร้อมกันครั้งเดียว โดยไม่ต้องอนุมัติทีละภาพ</p><button disabled={busy} onClick={publishReady}>เปิดรูปที่พร้อมให้ผู้ชมทั้งหมด ({counts.ready})</button></div>
+   {onNavigate&&event.status!=='published'&&<button className="fga-next" onClick={()=>onNavigate('publish')}>จัดการแท็กแล้ว ไปเผยแพร่รูปและแชร์ ›</button>}
   </>}
   </>}
 
@@ -201,6 +213,7 @@ export default function ReviewClient({event,players,retentionMonths,uploadKey=0,
   {show('publish')&&<>
   <div className="fga-review-policy">
    <h3>เปิดงานให้ผู้ปกครอง</h3>
+   {event.status==='published'&&<div className="fga-release-row"><p>รูปใหม่ที่อัปโหลดครบและตรวจ SHA-256 ผ่านแล้วสามารถเปิดให้ผู้ชมเห็นพร้อมกันได้โดยไม่ต้องกดอนุมัติทีละภาพ ผู้ชมที่มีลิงก์เดิมอาจเห็นทันทีเมื่อเปิดรูป</p><button disabled={busy||counts.ready===0} onClick={publishReady}>เปิดรูปที่พร้อมทั้งหมด ({Number(counts.ready||0)})</button></div>}
    {event.status==='published'?<><p>เผยแพร่แล้ว{event.retention_until?' · เข้าถึงถึง '+new Date(event.retention_until).toLocaleDateString('th-TH',{dateStyle:'medium',timeZone:'UTC'}):''} ระงับได้ทันทีหากพบปัญหา</p>{(event.deletion_after||oneYearAfterEvent(event.event_date))&&<p>เตรียมตรวจเพื่อลบได้หลังวันที่ {new Date(event.deletion_after||oneYearAfterEvent(event.event_date)).toLocaleDateString('th-TH',{dateStyle:'medium',timeZone:'UTC'})} และต้องรอเจ้าของยืนยัน</p>}<button className="fga-danger" disabled={busy} onClick={()=>confirm('ระงับการเผยแพร่ทั้งงาน? ผู้ปกครองทุกคนจะเข้าไม่ได้จนกว่าจะเปิดอีกครั้ง')&&review('suspend-event',{},'ระงับการเผยแพร่แล้ว')}>ระงับการเผยแพร่ทั้งงาน</button></>
    :event.status==='suspended'?<><p>งานนี้ถูกระงับอยู่ ผู้ปกครองเข้าไม่ได้</p><button disabled={busy} onClick={()=>review('resume-event',{},'เปิดการเผยแพร่อีกครั้งแล้ว')}>เปิดการเผยแพร่อีกครั้ง</button></>
    :event.status==='archived'?<p>งานนี้เก็บถาวรแล้ว ผู้ปกครองเข้าไม่ได้</p>
