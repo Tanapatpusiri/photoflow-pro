@@ -99,7 +99,7 @@ function AlbumStatus({album,onReview}){
  const n=v=>v.toLocaleString('th-TH');
  return <div className="fga-album-status" role="note">
   <strong>สถานะอัลบั้มตอนนี้</strong>
-  <p>{album.media>0?`มีภาพ/วิดีโอในอัลบั้มแล้ว ${n(album.media)} รายการ · พร้อมจัดการ ${n(album.pending)} · ${album.live?'อัลบั้มเผยแพร่แล้ว':'ยังไม่เผยแพร่'}`:'อัลบั้มนี้ยังไม่มีภาพ'}</p>
+  <p>{album.media>0?`มีภาพ/วิดีโอในอัลบั้มแล้ว ${n(album.media)} รายการ · พร้อมจัดการ ${n(album.pending)} · ${album.live?'อัลบั้มเปิดแล้ว แต่รูปที่ยังพร้อมจัดการไม่ได้แสดง':'ยังไม่เผยแพร่'}`:'อัลบั้มนี้ยังไม่มีภาพ'}</p>
   {album.pending>0&&onReview&&<button className="fga-link" onClick={onReview}>ไปแท็กภาพ ›</button>}
  </div>;
 }
@@ -107,7 +107,7 @@ function AlbumStatus({album,onReview}){
 function Steps({files,running,progress,summary,album}){
  const uploaded=!!summary&&!summary.stopped&&summary.failed===0&&summary.skipped===0;
  const reviewed=uploaded; // tagging is optional; album-level publication remains explicit
- const done=[files>0,uploaded,reviewed,reviewed&&album.live];
+ const done=[files>0,uploaded,reviewed,reviewed&&album.live&&album.pending===0];
  // Only the first unfinished step is the current one.
  const current=done.indexOf(false);
  const n=v=>v.toLocaleString('th-TH');
