@@ -56,10 +56,16 @@ export async function POST(request){
     const ok=await client.query('SELECT COUNT(*)::int AS n FROM fg_players WHERE event_id=$1 AND id=ANY($2::uuid[])',[eventId,players]);
     if(ok.rows[0].n!==players.length)throw new ReviewError('WRONG_EVENT_PLAYER');
    }
+   if(players.length){
+    const revoked=await client.query(`SELECT 1 FROM fg_privacy_records r WHERE r.event_id=$1 AND r.player_id=ANY($2::uuid[]) AND r.revoked_at IS NOT NULL
+     AND NOT EXISTS(SELECT 1 FROM fg_privacy_records a WHERE a.event_id=r.event_id AND a.player_id=r.player_id AND a.scope='private_gallery' AND a.reviewed_at IS NOT NULL AND a.revoked_at IS NULL) LIMIT 1`,[eventId,players]);
+    if(revoked.rowCount)throw new ReviewError('PLAYER_CONSENT_REVOKED');
+   }
+   // Tagging is a metadata-only action: don't unpublish a previously shared photo.
+   // All visibility decisions remain in the dedicated publication action.
    await client.query('DELETE FROM fg_media_players WHERE media_id=$1',[id]);
    if(players.length)await client.query('INSERT INTO fg_media_players(media_id,player_id) SELECT $1,unnest($2::uuid[])',[id,players]);
-   // Changing who appears in a published file sends it back for review.
-   await client.query("UPDATE fg_media SET status=CASE WHEN status='published' THEN 'review' ELSE status END,publish_allowed=false WHERE id=$1",[id]);
+   if(players.length)await client.query('UPDATE fg_players SET visible=true WHERE event_id=$1 AND id=ANY($2::uuid[])',[eventId,players]);
    detail={players:players.length};
   }else if(action==='tag-many'){
    // Tag one child across selected photos in a single atomic admin action.
@@ -113,6 +119,28 @@ export async function POST(request){
    await client.query('UPDATE fg_players SET visible=false WHERE id=$1',[d.playerId]);
    const affected=await client.query(`UPDATE fg_media m SET status='review',publish_allowed=false WHERE m.event_id=$1 AND m.status='published' AND EXISTS(SELECT 1 FROM fg_media_players mp WHERE mp.media_id=m.id AND mp.player_id=$2)`,[eventId,d.playerId]);
    resource=d.playerId;detail={unpublished:affected.rowCount};
+  }else if(action==='publish-ready'){
+   // One deliberate album-level publish instead of approving each individual file.
+   // Never expose unverified originals, hidden media, revoked children or drafts.
+   if(ev.rows[0].status!=='published'||!ev.rows[0].privacy_approved_at)throw new ReviewError('EVENT_NOT_PUBLISHED');
+   if(d.confirmed!==true)throw new ReviewError('RIGHTS_NOT_CONFIRMED',400);
+   const updated=await client.query(`UPDATE fg_media m
+    SET status='published',publish_allowed=true,metadata_reviewed=true
+    WHERE m.event_id=$1 AND m.status='review'
+      AND EXISTS(SELECT 1 FROM fg_media_files f WHERE f.media_id=m.id AND f.variant IN('JPEG','RAW','VIDEO_ORIGINAL'))
+      AND NOT EXISTS(SELECT 1 FROM fg_media_files f WHERE f.media_id=m.id AND f.variant IN('JPEG','RAW','VIDEO_ORIGINAL')
+        AND (f.verified_bytes IS DISTINCT FROM true OR f.verified_hash IS DISTINCT FROM true OR f.upload_id IS NOT NULL))
+      AND NOT EXISTS(SELECT 1 FROM fg_media_players mp JOIN fg_privacy_records r
+        ON r.player_id=mp.player_id AND r.event_id=m.event_id AND r.revoked_at IS NOT NULL
+        WHERE mp.media_id=m.id AND NOT EXISTS(SELECT 1 FROM fg_privacy_records a
+          WHERE a.event_id=r.event_id AND a.player_id=r.player_id AND a.scope='private_gallery'
+          AND a.reviewed_at IS NOT NULL AND a.revoked_at IS NULL))
+    RETURNING id`,[eventId]);
+   await client.query(`UPDATE fg_players SET visible=true WHERE event_id=$1 AND id IN
+    (SELECT mp.player_id FROM fg_media_players mp JOIN fg_media m ON m.id=mp.media_id
+     WHERE m.event_id=$1 AND m.status='published')`,[eventId]);
+   detail={published:updated.rowCount};
+   resource=null;
   }else if(action==='publish-event'){
    if(ev.rows[0].status!=='draft')throw new ReviewError('EVENT_NOT_DRAFT');
    const notice=text(d.notice,40,10000),retention=d.retentionUntil;
@@ -130,7 +158,25 @@ export async function POST(request){
     publicGrantId=code.rows[0].id;
    }
    await client.query(`UPDATE fg_events SET status='published',privacy_notice=$2,privacy_approved_at=NOW(),retention_until=$3,deletion_after=$4,public_grant_id=$5,updated_at=NOW() WHERE id=$1`,[eventId,notice,retention,deletionAfter,publicGrantId]);
-   detail={retentionUntil:retention,deletionAfter,periodMonths:months};
+   // The album-level consent confirmation also publishes every integrity-verified
+   // uploaded file in one transaction. No repetitive per-photo approval.
+   const madeVisible=await client.query(`UPDATE fg_media m
+    SET status='published',publish_allowed=true,metadata_reviewed=true
+    WHERE m.event_id=$1 AND m.status='review'
+      AND EXISTS(SELECT 1 FROM fg_media_files f WHERE f.media_id=m.id AND f.variant IN('JPEG','RAW','VIDEO_ORIGINAL'))
+      AND NOT EXISTS(SELECT 1 FROM fg_media_files f WHERE f.media_id=m.id AND f.variant IN('JPEG','RAW','VIDEO_ORIGINAL')
+        AND (f.verified_bytes IS DISTINCT FROM true OR f.verified_hash IS DISTINCT FROM true OR f.upload_id IS NOT NULL))
+      AND NOT EXISTS(SELECT 1 FROM fg_media_players mp JOIN fg_privacy_records r
+        ON r.player_id=mp.player_id AND r.event_id=m.event_id AND r.revoked_at IS NOT NULL
+        WHERE mp.media_id=m.id AND NOT EXISTS(SELECT 1 FROM fg_privacy_records a
+          WHERE a.event_id=r.event_id AND a.player_id=r.player_id AND a.scope='private_gallery'
+          AND a.reviewed_at IS NOT NULL AND a.revoked_at IS NULL))
+    RETURNING id`,[eventId]);
+   await client.query(`UPDATE fg_players SET visible=true WHERE event_id=$1 AND id IN
+    (SELECT mp.player_id FROM fg_media_players mp JOIN fg_media m ON m.id=mp.media_id
+     WHERE m.event_id=$1 AND m.status='published')`,[eventId]);
+
+   detail={retentionUntil:retention,deletionAfter,periodMonths:months,published:madeVisible.rowCount};
   }else if(action==='suspend-event'){
    if(ev.rows[0].status!=='published')throw new ReviewError('EVENT_NOT_PUBLISHED');
    await client.query(`UPDATE fg_events SET status='suspended',updated_at=NOW() WHERE id=$1`,[eventId]);
@@ -139,7 +185,7 @@ export async function POST(request){
    await client.query(`UPDATE fg_events SET status='published',updated_at=NOW() WHERE id=$1`,[eventId]);
   }else throw new ReviewError('UNKNOWN_ACTION',400);
   await audit(client,{adminId:admin.id,eventId,action:'review.'+action,resourceId:resource,detail});
-  await client.query('COMMIT');return reply({ok:true});
+  await client.query('COMMIT');return reply({ok:true,...(detail?.published!==undefined?{published:detail.published}:{})});
  }catch(e){
   await client.query('ROLLBACK');
   if(e instanceof ReviewError)return reply({message:messages[e.message]||'ไม่สามารถบันทึกการตรวจ',code:e.message},e.status);
