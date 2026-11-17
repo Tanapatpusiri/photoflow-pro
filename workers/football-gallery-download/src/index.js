@@ -52,7 +52,11 @@ async function driveFetch(env,id,range,retry=true){
 const requestedStart=request=>{const m=/^bytes=(\d+)-/.exec(request.headers.get('range')||'');return m?Number(m[1]):0};
 const deny=status=>text(status===410?'ลิงก์หมดอายุหรือรายการเปลี่ยนแปลง กรุณากลับไปที่อัลบั้มแล้วกดดาวน์โหลดใหม่':status===404?'ไม่พบไฟล์':'ไม่มีสิทธิ์ดาวน์โหลด กรุณาเปิดอัลบั้มอีกครั้ง',status===410||status===404?status:403);
 
-async function preview(env,ticket,t){
+// Cache only byte-identical JPEG preview derivatives at the Cloudflare edge.
+// Every request still verifies its ticket and (for parent images) asks the app
+// to authorize the grant BEFORE reading the cache. A revoked grant therefore
+// cannot retrieve a cached image. Never cache RAW/video originals or ZIPs.
+async function preview(env,ticket,t,ctx){
  let driveId=t.d;
  if(t.k==='t'){
   const auth=await authorize(env,ticket,0);
@@ -60,9 +64,25 @@ async function preview(env,ticket,t){
   driveId=auth.body.preview?.driveId;
  }
  if(typeof driveId!=='string'||!driveId)return deny(403);
+ const store=typeof caches!=='undefined'?caches.default:null;
+ const key=new Request('https://fg-image-cache.invalid/previews/'+encodeURIComponent(driveId));
+ let cached=null;
+ if(store){try{cached=await store.match(key)}catch(err){console.warn('preview cache lookup failed',err?.message)}}
+ if(cached){
+  return new Response(cached.body,{status:200,headers:{'content-type':'image/jpeg','cache-control':'private, no-store','content-disposition':'inline','x-content-type-options':'nosniff','referrer-policy':'no-referrer','x-fg-preview-cache':'HIT'}});
+ }
  const r=await driveFetch(env,driveId);
  if(!r.ok){r.body?.cancel();return text('ไม่พบภาพ',404)}
- return new Response(r.body,{status:200,headers:{'content-type':'image/jpeg','content-length':r.headers.get('content-length')||'','cache-control':'private, no-store','content-disposition':'inline','x-content-type-options':'nosniff','referrer-policy':'no-referrer'}});
+ const bytes=r.headers.get('content-length');
+ const headers={'content-type':'image/jpeg','cache-control':'private, no-store','content-disposition':'inline','x-content-type-options':'nosniff','referrer-policy':'no-referrer','x-fg-preview-cache':'MISS'};
+ if(bytes)headers['content-length']=bytes;
+ if(store&&ctx?.waitUntil){
+  const cacheResponse=new Response(r.body,{status:200,headers:{'content-type':'image/jpeg','cache-control':'public, max-age=3600'}});
+  const served=cacheResponse.clone();
+  ctx.waitUntil(store.put(key,cacheResponse).catch(err=>console.warn('preview cache write failed',err?.message)));
+  return new Response(served.body,{status:200,headers});
+ }
+ return new Response(r.body,{status:200,headers});
 }
 
 async function original(env,request,ticket){
@@ -127,7 +147,7 @@ export default {
   const t=await verifyTicket(env,m[2]);
   if(!t||t.k!==m[1])return deny(403);
   try{
-   if(t.k==='t'||t.k==='a')return await preview(env,m[2],t);
+   if(t.k==='t'||t.k==='a')return await preview(env,m[2],t,ctx);
    if(t.k==='f')return await original(env,request,m[2]);
    return await zip(env,request,m[2],ctx);
   }catch(e){console.error('download failed',e?.message);return text('ระบบดาวน์โหลดขัดข้องชั่วคราว กรุณาลองใหม่',503)}

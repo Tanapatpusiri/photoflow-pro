@@ -1,5 +1,6 @@
 'use client';
 import {useEffect,useRef,useState} from 'react';
+import Link from 'next/link';
 import './gallery.css';
 
 const Icon=({name,size=22})=>{
@@ -53,10 +54,10 @@ export default function FootballGallery() {
     <section className="fg-albums" aria-label="อัลบั้ม">
      {albums===null?<div className="fg-album-grid">{[0,1].map(i=><div key={i} className="fg-album-card fg-album-loading"/>)}</div>
      :albums.length===0?<div className="fg-albums-empty" role="status"><Icon name="image" size={28}/><span>ยังไม่มีอัลบั้มที่เปิดให้ชม</span></div>
-     :<div className="fg-album-grid">{albums.map(a=>{const body=<>
-       <div className="fg-album-cover">{a.cover&&!broken[a.slug]?<img src={a.cover} alt="" loading="lazy" onError={()=>setBroken(b=>({...b,[a.slug]:true}))}/>:<Icon name="image" size={34}/>}{a.locked&&<span className="fg-album-lock" aria-label="ล็อก ต้องใช้รหัส"><Icon name="lock" size={14}/></span>}</div>
+     :<div className="fg-album-grid">{albums.map((a,index)=>{const body=<>
+       <div className="fg-album-cover">{a.cover&&!broken[a.slug]?<img src={a.cover} alt="" loading={index<2?"eager":"lazy"} fetchPriority={index<2?"high":"auto"} decoding="async" onError={()=>setBroken(b=>({...b,[a.slug]:true}))}/>:<Icon name="image" size={34}/>}{a.locked&&<span className="fg-album-lock" aria-label="ล็อก ต้องใช้รหัส"><Icon name="lock" size={14}/></span>}</div>
        <strong>{a.title}</strong><span>{[fmtDate(a.date),a.venue].filter(Boolean).join(' · ')}</span></>;
-      return a.locked?<button key={a.slug} type="button" className="fg-album-card" onClick={()=>askCode(a.title)}>{body}</button>:<a key={a.slug} className="fg-album-card" href={'/football-gallery/'+encodeURIComponent(a.slug)}>{body}</a>})}</div>}
+      return a.locked?<button key={a.slug} type="button" className="fg-album-card" onClick={()=>askCode(a.title)}>{body}</button>:<Link key={a.slug} className="fg-album-card" href={"/football-gallery/"+encodeURIComponent(a.slug)} prefetch={true}>{body}</Link>})}</div>}
     </section>
     <div className="fg-features"><span><Icon name="image" size={18}/> JPEG + RAW</span><span><Icon name="video" size={18}/> Videos</span></div>
     <div className="fg-notice"><Icon name="shield" size={23}/><div><strong>ความเป็นส่วนตัวของเด็กสำคัญที่สุด</strong><p>ไม่ต้องสมัครสมาชิก อัลบั้มที่มีรูปกุญแจเปิดได้เฉพาะผู้ที่ได้รับรหัสหรือลิงก์จากผู้จัดงาน</p></div></div>
