@@ -14,13 +14,13 @@ export async function GET(request){
    if(encodedCursor.length>220)throw Error('invalid');
    const [stamp,id]=JSON.parse(Buffer.from(encodedCursor,'base64url').toString('utf8'));
    if(typeof stamp!=='string'||!Number.isFinite(Date.parse(stamp))||!isUuid(id))throw Error('invalid');
-   afterDate=new Date(stamp).toISOString();afterId=id;
+   afterDate=stamp;afterId=id;
   }catch{return reply({message:'ตัวแบ่งหน้ารายการไม่ถูกต้อง'},400)}
  }
  if(!isUuid(event))return reply({message:'กรุณาเลือกงาน'},400);
  if(status&&!['uploading','review','published','hidden'].includes(status))return reply({message:'สถานะไม่ถูกต้อง'},400);
  try{
-  const q=await db().query(`SELECT m.id,m.title,m.kind,m.status,m.publish_allowed,m.metadata_reviewed,m.captured_at,m.has_gps,m.created_at AS page_created_at,
+  const q=await db().query(`SELECT m.id,m.title,m.kind,m.status,m.publish_allowed,m.metadata_reviewed,m.captured_at,m.has_gps,to_char(m.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS page_created_at,
   COALESCE((SELECT json_agg(json_build_object('id',f.id,'variant',f.variant,'filename',f.original_filename,'bytes',f.size_bytes,'sha256',f.sha256,'verifiedBytes',f.verified_bytes,'verifiedHash',f.verified_hash,'verifyOffset',f.verify_offset,'pending',f.upload_id IS NOT NULL) ORDER BY f.variant) FROM fg_media_files f WHERE f.media_id=m.id),'[]'::json) AS files,
   EXISTS(SELECT 1 FROM fg_media_files f WHERE f.media_id=m.id AND f.variant='THUMB' AND f.verified_bytes=true) AS has_thumb,
   COALESCE((SELECT array_agg(mp.player_id) FROM fg_media_players mp WHERE mp.media_id=m.id),'{}'::uuid[]) AS players
@@ -43,7 +43,7 @@ export async function GET(request){
   const last=rows[rows.length-1];
   const hasMore=q.rows.length>PAGE;
   const nextCursor=hasMore&&last
-   ?Buffer.from(JSON.stringify([new Date(last.page_created_at).toISOString(),last.id])).toString('base64url')
+   ?Buffer.from(JSON.stringify([last.page_created_at,last.id])).toString('base64url')
    :null;
   return reply({items,hasMore,nextCursor,page,counts});
  }catch(e){console.error('fg admin list',e?.code||'unknown');return reply({message:'โหลดไฟล์ไม่สำเร็จ'},503)}
