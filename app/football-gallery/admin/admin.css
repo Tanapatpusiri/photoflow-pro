@@ -160,3 +160,15 @@
 .fga-file-chip input{position:absolute;inset:0;opacity:0;cursor:pointer;height:auto!important}
 .fga-front-chooser{display:grid;gap:10px;border-top:1px solid #f0f0f2;padding-top:12px}
 @media(max-width:560px){.fga-front-row{grid-template-columns:1fr}.fga-front-card{max-width:260px}}
+
+/* Select multiple gallery files on iPhone by a 480ms hold. Keep normal taps for detail. */
+.fga-review-tile{touch-action:pan-y;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+.fga-review-tile img{pointer-events:none;-webkit-user-drag:none}
+.fga-detail-nav{display:flex;flex-wrap:wrap;align-items:center;gap:8px;min-width:0}
+.fga-detail-nav>span{font-size:13px;color:#777;margin-inline:auto}
+.fga-detail-nav .fga-chip{min-height:40px;padding-inline:14px}
+.fga-detail-nav button:disabled{opacity:.35}
+.fga-bulk-player{display:flex!important;flex-direction:column;gap:6px;min-width:0;flex:1 1 155px;font-size:13px}
+.fga-bulk-player select{font-size:16px;max-width:100%;min-width:0;min-height:44px;border:1px solid #e7e7ea;border-radius:14px;background:#fff;padding:9px}
+.fga-bulk-save{background:#252528!important;color:#fff!important}
+.fga-pick-bar{min-width:0}
