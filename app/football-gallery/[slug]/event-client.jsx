@@ -134,7 +134,22 @@ export default function EventExperience({slug,initialData=null}){
    <p className="fge-count">{page==='player'?player?.name:event.title} · Original files available{selected.length?' · เลือกแล้ว '+fmt(selected.length):''}</p>
    {!isVideo&&<div className="fge-filters">{['all','favorites','JPEG','RAW'].map(v=><button key={v} className={filter===v?'active':''} onClick={()=>setFilter(v)}>{v==='all'?'ทั้งหมด':v==='favorites'?'รายการโปรด':v}</button>)}</div>}
    {loading&&items.length===0?<p className="fge-loading">กำลังโหลด…</p>:viewed.length===0?<Empty message="ยังไม่มีไฟล์ในหมวดนี้"/>:null}
-   <div className={isVideo?'fge-video-list':'fge-photo-grid'}>{viewed.map((item,index)=><article className={'fge-tile'+(selected.includes(item.id)?' is-selected':'')} key={item.id}><button className="fge-tile-image" onClick={()=>openDetail(item)} aria-label={'เปิด '+(item.title||'ไฟล์')}>{imageFor(item)?<img src={imageFor(item)} loading={index<6?"eager":"lazy"} fetchPriority={index<3?"high":"auto"} decoding="async" alt={item.title||'ภาพการแข่งขัน'}/>:<span className="fge-photo-fallback"><Icon name={item.kind==='video'?'video':'image'} size={34}/></span>}</button><div className="fge-tile-actions"><button onClick={()=>toggleFav(item.id)} aria-label="รายการโปรด" aria-pressed={favorites.includes(item.id)}><Icon name="heart" size={17} filled={favorites.includes(item.id)}/></button><button onClick={()=>toggleSelected(item.id)} aria-label="เลือกไฟล์" aria-pressed={selected.includes(item.id)}><Icon name={selected.includes(item.id)?'check':'box'} size={17}/></button></div>{item.kind==='video'&&<span className="fge-video-title">{item.title||'วิดีโอการแข่งขัน'}<small>{fmtBytes(item.files.filter(f=>f.variant==='VIDEO_ORIGINAL').reduce((n,f)=>n+Number(f.bytes),0))}</small></span>}</article>)}</div>
+   <div className={isVideo?'fge-video-list':'fge-photo-grid'}>
+    {(isVideo?[viewed]:[viewed.filter((_,index)=>index%2===0),viewed.filter((_,index)=>index%2===1)]).map((column,columnIndex)=>
+     <div className={isVideo?'fge-video-column':'fge-photo-column'} key={columnIndex}>
+      {column.map((item,index)=><article className={'fge-tile'+(selected.includes(item.id)?' is-selected':'')} key={item.id}>
+       <button className="fge-tile-image" onClick={()=>openDetail(item)} aria-label={'เปิด '+(item.title||'ไฟล์')}>
+        {imageFor(item)?<img src={imageFor(item)} loading={columnIndex===0&&index<3||columnIndex===1&&index<3?"eager":"lazy"} fetchPriority={index<2?"high":"auto"} decoding="async" alt={item.title||'ภาพการแข่งขัน'}/>:<span className="fge-photo-fallback"><Icon name={item.kind==='video'?'video':'image'} size={34}/></span>}
+       </button>
+       <div className="fge-tile-actions">
+        <button onClick={()=>toggleFav(item.id)} aria-label="รายการโปรด" aria-pressed={favorites.includes(item.id)}><Icon name="heart" size={17} filled={favorites.includes(item.id)}/></button>
+        <button onClick={()=>toggleSelected(item.id)} aria-label="เลือกไฟล์" aria-pressed={selected.includes(item.id)}><Icon name={selected.includes(item.id)?'check':'box'} size={17}/></button>
+       </div>
+       {item.kind==='video'&&<span className="fge-video-title">{item.title||'วิดีโอการแข่งขัน'}<small>{fmtBytes(item.files.filter(f=>f.variant==='VIDEO_ORIGINAL').reduce((n,f)=>n+Number(f.bytes),0))}</small></span>}
+      </article>)}
+     </div>
+    )}
+   </div>
    {hasMore&&<button className="fge-load" onClick={()=>setPageNo(n=>n+1)} disabled={loading}>โหลดเพิ่ม</button>}
    <button className="fge-primary fge-sticky" onClick={()=>{setArchive(null);setDownloadProgress('');setPage('downloads')}}>{selected.length?'ดาวน์โหลด '+fmt(selected.length)+' รายการ':page==='player'?'ดาวน์โหลดทั้งหมดของ '+player.name:'เลือกและดาวน์โหลดทั้งหมด'}</button>
   </>}
