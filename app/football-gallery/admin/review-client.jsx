@@ -1,5 +1,5 @@
 'use client';
-import {useEffect,useState} from 'react';
+import {useEffect,useRef,useState} from 'react';
 import {addRetentionMonths,oneYearAfterEvent} from '../../../lib/football-gallery-retention';
 import {formatBytes,formatCaptureTime} from '../../../lib/football-gallery-format';
 const api='/api/football-gallery/admin';
@@ -10,7 +10,7 @@ const EVIDENCE_HINT='เขียนว่าหลักฐานอยู่�
 // Standard notice shown to parents; the admin can publish it as is or edit it.
 const fmtThaiDate=v=>v?new Date(v+'T00:00:00Z').toLocaleDateString('th-TH',{dateStyle:'long',timeZone:'UTC'}):'วันที่กำหนด';
 const defaultNotice=(title,until)=>`ภาพและวิดีโอในอัลบั้ม "${title}" ใช้เพื่อให้ผู้ปกครองที่ได้รับลิงก์หรือรหัสจากผู้ดูแล ดูและดาวน์โหลดภาพของบุตรหลานตนเองเท่านั้น ห้ามนำไปเผยแพร่ต่อสาธารณะ ผู้ดูแลอัลบั้มเป็นผู้ควบคุมข้อมูล อัลบั้มเปิดให้เข้าถึงถึงวันที่ ${fmtThaiDate(until)} หลังจากนั้นลิงก์และรหัสทั้งหมดจะใช้ไม่ได้ และผู้ดูแลจะลบไฟล์ตามขั้นตอน ผู้ปกครองขอถอดภาพที่มีบุตรหลานของตนได้ทุกเมื่อ โดยกด "ขอถอดภาพ" ในอัลบั้ม หรือติดต่อผู้ดูแลอัลบั้มโดยตรง`;
-const STATUS={uploading:'กำลังอัปโหลด',review:'รอตรวจ',published:'เผยแพร่แล้ว',hidden:'ซ่อน'};
+const STATUS={uploading:'กำลังอัปโหลด',review:'พร้อมจัดการ',published:'แสดงในอัลบั้ม',hidden:'ซ่อน'};
 const fmtDate=v=>v?new Date(v).toLocaleString('th-TH',{dateStyle:'medium',timeStyle:'short'}):'';
 // Calendar dates follow Thailand, matching the server's Bangkok "today".
 const inDays=n=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Bangkok'}).format(new Date(Date.now()+n*86400000));
@@ -20,6 +20,27 @@ export default function ReviewClient({event,players,retentionMonths,uploadKey=0,
  const show=part=>view==='all'||view===part;
  const [items,setItems]=useState([]),[active,setActive]=useState(null),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false),[error,setError]=useState(''),[info,setInfo]=useState(''),[page,setPage]=useState(1),[hasMore,setHasMore]=useState(false),[filter,setFilter]=useState('');
  const [picking,setPicking]=useState(false),[picked,setPicked]=useState([]),[pickAll,setPickAll]=useState(false);
+ const [bulkPlayer,setBulkPlayer]=useState('');
+ const holdTimer=useRef(null),holdTriggered=useRef(false),holdStart=useRef(null);
+ const longPress=item=>{
+  holdTriggered.current=true;
+  setPicking(true);
+  setPicked(previous=>previous.includes(item.id)?previous:[...previous,item.id]);
+  setPickAll(false);
+ };
+ const beginHold=(e,item)=>{
+  if(e.pointerType==='mouse')return;
+  holdTriggered.current=false;
+  holdStart.current={x:e.clientX,y:e.clientY};
+  clearTimeout(holdTimer.current);
+  holdTimer.current=setTimeout(()=>longPress(item),480);
+ };
+ const moveHold=e=>{
+  if(holdStart.current&&Math.hypot(e.clientX-holdStart.current.x,e.clientY-holdStart.current.y)>12)clearTimeout(holdTimer.current);
+ };
+ const endHold=()=>{clearTimeout(holdTimer.current);holdStart.current=null};
+ useEffect(()=>()=>clearTimeout(holdTimer.current),[]);
+
  const [tags,setTags]=useState([]),[approval,setApproval]=useState({noChildren:false}),[newName,setNewName]=useState('');
  const [privacy,setPrivacy]=useState({player:'',basis:'',evidence:'',attest:false});
  const [publish,setPublish]=useState({notice:'',edited:false,retention:addRetentionMonths(event.event_date,retentionMonths),attest:false});
@@ -55,6 +76,31 @@ export default function ReviewClient({event,players,retentionMonths,uploadKey=0,
  };
  const filterLabel={'':'ทั้งหมด',review:'รอตรวจ',published:'เผยแพร่',hidden:'ซ่อน'}[filter]||'ทั้งหมด';
  const togglePick=id=>{setPickAll(false);setPicked(p=>p.includes(id)?p.filter(x=>x!==id):[...p,id])};
+ const bulkTag=()=>run(async()=>{
+  if(!bulkPlayer||picked.length===0)throw Error('เลือกนักฟุตบอลและรูปก่อน');
+  const photos=items.filter(x=>picked.includes(x.id)&&x.kind==='photo'&&x.status!=='hidden');
+  if(photos.length!==picked.length)throw Error('เลือกได้เฉพาะรูปภาพที่ไม่ถูกซ่อน');
+  const r=await post('/review',{action:'tag-many',eventId:event.id,playerId:bulkPlayer,mediaIds:photos.map(x=>x.id)});
+  setItems(prev=>prev.map(x=>picked.includes(x.id)?{...x,players:[...new Set([...(x.players||[]),bulkPlayer])]}:x));
+  setPicked([]);setPicking(false);setPickAll(false);setBulkPlayer('');
+  setInfo('แท็ก '+photos.length+' รูปสำเร็จ');
+ },undefined);
+ const activeIndex=active?items.findIndex(i=>i.id===active.id):-1;
+ const navigatePhoto=delta=>{
+  const index=activeIndex+delta;if(index<0||index>=items.length)return;
+  select(items[index]);
+ };
+ useEffect(()=>{
+  if(!active)return;
+  const keys=e=>{
+   if(e.target?.matches?.('input,textarea,select,[contenteditable]'))return;
+   if(e.key==='ArrowRight'&&activeIndex<items.length-1)navigatePhoto(1);
+   if(e.key==='ArrowLeft'&&activeIndex>0)navigatePhoto(-1);
+  };
+  window.addEventListener('keydown',keys);
+  return()=>window.removeEventListener('keydown',keys);
+ },[active,activeIndex,items]);
+
  const approve=()=>run(async()=>{
   if(tagsDirty){await post('/review',{action:'tag',eventId:event.id,mediaId:active.id,players:tags});setActive(a=>a&&{...a,players:[...tags]})}
   await post('/review',{action:'approve',eventId:event.id,mediaId:active.id,noChildrenConfirmed:tags.length===0&&approval.noChildren});
@@ -87,9 +133,9 @@ export default function ReviewClient({event,players,retentionMonths,uploadKey=0,
   {error&&<div className="fga-message" role="alert">{error}</div>}
   {info&&<div className="fga-message fga-ok" role="status">{info}</div>}
   {show('review')&&<>
-  <h2>ตรวจภาพก่อนเผยแพร่</h2><p>ผู้ปกครองจะเห็นเฉพาะภาพที่คุณอนุมัติแล้ว กดที่ภาพเพื่อแท็กนักฟุตบอลและอนุมัติ</p>
+  <h2>จัดการรูปและแท็กนักฟุตบอล</h2><p>รูปที่อัปโหลดครบพร้อมให้แท็กได้เลย เลือกหลายรูปแล้วแท็กเด็กคนเดียวพร้อมกันได้ ส่วนการเปิดรูปให้ผู้ชมเห็นยังควบคุมแยกจากหน้าเผยแพร่</p>
    {active?<div className="fga-review-detail">
-    <button className="fga-link" onClick={()=>setActive(null)}>‹ กลับรายการ</button>
+    <div className="fga-detail-nav"><button className="fga-link" onClick={()=>setActive(null)}>‹ กลับรายการ</button><span>{activeIndex+1} / {items.length}</span><button type="button" className="fga-chip" onClick={()=>navigatePhoto(-1)} disabled={busy||activeIndex<=0} aria-label="รูปก่อนหน้า">‹ ก่อนหน้า</button><button type="button" className="fga-chip" onClick={()=>navigatePhoto(1)} disabled={busy||activeIndex>=items.length-1} aria-label="รูปถัดไป">ถัดไป ›</button></div>
     <div className="fga-review-layout">
     <div className="fga-review-media">
     {active.thumb&&!thumbFailed[active.id]?<img className="fga-review-photo" src={active.thumb} alt="ภาพสำหรับผู้ดูแลตรวจสอบก่อนเผยแพร่" onError={()=>setThumbFailed(s=>({...s,[active.id]:true}))}/>:<div className="fga-review-photo fga-review-nophoto" role="note">{active.thumb?'โหลดภาพตัวอย่างไม่ได้ ตอนนี้ระบบส่งภาพ (Download Worker) ยังไม่พร้อม เปิดไฟล์ต้นฉบับใน Google Drive เพื่อตรวจแทนได้':'ไฟล์นี้ไม่มีภาพตัวอย่าง (เช่น RAW หรือวิดีโอบางชนิด) เปิดไฟล์ต้นฉบับใน Google Drive เพื่อตรวจ'}</div>}
@@ -121,14 +167,16 @@ export default function ReviewClient({event,players,retentionMonths,uploadKey=0,
     </div>
   </div>:<>
    <div className="fga-actions">{[['','ทั้งหมด'],['review','รอตรวจ'],['published','เผยแพร่'],['hidden','ซ่อน']].map(([v,l])=><button key={v} className={filter===v?'fga-chip active':'fga-chip'} onClick={()=>{setFilter(v);setPicked([]);setPickAll(false);load(1,v)}}>{l}</button>)}</div>
-   {items.length>0&&(!picking?<div className="fga-pick-bar"><button className="fga-chip" onClick={()=>setPicking(true)}>เลือกภาพเพื่อลบ</button></div>
-   :<div className="fga-pick-bar" role="toolbar" aria-label="เลือกภาพเพื่อลบ">
+   {items.length>0&&(!picking?<div className="fga-pick-bar"><button className="fga-chip" onClick={()=>setPicking(true)}>เลือกหลายรูปเพื่อแท็กหรือลบ</button><span>แตะค้างที่รูปเพื่อเริ่มเลือกหลายรูป</span></div>
+   :<div className="fga-pick-bar" role="toolbar" aria-label="เลือกภาพเพื่อแท็กหรือลบ">
     <label className="fga-check"><input type="checkbox" checked={pickAll} onChange={e=>{setPickAll(e.target.checked);setPicked(e.target.checked?items.map(i=>i.id):[])}}/>เลือกทั้งหมดในหมวด "{filterLabel}"{hasMore?' (รวมที่ยังไม่ได้โหลด)':''}</label>
     <span>{pickAll?`ทั้งหมด ${items.length.toLocaleString('th-TH')}${hasMore?'+':''} รายการ`:`เลือกแล้ว ${picked.length.toLocaleString('th-TH')} รายการ`}</span>
+    <label className="fga-bulk-player">แท็กเด็กให้รูปที่เลือก<select aria-label="เลือกเด็กที่ต้องการแท็ก" value={bulkPlayer} onChange={e=>setBulkPlayer(e.target.value)}><option value="">เลือกนักฟุตบอล</option>{players.map(p=><option key={p.id} value={p.id}>{p.name}{p.jersey?' #'+p.jersey:''}</option>)}</select></label>
+    <button className="fga-chip fga-bulk-save" disabled={busy||!bulkPlayer||picked.length===0||picked.some(id=>items.find(x=>x.id===id)?.kind!=='photo')} onClick={bulkTag}>แท็ก {picked.length} รูปพร้อมกัน</button>
     <button className="fga-chip fga-chip-danger" disabled={busy||(!pickAll&&picked.length===0)} onClick={()=>removeForever(pickAll?{all:true,label:`ทั้งหมดในหมวด "${filterLabel}" (${items.length.toLocaleString('th-TH')}${hasMore?'+':''} รายการ)`}:{ids:picked,label:`${picked.length.toLocaleString('th-TH')} รายการที่เลือก`})}>ลบถาวร</button>
     <button className="fga-chip" onClick={()=>{setPicking(false);setPicked([]);setPickAll(false)}}>ยกเลิก</button>
    </div>)}
-   <div className="fga-review-grid">{items.map((item,index)=><button key={item.id} className={'fga-review-tile'+(picking&&(pickAll||picked.includes(item.id))?' picked':'')} aria-pressed={picking?(pickAll||picked.includes(item.id)):undefined} onClick={()=>picking?togglePick(item.id):select(item)}>{picking&&<span className="fga-tile-check" aria-hidden="true">{pickAll||picked.includes(item.id)?'✓':''}</span>}{item.thumb?<img src={item.thumb} alt="ภาพรอตรวจ" loading={index<8?"eager":"lazy"} fetchPriority={index<4?"high":"auto"} decoding="async"/>:<div className="fga-review-placeholder">ยังไม่มี Preview</div>}<strong>{item.title||(item.kind==='photo'?'รูปภาพ':'วิดีโอ')}</strong><span>{STATUS[item.status]||item.status} · {item.files.filter(originals).map(f=>f.variant==='VIDEO_ORIGINAL'?'VIDEO':f.variant).join('+')}{item.has_gps?' · GPS':''}</span></button>)}</div>
+   <div className="fga-review-grid">{items.map((item,index)=><button key={item.id} className={'fga-review-tile'+(picking&&(pickAll||picked.includes(item.id))?' picked':'')} aria-pressed={picking?(pickAll||picked.includes(item.id)):undefined} onPointerDown={e=>beginHold(e,item)} onPointerMove={moveHold} onPointerUp={endHold} onPointerCancel={endHold} onContextMenu={e=>{e.preventDefault();endHold();if(!picking)longPress(item)}} onClick={()=>{if(holdTriggered.current){holdTriggered.current=false;return}picking?togglePick(item.id):select(item)}}>{picking&&<span className="fga-tile-check" aria-hidden="true">{pickAll||picked.includes(item.id)?'✓':''}</span>}{item.thumb?<img src={item.thumb} alt="ภาพรอตรวจ" loading={index<8?"eager":"lazy"} fetchPriority={index<4?"high":"auto"} decoding="async"/>:<div className="fga-review-placeholder">ยังไม่มี Preview</div>}<strong>{item.title||(item.kind==='photo'?'รูปภาพ':'วิดีโอ')}</strong><span>{STATUS[item.status]||item.status} · {item.files.filter(originals).map(f=>f.variant==='VIDEO_ORIGINAL'?'VIDEO':f.variant).join('+')}{item.has_gps?' · GPS':''}</span></button>)}</div>
    {loading&&<p>กำลังโหลด…</p>}{items.length===0&&!loading&&<p>ยังไม่มีไฟล์ในหมวดนี้{onNavigate&&filter===''?' ':''}{onNavigate&&filter===''&&<button className="fga-link" onClick={()=>onNavigate('upload')}>ไปอัปโหลด ›</button>}</p>}{hasMore&&<button className="fga-quiet" onClick={()=>load(page+1)} disabled={loading}>โหลดเพิ่ม</button>}
    {onNavigate&&event.status==='draft'&&publishedCount>0&&<button className="fga-next" onClick={()=>onNavigate('publish')}>อนุมัติภาพแล้ว ไปเผยแพร่ & แชร์ ›</button>}
   </>}
