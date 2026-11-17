@@ -99,20 +99,20 @@ function AlbumStatus({album,onReview}){
  const n=v=>v.toLocaleString('th-TH');
  return <div className="fga-album-status" role="note">
   <strong>สถานะอัลบั้มตอนนี้</strong>
-  <p>{album.media>0?`มีภาพ/วิดีโอในอัลบั้มแล้ว ${n(album.media)} รายการ · รอตรวจ ${n(album.pending)} · ${album.live?'อัลบั้มเผยแพร่แล้ว':'ยังไม่เผยแพร่'}`:'อัลบั้มนี้ยังไม่มีภาพ'}</p>
-  {album.pending>0&&onReview&&<button className="fga-link" onClick={onReview}>ไปตรวจภาพที่ค้างอยู่ ›</button>}
+  <p>{album.media>0?`มีภาพ/วิดีโอในอัลบั้มแล้ว ${n(album.media)} รายการ · พร้อมจัดการ ${n(album.pending)} · ${album.live?'อัลบั้มเผยแพร่แล้ว':'ยังไม่เผยแพร่'}`:'อัลบั้มนี้ยังไม่มีภาพ'}</p>
+  {album.pending>0&&onReview&&<button className="fga-link" onClick={onReview}>ไปแท็กภาพ ›</button>}
  </div>;
 }
 // Steps of this upload round only: they start fresh every time new files are chosen.
 function Steps({files,running,progress,summary,album}){
  const uploaded=!!summary&&!summary.stopped&&summary.failed===0&&summary.skipped===0;
- const reviewed=uploaded&&album.pending===0;
+ const reviewed=uploaded; // tagging is optional; album-level publication remains explicit
  const done=[files>0,uploaded,reviewed,reviewed&&album.live];
  // Only the first unfinished step is the current one.
  const current=done.indexOf(false);
  const n=v=>v.toLocaleString('th-TH');
  const notes=[files>0?n(files)+' ไฟล์':'ยังไม่ได้เลือก',running?`${n(progress)}/${n(files)} ไฟล์`:summary&&summary.failed?`ไม่สำเร็จ ${n(summary.failed)} ไฟล์`:summary&&(summary.stopped||summary.skipped)?'หยุดไว้':'',uploaded&&album.pending>0?`พร้อมแท็ก ${n(album.pending)}`:'',''];
- const steps=['เลือกไฟล์','อัปโหลด','แท็กภาพ','เผยแพร่'].map((label,i)=>[label,done[i]&&(current===-1||i<current)?'done':i===current?'now':'todo',notes[i]]);
+ const steps=['เลือกไฟล์','อัปโหลด','แท็กชื่อ (ไม่บังคับ)','เผยแพร่'].map((label,i)=>[label,done[i]&&(current===-1||i<current)?'done':i===current?'now':'todo',notes[i]]);
  return <div className="fga-round"><small className="fga-round-title">ขั้นตอนของรอบอัปโหลดนี้</small><ol className="fga-steps" aria-label="ขั้นตอนของรอบอัปโหลดนี้">{steps.map(([label,state,note],i)=><li key={label} className={state} aria-current={state==='now'?'step':undefined}><span>{state==='done'?'✓':i+1}</span><strong>{label}</strong>{note&&<small>{note}</small>}</li>)}</ol></div>;
 }
 
@@ -210,7 +210,7 @@ export default function Uploader({eventId,album={media:0,pending:0,live:false},o
    {summary.duplicate>0&&<p>ไฟล์ที่ "มีอยู่แล้ว" คือไฟล์เดียวกันที่เคยอัปโหลดเข้าอัลบั้มนี้ ระบบไม่เก็บซ้ำ</p>}
    {(summary.ok>0||album.pending>0)&&onReview&&<button className="fga-primary" onClick={onReview}>ไปแท็กภาพ{album.pending>0?` (${album.pending.toLocaleString('th-TH')} รูปพร้อมจัดการ)`:''} ›</button>}
   </div>}
-  {!summary&&!running&&files.length===0&&album.media>0&&album.pending===0&&!album.live&&onPublish&&<button className="fga-quiet-btn" onClick={onPublish}>อัปโหลดครบแล้ว ไปเผยแพร่ ›</button>}
+  {!summary&&!running&&files.length===0&&album.media>0&&!album.live&&onPublish&&<button className="fga-quiet-btn" onClick={onPublish}>อัปโหลดครบแล้ว ไปเผยแพร่ ›</button>}
   {files.length>0&&<><p className="fga-upload-count">{showAllFiles?'แสดงไฟล์ครบทั้งหมด':`แสดง 200 ไฟล์แรกจาก ${files.length.toLocaleString('th-TH')} ไฟล์ที่เลือก`}</p>{files.length>200&&<button className="fga-quiet-btn" type="button" onClick={()=>setShowAllFiles(v=>!v)}>{showAllFiles?'ย่อรายการไฟล์':'ดูสถานะครบทุกไฟล์ ('+files.length.toLocaleString('th-TH')+')'}</button>}<div className="fga-upload-list">{(showAllFiles?files:files.slice(0,200)).map((f,i)=><div key={i}><span>{f.name} · {fmtBytes(f.size)}</span><small>{status[f.name+'-'+i]||'รออัปโหลด'}</small></div>)}</div></>}
   {errors.length>0&&<div role="alert">{errors.slice(-12).map((e,i)=><p key={i} className="fga-message">{e}</p>)}</div>}
   <p>ระบบเก็บไฟล์ต้นฉบับตามจริง ไม่ย่อขนาดและไม่แก้ไขรูป ถ้าอัปโหลดค้างหรือหยุดไว้ ให้เลือกไฟล์ชุดเดิมแล้วกดอัปโหลดต่อได้ ระบบตรวจไฟล์ที่มีอยู่แล้วและจะไม่เก็บซ้ำ การแท็กทำได้ทันทีหลังอัปโหลดครบ ส่วนรูปที่ยังไม่ได้เปิดเผยต่อผู้ชมจะเปิดพร้อมกันจากหน้าเผยแพร่</p>
