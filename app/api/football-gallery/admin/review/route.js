@@ -71,7 +71,7 @@ export async function POST(request){
    // Tag one child across selected photos in a single atomic admin action.
    // Never touch other photo tags; never publish revoked or unverified files.
    const ids=Array.isArray(d.mediaIds)?[...new Set(d.mediaIds)]:[];
-   if(!isUuid(d.playerId)||ids.length<1||ids.length>200||ids.some(x=>!isUuid(x)))throw new ReviewError('INVALID_INPUT',400);
+   if(!isUuid(d.playerId)||ids.length<1||ids.length>500||ids.some(x=>!isUuid(x)))throw new ReviewError('INVALID_INPUT',400);
    const p=await client.query('SELECT id FROM fg_players WHERE event_id=$1 AND id=$2',[eventId,d.playerId]);
    if(!p.rowCount)throw new ReviewError('WRONG_EVENT_PLAYER');
    const forbidden=await client.query(`SELECT 1 FROM fg_privacy_records r WHERE r.event_id=$1 AND r.player_id=$2 AND r.revoked_at IS NOT NULL AND NOT EXISTS(SELECT 1 FROM fg_privacy_records a WHERE a.event_id=r.event_id AND a.player_id=r.player_id AND a.revoked_at IS NULL AND a.reviewed_at IS NOT NULL) LIMIT 1`,[eventId,d.playerId]);
