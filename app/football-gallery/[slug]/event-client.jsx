@@ -71,7 +71,7 @@ export default function EventExperience({slug}){
    const files=[];
    for(let i=0;i<originals.length;i++){
     setDownloadProgress('กำลังเตรียมภาพ '+fmt(i+1)+' / '+fmt(originals.length));
-    const f=originals[i],response=await fetch(fileUrl(f),{cache:'no-store'});
+    const f=originals[i],response=await fetch(fileUrl(f)+'?share=1',{cache:'no-store'});
     if(!response.ok)throw Error('ดาวน์โหลดภาพไม่สำเร็จ ('+response.status+')');
     const blob=await response.blob();
     if(blob.type&&!blob.type.includes('image/')&&!blob.type.includes('octet-stream'))throw Error('ไฟล์ที่ได้รับไม่ใช่รูปภาพ');
@@ -126,10 +126,9 @@ export default function EventExperience({slug}){
   </>}
   {page==='detail'&&detail&&<><div className="fge-detail-image">{imageFor(detail)?<img src={imageFor(detail)} alt={detail.title||'ภาพการแข่งขัน'}/>:<Empty message="ไฟล์นี้ไม่มีภาพตัวอย่าง"/>}</div>
    <div className="fge-card"><h2>{detail.title||'ภาพการแข่งขัน'}</h2><p>{event.title}{detail.captured_at?' · '+new Date(detail.captured_at).toLocaleString('th-TH',{dateStyle:'medium',timeStyle:'short',timeZone:'UTC'}):''}</p><p>ไฟล์ต้นฉบับที่มีอยู่จริง</p></div>
-   <div className="fge-file-options">{detail.files.filter(f=>ORIGINAL.includes(f.variant)).map(f=><a key={f.id} href={fileUrl(f)} className="fge-file-option"><strong>{f.variant==='VIDEO_ORIGINAL'?'Video':f.variant} Original</strong><small>{fmtBytes(f.bytes)} · SHA-256 {String(f.sha256||'').slice(0,8)}</small><Icon name="download"/></a>)}
-    {detail.files.some(f=>f.variant==='JPEG')&&detail.files.some(f=>f.variant==='RAW')&&<button className="fge-file-option" onClick={()=>prepare({jpeg:true,raw:true},{scope:'selection',mediaIds:[detail.id]})} disabled={preparing}><strong>JPEG + RAW</strong><small>{fmtBytes(detail.files.filter(f=>['JPEG','RAW'].includes(f.variant)).reduce((n,f)=>n+Number(f.bytes),0))} · ZIP</small><Icon name="download"/></button>}
-   </div>
-   <Parts/>
+   {detail.kind==='photo'&&<button className="fge-primary" disabled={preparing} onClick={()=>savePhotos({mediaIds:[detail.id]})}><Icon name="download"/><span style={{marginLeft:10}}>{preparing?'กำลังเตรียมรูปภาพ…':'ดาวน์โหลดรูปภาพ'}</span></button>}
+   {detail.kind==='video'&&<a className="fge-primary fge-link-button" href={fileUrl(detail.files.find(f=>f.variant==='VIDEO_ORIGINAL')||{id:''})}>ดาวน์โหลดวิดีโอต้นฉบับ</a>}
+   {downloadProgress&&<p className="fge-hint" role="status">{downloadProgress}</p>}
    <p className="fge-hint">ไฟล์ที่ดาวน์โหลดเป็นต้นฉบับ ไม่ลดความละเอียดหรือแก้ไขข้อมูลสี</p>
    <button className="fge-text-link" onClick={()=>{setRemoval(s=>({...s,sent:null}));setPage('removal')}}>ขอถอดภาพนี้</button></>}
   {page==='downloads'&&<><div className="fge-card fge-event-summary"><h2>{selected.length?'รายการที่เลือก':player?.name||event.title}</h2><p>{selected.length?fmt(selected.length)+' รายการที่เลือก':player?fmt(player.photos)+' ภาพ':fmt(event.photos)+' ภาพ'}</p></div>
