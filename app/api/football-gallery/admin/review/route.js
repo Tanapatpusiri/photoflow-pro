@@ -65,7 +65,9 @@ export async function POST(request){
    // All visibility decisions remain in the dedicated publication action.
    await client.query('DELETE FROM fg_media_players WHERE media_id=$1',[id]);
    if(players.length)await client.query('INSERT INTO fg_media_players(media_id,player_id) SELECT $1,unnest($2::uuid[])',[id,players]);
-   if(players.length)await client.query('UPDATE fg_players SET visible=true WHERE event_id=$1 AND id=ANY($2::uuid[])',[eventId,players]);
+   if(players.length)await client.query(`UPDATE fg_players p SET visible=true WHERE p.event_id=$1 AND p.id=ANY($2::uuid[])
+     AND EXISTS(SELECT 1 FROM fg_media_players mp JOIN fg_media m ON m.id=mp.media_id
+       WHERE mp.player_id=p.id AND m.event_id=$1 AND m.status='published' AND m.publish_allowed=true AND m.metadata_reviewed=true)`,[eventId,players]);
    detail={players:players.length};
   }else if(action==='tag-many'){
    // Tag one child across selected photos in a single atomic admin action.
@@ -81,7 +83,9 @@ export async function POST(request){
    const inserted=await client.query(`INSERT INTO fg_media_players(media_id,player_id) SELECT unnest($1::uuid[]),$2 ON CONFLICT DO NOTHING`,[ids,d.playerId]);
    // Older approved photos remain approved when adding another child's tag.
    // New uploads become visible only after integrity checks and album publication.
-   await client.query('UPDATE fg_players SET visible=true WHERE id=$1',[d.playerId]);
+   await client.query(`UPDATE fg_players p SET visible=true WHERE p.id=$1 AND p.event_id=$2
+     AND EXISTS(SELECT 1 FROM fg_media_players mp JOIN fg_media m ON m.id=mp.media_id
+       WHERE mp.player_id=p.id AND m.event_id=$2 AND m.status='published' AND m.publish_allowed=true AND m.metadata_reviewed=true)`,[d.playerId,eventId]);
    detail={mediaCount:ids.length,newTags:inserted.rowCount};
    resource=d.playerId;
   }else if(action==='approve'){
