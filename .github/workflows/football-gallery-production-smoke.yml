@@ -1,0 +1,26 @@
+name: Football Gallery Production Loading Smoke
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 */6 * * *'
+  push:
+    branches: [main]
+    paths:
+      - 'app/football-gallery/**'
+      - 'app/api/football-gallery/**'
+      - 'lib/football-gallery-*.js'
+      - 'scripts/check-football-gallery-production.mjs'
+      - '.github/workflows/football-gallery-production-smoke.yml'
+permissions:
+  contents: read
+jobs:
+  verify-public-ssr:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check public homepage, event SSR, access and album cover consistency
+        run: node scripts/check-football-gallery-production.mjs
