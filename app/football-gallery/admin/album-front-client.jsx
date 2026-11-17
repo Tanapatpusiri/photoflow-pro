@@ -30,7 +30,7 @@ export default function AlbumFront({event,onChanged}){
   if(!r.ok)throw Error('อัปโหลดหน้าปกไม่สำเร็จ ('+r.status+')');
   await send({action:'cover-complete',event:event.id});
  },'ตั้งรูปหน้าปกแล้ว');
- const loadPhotos=(page=1)=>run(async()=>{const r=await fetch(api+'/media?event='+encodeURIComponent(event.id)+'&page='+page,{cache:'no-store'});const d=await r.json();if(!r.ok)throw Error(d.message||'โหลดภาพไม่สำเร็จ');const approved=(d.items||[]).filter(i=>i.thumb&&i.status==='published'&&i.publish_allowed!==false);setPhotos(previous=>page===1?approved:[...previous,...approved]);setPhotoPage(page);setHasMorePhotos(!!d.hasMore);setChoosing(true)});
+ const loadPhotos=(page=1)=>run(async()=>{const r=await fetch(api+'/media?event='+encodeURIComponent(event.id)+'&page='+page,{cache:'no-store'});const d=await r.json();if(!r.ok)throw Error(d.message||'โหลดภาพไม่สำเร็จ');const approved=(d.items||[]).filter(i=>i.thumb&&i.status==='published'&&i.publish_allowed!==false);setPhotos(previous=>{const combined=page===1?approved:[...previous,...approved];const seen=new Set();return combined.filter(item=>{if(seen.has(item.id))return false;seen.add(item.id);return true})});setPhotoPage(page);setHasMorePhotos(!!d.hasMore);setChoosing(true)});
  const openChooser=()=>loadPhotos(1);
  const choose=id=>run(async()=>{await send({action:'cover-media',event:event.id,mediaId:id});setChoosing(false)},'ตั้งรูปหน้าปกแล้ว');
  return <section className="fga-card fga-front">
