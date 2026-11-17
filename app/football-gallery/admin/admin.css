@@ -172,3 +172,15 @@
 .fga-bulk-player select{font-size:16px;max-width:100%;min-width:0;min-height:44px;border:1px solid #e7e7ea;border-radius:14px;background:#fff;padding:9px}
 .fga-bulk-save{background:#252528!important;color:#fff!important}
 .fga-pick-bar{min-width:0}
+
+/* Clear distinction between selected-file count, loaded page count and public release. */
+.fga-review-count,.fga-upload-count{font-size:13px;line-height:1.6;color:#606068;margin:8px 0 2px;overflow-wrap:anywhere}
+.fga-more-anchor{display:grid;place-items:center;padding:16px 0}
+.fga-release-row{border-radius:19px;background:#f5f5f7;padding:15px;display:grid;gap:11px;min-width:0}
+.fga-release-row p{margin:0;font-size:13px;line-height:1.6;color:#55565c}
+.fga-release-row button{background:#29292d;border:0;color:#fff;min-height:48px;border-radius:999px;padding:12px 18px;font-size:14px;font-weight:600;max-width:100%;white-space:normal;cursor:pointer}
+.fga-release-row button:disabled{opacity:.4}
+.fga-upload-failures{background:#fff7f5;border-radius:16px;padding:14px;max-width:100%;overflow-wrap:anywhere}
+.fga-upload-failures summary{font-weight:600;cursor:pointer}
+.fga-upload-failures ul{padding-left:20px;max-height:250px;overflow-y:auto;margin:12px 0}
+.fga-upload-failures li{font-size:12px;line-height:1.5;margin:3px 0}
