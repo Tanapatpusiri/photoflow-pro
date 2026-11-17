@@ -48,7 +48,35 @@ export default function ReviewClient({event,players,retentionMonths,uploadKey=0,
  const [publish,setPublish]=useState({notice:'',edited:false,retention:addRetentionMonths(event.event_date,retentionMonths),attest:false});
  const [grants,setGrants]=useState([]),[grantLabel,setGrantLabel]=useState(''),[grantDays,setGrantDays]=useState(14),[issued,setIssued]=useState(null);
  const [thumbFailed,setThumbFailed]=useState({}),[removals,setRemovals]=useState([]),[auditLog,setAuditLog]=useState([]),[verifying,setVerifying]=useState({});
- const load=async(p=1,f=filter)=>{setLoading(true);try{const d=await get('/media?event='+encodeURIComponent(event.id)+'&page='+p+(f?'&status='+f:''));setItems(old=>p===1?d.items:[...old,...d.items]);if(d.counts)setCounts(d.counts);setHasMore(d.hasMore);setPage(p);setError('')}catch(e){setError(e.message)}finally{setLoading(false)}};
+ // Keep pagination stable while uploads add images at the top.
+ // A cursor identifies the last image rather than the offset of a shifting list.
+ const nextCursorRef=useRef(null),pageRef=useRef(1),loadGenerationRef=useRef(0),listBusyRef=useRef(false);
+ const load=async(p=1,f=filter)=>{
+  const reset=p===1;
+  if(!reset&&(listBusyRef.current||p!==pageRef.current+1||!nextCursorRef.current))return null;
+  const generation=reset?++loadGenerationRef.current:loadGenerationRef.current;
+  if(reset){nextCursorRef.current=null;pageRef.current=1}
+  listBusyRef.current=true;setLoading(true);
+  try{
+   const params=new URLSearchParams({event:event.id,page:String(p)});
+   if(f)params.set('status',f);
+   if(!reset)params.set('cursor',nextCursorRef.current);
+   const d=await get('/media?'+params.toString());
+   if(generation!==loadGenerationRef.current)return null;
+   setItems(current=>{
+    const combined=reset?d.items:[...current,...d.items];
+    const ids=new Set();
+    return combined.filter(item=>{if(ids.has(item.id))return false;ids.add(item.id);return true});
+   });
+   nextCursorRef.current=d.nextCursor||null;
+   pageRef.current=p;
+   if(d.counts)setCounts(d.counts);
+   setHasMore(!!d.hasMore);
+   setPage(p);setError('');
+   return d;
+  }catch(e){if(generation===loadGenerationRef.current)setError(e.message);return null}
+  finally{if(generation===loadGenerationRef.current){listBusyRef.current=false;setLoading(false)}}
+ };
  useEffect(()=>{
   if(!show('review')||active||!hasMore||loading||!moreRef.current)return;
   const observer=new IntersectionObserver(entries=>{
@@ -123,13 +151,8 @@ export default function ReviewClient({event,players,retentionMonths,uploadKey=0,
   if(index<0)return;
   if(index<items.length){select(items[index]);return}
   if(delta>0&&hasMore&&!loading){
-   setLoading(true);
-   try{
-    const d=await get('/media?event='+encodeURIComponent(event.id)+'&page='+(page+1)+(filter?'&status='+filter:''));
-    setItems(current=>[...current,...d.items]);setHasMore(d.hasMore);setPage(page+1);
-    if(d.counts)setCounts(d.counts);
-    if(d.items.length)select(d.items[0]);
-   }catch(e){setError(e.message)}finally{setLoading(false)}
+   const d=await load(pageRef.current+1);
+   if(d?.items?.length)select(d.items[0]);
   }
  };
  useEffect(()=>{
