@@ -20,6 +20,7 @@ export default function ReviewClient({event,players,retentionMonths,uploadKey=0,
  const show=part=>view==='all'||view===part;
  const [items,setItems]=useState([]),[active,setActive]=useState(null),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false),[error,setError]=useState(''),[info,setInfo]=useState(''),[page,setPage]=useState(1),[hasMore,setHasMore]=useState(false),[filter,setFilter]=useState('');
  const [counts,setCounts]=useState({total:0,ready:0,published:0,uploading:0,hidden:0,filtered:0});
+ const moreRef=useRef(null),pageInProgress=useRef(false);
  const [picking,setPicking]=useState(false),[picked,setPicked]=useState([]),[pickAll,setPickAll]=useState(false);
  const [bulkPlayer,setBulkPlayer]=useState('');
  const holdTimer=useRef(null),holdTriggered=useRef(false),holdStart=useRef(null);
@@ -48,6 +49,17 @@ export default function ReviewClient({event,players,retentionMonths,uploadKey=0,
  const [grants,setGrants]=useState([]),[grantLabel,setGrantLabel]=useState(''),[grantDays,setGrantDays]=useState(14),[issued,setIssued]=useState(null);
  const [thumbFailed,setThumbFailed]=useState({}),[removals,setRemovals]=useState([]),[auditLog,setAuditLog]=useState([]),[verifying,setVerifying]=useState({});
  const load=async(p=1,f=filter)=>{setLoading(true);try{const d=await get('/media?event='+encodeURIComponent(event.id)+'&page='+p+(f?'&status='+f:''));setItems(old=>p===1?d.items:[...old,...d.items]);if(d.counts)setCounts(d.counts);setHasMore(d.hasMore);setPage(p);setError('')}catch(e){setError(e.message)}finally{setLoading(false)}};
+ useEffect(()=>{
+  if(!show('review')||active||!hasMore||loading||!moreRef.current)return;
+  const observer=new IntersectionObserver(entries=>{
+   if(entries.some(e=>e.isIntersecting)&&!pageInProgress.current){
+    pageInProgress.current=true;
+    load(page+1).finally(()=>{pageInProgress.current=false});
+   }
+  },{rootMargin:'350px'});
+  observer.observe(moreRef.current);
+  return()=>observer.disconnect();
+ },[view,active,hasMore,loading,page,filter,items.length,event.id]);
  const loadSide=async()=>{try{const [g,r,a]=await Promise.all([get('/grants?event='+event.id),get('/removals?event='+event.id),get('/audit?event='+event.id)]);setGrants(g.grants);setRemovals(r.requests);setAuditLog(a.entries.slice(0,20))}catch(e){setError(e.message)}};
  useEffect(()=>{setActive(null);setItems([]);setPage(1);setPicking(false);setPicked([]);setPickAll(false);setIssued(null);setPublish({notice:'',edited:false,retention:addRetentionMonths(event.event_date,retentionMonths),attest:false});load(1);loadSide()},[event.id,event.event_date]);
  // Show newly uploaded files without leaving the current filter or the file being reviewed.
@@ -106,20 +118,30 @@ export default function ReviewClient({event,players,retentionMonths,uploadKey=0,
   setInfo('แท็ก '+photos.length+' รูปสำเร็จ');
  },undefined);
  const activeIndex=active?items.findIndex(i=>i.id===active.id):-1;
- const navigatePhoto=delta=>{
-  const index=activeIndex+delta;if(index<0||index>=items.length)return;
-  select(items[index]);
+ const navigatePhoto=async delta=>{
+  const index=activeIndex+delta;
+  if(index<0)return;
+  if(index<items.length){select(items[index]);return}
+  if(delta>0&&hasMore&&!loading){
+   setLoading(true);
+   try{
+    const d=await get('/media?event='+encodeURIComponent(event.id)+'&page='+(page+1)+(filter?'&status='+filter:''));
+    setItems(current=>[...current,...d.items]);setHasMore(d.hasMore);setPage(page+1);
+    if(d.counts)setCounts(d.counts);
+    if(d.items.length)select(d.items[0]);
+   }catch(e){setError(e.message)}finally{setLoading(false)}
+  }
  };
  useEffect(()=>{
   if(!active)return;
   const keys=e=>{
    if(e.target?.matches?.('input,textarea,select,[contenteditable]'))return;
-   if(e.key==='ArrowRight'&&activeIndex<items.length-1)navigatePhoto(1);
+   if(e.key==='ArrowRight'&&(activeIndex<items.length-1||hasMore))navigatePhoto(1);
    if(e.key==='ArrowLeft'&&activeIndex>0)navigatePhoto(-1);
   };
   window.addEventListener('keydown',keys);
   return()=>window.removeEventListener('keydown',keys);
- },[active,activeIndex,items]);
+ },[active,activeIndex,items,hasMore,loading,page,filter,event.id]);
 
  const approve=()=>run(async()=>{
   if(tagsDirty){await post('/review',{action:'tag',eventId:event.id,mediaId:active.id,players:tags});setActive(a=>a&&{...a,players:[...tags]})}
@@ -155,7 +177,7 @@ export default function ReviewClient({event,players,retentionMonths,uploadKey=0,
   {show('review')&&<>
   <h2>จัดการรูปและแท็กนักฟุตบอล</h2><p>รูปที่อัปโหลดครบพร้อมให้แท็กได้เลย เลือกหลายรูปแล้วแท็กเด็กคนเดียวพร้อมกันได้ ส่วนการเปิดรูปให้ผู้ชมเห็นยังควบคุมแยกจากหน้าเผยแพร่</p>
    {active?<div className="fga-review-detail">
-    <div className="fga-detail-nav"><button className="fga-link" onClick={()=>setActive(null)}>‹ กลับรายการ</button><span>{activeIndex+1} / {items.length}</span><button type="button" className="fga-chip" onClick={()=>navigatePhoto(-1)} disabled={busy||activeIndex<=0} aria-label="รูปก่อนหน้า">‹ ก่อนหน้า</button><button type="button" className="fga-chip" onClick={()=>navigatePhoto(1)} disabled={busy||activeIndex>=items.length-1} aria-label="รูปถัดไป">ถัดไป ›</button></div>
+    <div className="fga-detail-nav"><button className="fga-link" onClick={()=>setActive(null)}>‹ กลับรายการ</button><span>{activeIndex+1} / {items.length}</span><button type="button" className="fga-chip" onClick={()=>navigatePhoto(-1)} disabled={busy||activeIndex<=0} aria-label="รูปก่อนหน้า">‹ ก่อนหน้า</button><button type="button" className="fga-chip" onClick={()=>navigatePhoto(1)} disabled={busy||loading||(activeIndex>=items.length-1&&!hasMore)} aria-label="รูปถัดไป">ถัดไป ›</button></div>
     <div className="fga-review-layout">
     <div className="fga-review-media">
     {active.thumb&&!thumbFailed[active.id]?<img className="fga-review-photo" src={active.thumb} alt="ภาพสำหรับผู้ดูแลตรวจสอบก่อนเผยแพร่" onError={()=>setThumbFailed(s=>({...s,[active.id]:true}))}/>:<div className="fga-review-photo fga-review-nophoto" role="note">{active.thumb?'โหลดภาพตัวอย่างไม่ได้ ตอนนี้ระบบส่งภาพ (Download Worker) ยังไม่พร้อม เปิดไฟล์ต้นฉบับใน Google Drive เพื่อตรวจแทนได้':'ไฟล์นี้ไม่มีภาพตัวอย่าง (เช่น RAW หรือวิดีโอบางชนิด) เปิดไฟล์ต้นฉบับใน Google Drive เพื่อตรวจ'}</div>}
@@ -195,7 +217,7 @@ export default function ReviewClient({event,players,retentionMonths,uploadKey=0,
    </div>)}
    <p className="fga-review-count" role="status">แสดง {items.length.toLocaleString('th-TH')} จาก {Number(counts.filtered||0).toLocaleString('th-TH')} รายการในหมวดนี้ · รวมทั้งอัลบั้ม {Number(counts.total||0).toLocaleString('th-TH')} รูป/คลิป ({Number(counts.ready||0).toLocaleString('th-TH')} พร้อมจัดการ, {Number(counts.uploading||0).toLocaleString('th-TH')} กำลังอัปโหลด)</p>
    <div className="fga-review-grid">{items.map((item,index)=><button key={item.id} className={'fga-review-tile'+(picking&&(pickAll||picked.includes(item.id))?' picked':'')} aria-pressed={picking?(pickAll||picked.includes(item.id)):undefined} onPointerDown={e=>beginHold(e,item)} onPointerMove={moveHold} onPointerUp={endHold} onPointerCancel={endHold} onContextMenu={e=>{e.preventDefault();endHold();if(!picking)longPress(item)}} onClick={()=>{if(holdTriggered.current){holdTriggered.current=false;return}picking?togglePick(item.id):select(item)}}>{picking&&<span className="fga-tile-check" aria-hidden="true">{pickAll||picked.includes(item.id)?'✓':''}</span>}{item.thumb?<img src={item.thumb} alt="ภาพรอตรวจ" loading={index<8?"eager":"lazy"} fetchPriority={index<4?"high":"auto"} decoding="async"/>:<div className="fga-review-placeholder">ยังไม่มี Preview</div>}<strong>{item.title||(item.kind==='photo'?'รูปภาพ':'วิดีโอ')}</strong><span>{STATUS[item.status]||item.status} · {item.files.filter(originals).map(f=>f.variant==='VIDEO_ORIGINAL'?'VIDEO':f.variant).join('+')}{item.has_gps?' · GPS':''}</span></button>)}</div>
-   {loading&&<p>กำลังโหลด…</p>}{items.length===0&&!loading&&<p>ยังไม่มีไฟล์ในหมวดนี้{onNavigate&&filter===''?' ':''}{onNavigate&&filter===''&&<button className="fga-link" onClick={()=>onNavigate('upload')}>ไปอัปโหลด ›</button>}</p>}{hasMore&&<button className="fga-quiet" onClick={()=>load(page+1)} disabled={loading}>โหลดรูปเพิ่ม ({(counts.filtered-items.length).toLocaleString('th-TH')} รายการที่เหลือ)</button>}
+   {loading&&<p>กำลังโหลด…</p>}{items.length===0&&!loading&&<p>ยังไม่มีไฟล์ในหมวดนี้{onNavigate&&filter===''?' ':''}{onNavigate&&filter===''&&<button className="fga-link" onClick={()=>onNavigate('upload')}>ไปอัปโหลด ›</button>}</p>}{hasMore&&<div ref={moreRef} className="fga-more-anchor"><button className="fga-quiet" onClick={()=>load(page+1)} disabled={loading}>โหลดรูปเพิ่ม ({(counts.filtered-items.length).toLocaleString('th-TH')} รายการที่เหลือ)</button></div>}
    {event.status==='published'&&Number(counts.ready)>0&&<div className="fga-release-row"><p>หลังแท็กเสร็จ สามารถเปิดรูปที่พร้อมให้ผู้ชมได้พร้อมกันครั้งเดียว โดยไม่ต้องอนุมัติทีละภาพ</p><button disabled={busy} onClick={publishReady}>เปิดรูปที่พร้อมให้ผู้ชมทั้งหมด ({counts.ready})</button></div>
    {onNavigate&&event.status!=='published'&&<button className="fga-next" onClick={()=>onNavigate('publish')}>จัดการแท็กแล้ว ไปเผยแพร่รูปและแชร์ ›</button>}
   </>}
