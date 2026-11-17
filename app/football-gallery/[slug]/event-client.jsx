@@ -1,5 +1,5 @@
 'use client';
-import {useEffect,useMemo,useState} from 'react';
+import {useEffect,useMemo,useRef,useState} from 'react';
 import {formatBytes as fmtBytes} from '../../../lib/football-gallery-format';
 import './event.css';
 const paths={
@@ -24,13 +24,27 @@ export default function EventExperience({slug}){
  const [page,setPage]=useState('overview'),[tab,setTab]=useState('photo'),[player,setPlayer]=useState(null),[detail,setDetail]=useState(null),[filter,setFilter]=useState('all'),[favorites,setFavorites]=useState([]),[selected,setSelected]=useState([]),[pageNo,setPageNo]=useState(1),[hasMore,setHasMore]=useState(false),[query,setQuery]=useState('');
  const [archive,setArchive]=useState(null),[preparing,setPreparing]=useState(false),[downloadProgress,setDownloadProgress]=useState('');
  const [removal,setRemoval]=useState({description:'',contact:'',sent:null,busy:false});
+ const listingCache=useRef(new Map());
+ function listMedia(kind,personId,pageNumber){
+  const key=[kind,personId||'',pageNumber].join(':');
+  const entry=listingCache.current.get(key);
+  if(entry&&Date.now()-entry.at<20000)return entry.promise;
+  const params=new URLSearchParams({page:String(pageNumber),kind});
+  if(personId)params.set('player',personId);
+  const promise=fetch(base(slug)+'/media?'+params,{cache:'no-store'})
+    .then(async r=>{const d=await r.json();if(!r.ok)throw Error(d.message||'โหลดไฟล์ไม่สำเร็จ');return d})
+    .catch(e=>{listingCache.current.delete(key);throw e});
+  listingCache.current.set(key,{at:Date.now(),promise});
+  return promise;
+ }
+
  const inLine=typeof navigator!=='undefined'&&/\bLine\//i.test(navigator.userAgent);
  useEffect(()=>{try{setFavorites(JSON.parse(localStorage.getItem('fg_fav_'+slug)||'[]'))}catch{}},[slug]);
  useEffect(()=>{let live=true;(async()=>{setLoading(true);try{let r=await fetch(base(slug),{cache:'no-store'}),d=await r.json();
   // An unlocked album opens without a code: ask for its public pass once, then load again.
   if(!r.ok&&d.needsAccess){const o=await fetch('/api/football-gallery/open',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({slug}),cache:'no-store'});if(o.ok){r=await fetch(base(slug),{cache:'no-store'});d=await r.json()}}
-  if(!r.ok){if(d.needsAccess&&live)setNeedsAccess(true);throw Error(d.message||'ไม่สามารถเปิดอัลบั้ม')}if(live){setEvent(d.event);setPlayers(d.players||[]);setError('')}}catch(e){if(live)setError(e.message)}finally{if(live)setLoading(false)}})();return()=>{live=false}},[slug]);
- useEffect(()=>{if(!event||!['photos','videos','player'].includes(page))return;let live=true;(async()=>{setLoading(true);try{const params=new URLSearchParams({page:String(pageNo),kind:page==='videos'||page==='player'&&tab==='video'?'video':'photo'});if(player&&page==='player')params.set('player',player.id);const r=await fetch(base(slug)+'/media?'+params,{cache:'no-store'}),d=await r.json();if(!r.ok)throw Error(d.message||'โหลดไฟล์ไม่สำเร็จ');if(live){setItems(old=>pageNo===1?d.items:[...old,...d.items]);setHasMore(d.hasMore);setError('')}}catch(e){if(live)setError(e.message)}finally{if(live)setLoading(false)}})();return()=>{live=false}},[slug,event,page,player,tab,pageNo]);
+  if(!r.ok){if(d.needsAccess&&live)setNeedsAccess(true);throw Error(d.message||'ไม่สามารถเปิดอัลบั้ม')}if(live){setEvent(d.event);setPlayers(d.players||[]);setError('');if(!navigator.connection?.saveData){listMedia('photo',null,1).catch(()=>{});listMedia('video',null,1).catch(()=>{})}}}catch(e){if(live)setError(e.message)}finally{if(live)setLoading(false)}})();return()=>{live=false}},[slug]);
+ useEffect(()=>{if(!event||!['photos','videos','player'].includes(page))return;let live=true;(async()=>{setLoading(true);try{const d=await listMedia(page==='videos'||page==='player'&&tab==='video'?'video':'photo',page==='player'?player?.id:null,pageNo);if(live){setItems(old=>pageNo===1?d.items:[...old,...d.items]);setHasMore(d.hasMore);setError('')}}catch(e){if(live)setError(e.message)}finally{if(live)setLoading(false)}})();return()=>{live=false}},[slug,event,page,player,tab,pageNo]);
  const change=(next,who=null,newTab='photo')=>{setPage(next);setPlayer(who);setTab(newTab);setPageNo(1);setItems([]);setSelected([]);setDetail(null);setFilter('all');setArchive(null);window.scrollTo({top:0,behavior:'instant'})};
  const toggleFav=id=>{setFavorites(prev=>{const next=prev.includes(id)?prev.filter(x=>x!==id):[...prev,id];try{localStorage.setItem('fg_fav_'+slug,JSON.stringify(next))}catch{}return next})};
  const toggleSelected=id=>setSelected(prev=>prev.includes(id)?prev.filter(x=>x!==id):[...prev,id]);
