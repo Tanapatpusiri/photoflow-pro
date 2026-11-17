@@ -61,6 +61,23 @@ export async function POST(request){
    // Changing who appears in a published file sends it back for review.
    await client.query("UPDATE fg_media SET status=CASE WHEN status='published' THEN 'review' ELSE status END,publish_allowed=false WHERE id=$1",[id]);
    detail={players:players.length};
+  }else if(action==='tag-many'){
+   // Tag one child across selected photos in a single atomic admin action.
+   // Never touch other photo tags; never publish revoked or unverified files.
+   const ids=Array.isArray(d.mediaIds)?[...new Set(d.mediaIds)]:[];
+   if(!isUuid(d.playerId)||ids.length<1||ids.length>200||ids.some(x=>!isUuid(x)))throw new ReviewError('INVALID_INPUT',400);
+   const p=await client.query('SELECT id FROM fg_players WHERE event_id=$1 AND id=$2',[eventId,d.playerId]);
+   if(!p.rowCount)throw new ReviewError('WRONG_EVENT_PLAYER');
+   const forbidden=await client.query(`SELECT 1 FROM fg_privacy_records r WHERE r.event_id=$1 AND r.player_id=$2 AND r.revoked_at IS NOT NULL AND NOT EXISTS(SELECT 1 FROM fg_privacy_records a WHERE a.event_id=r.event_id AND a.player_id=r.player_id AND a.revoked_at IS NULL AND a.reviewed_at IS NOT NULL) LIMIT 1`,[eventId,d.playerId]);
+   if(forbidden.rowCount)throw new ReviewError('PLAYER_CONSENT_REVOKED');
+   const selected=await client.query('SELECT id FROM fg_media WHERE event_id=$1 AND kind=$2 AND status<>$3 AND id=ANY($4::uuid[]) FOR UPDATE',[eventId,'photo','hidden',ids]);
+   if(selected.rowCount!==ids.length)throw new ReviewError('MEDIA_NOT_FOUND',404);
+   const inserted=await client.query(`INSERT INTO fg_media_players(media_id,player_id) SELECT unnest($1::uuid[]),$2 ON CONFLICT DO NOTHING`,[ids,d.playerId]);
+   // Older approved photos remain approved when adding another child's tag.
+   // New uploads become visible only after integrity checks and album publication.
+   await client.query('UPDATE fg_players SET visible=true WHERE id=$1',[d.playerId]);
+   detail={mediaCount:ids.length,newTags:inserted.rowCount};
+   resource=d.playerId;
   }else if(action==='approve'){
    // Owner policy (2026-11-15): consent is confirmed once for the whole album when it is published,
    // so approving a photo only records who is in it. A per-photo basis and evidence are optional.
