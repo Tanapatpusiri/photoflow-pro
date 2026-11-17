@@ -182,7 +182,10 @@ export default function Uploader({eventId,album={media:0,pending:0,live:false},o
   setRunning(true);setErrors([]);setSummary(null);setProgress(0);setFailedNames([]);
   controller.current=new AbortController();
   // JPEG and RAW of the same frame must be in the same batch to be paired into one item.
-  const batch=crypto.randomUUID();let cursor=0;const counts={ok:0,duplicate:0,failed:0};
+  const batch=crypto.randomUUID(),batchContext={eventId,batch,selected:files.length,bytes:files.reduce((sum,file)=>sum+file.size,0)};
+  const started=await post('/api/football-gallery/admin/upload-batches',{action:'begin',...batchContext});
+  if(!started.ok){setRunning(false);setErrors([started.data.message||'บันทึกจำนวนไฟล์ที่เลือกไม่สำเร็จ กรุณาลองใหม่']);return}
+  let cursor=0;const counts={ok:0,duplicate:0,failed:0};
   const worker=async()=>{
    while(cursor<files.length&&!controller.current.signal.aborted){
     const index=cursor++,f=files[index],key=f.name+'-'+index;
@@ -192,7 +195,10 @@ export default function Uploader({eventId,album={media:0,pending:0,live:false},o
    }
   };
   await Promise.all([worker(),worker(),worker()]);
-  const stopped=controller.current.signal.aborted;setRunning(false);setSummary({...counts,skipped:files.length-counts.ok-counts.duplicate-counts.failed,stopped});onUploaded?.();
+  const stopped=controller.current.signal.aborted,skipped=files.length-counts.ok-counts.duplicate-counts.failed;
+  const recorded=await post('/api/football-gallery/admin/upload-batches',{action:'end',...batchContext,...counts,skipped,stopped}).catch(()=>({ok:false,data:{message:'บันทึกยอดอัปโหลดบนเซิร์ฟเวอร์ไม่สำเร็จ'}}));
+  if(!recorded.ok)setErrors(xs=>[...xs,recorded.data.message||'ยังยืนยันยอดชุดอัปโหลดไม่ได้']);
+  setRunning(false);setSummary({...counts,skipped,stopped,reconciled:recorded.ok,serverStarted:recorded.data.serverStarted,serverVerified:recorded.data.serverVerified});onUploaded?.();
  }
  const total=files.reduce((n,f)=>n+f.size,0);
  return <div className="fga-uploader">
@@ -204,10 +210,11 @@ export default function Uploader({eventId,album={media:0,pending:0,live:false},o
   {running?<button onClick={()=>controller.current?.abort()} className="fga-quiet-btn">หยุดชั่วคราว (อัปโหลดต่อได้ภายหลัง)</button>:<button disabled={files.length===0} onClick={run}>{Object.keys(status).length?'อัปโหลดต่อ / ลองใหม่':'เริ่มอัปโหลด'}</button>}
   {running&&<div className="fga-progress" role="progressbar" aria-valuemin={0} aria-valuemax={files.length} aria-valuenow={progress} aria-label="ความคืบหน้าการอัปโหลด"><i style={{width:(files.length?progress/files.length*100:0)+'%'}}/></div>}
   {summary&&<div role="status" className="fga-summary">
-   <strong>{summary.stopped?'หยุดอัปโหลดไว้ชั่วคราว':summary.failed||summary.skipped?'ยังมีไฟล์ที่ไม่สำเร็จหรือไม่ได้เริ่ม':'ตรวจสอบไฟล์ที่เลือกครบแล้ว'}</strong><p>เลือก {files.length.toLocaleString('th-TH')} ไฟล์ · สำเร็จ {summary.ok.toLocaleString('th-TH')} · มีอยู่แล้ว {summary.duplicate.toLocaleString('th-TH')} · ไม่สำเร็จ {summary.failed.toLocaleString('th-TH')} · ยังไม่ได้เริ่ม {summary.skipped.toLocaleString('th-TH')}</p>
+   <strong>{summary.stopped?'หยุดอัปโหลดไว้ชั่วคราว':summary.failed||summary.skipped?'ยังมีไฟล์ที่ไม่สำเร็จหรือไม่ได้เริ่ม':!summary.reconciled?'อัปโหลดแล้ว แต่ยังบันทึกยอดชุดอัปโหลดไม่สำเร็จ':'ตรวจสอบไฟล์ที่เลือกครบแล้ว'}</strong><p>เลือก {files.length.toLocaleString('th-TH')} ไฟล์ · สำเร็จ {summary.ok.toLocaleString('th-TH')} · มีอยู่แล้ว {summary.duplicate.toLocaleString('th-TH')} · ไม่สำเร็จ {summary.failed.toLocaleString('th-TH')} · ยังไม่ได้เริ่ม {summary.skipped.toLocaleString('th-TH')}</p>
    <dl><div><dt>สำเร็จ</dt><dd>{summary.ok.toLocaleString('th-TH')}</dd></div><div><dt>มีอยู่แล้ว (ข้าม)</dt><dd>{summary.duplicate.toLocaleString('th-TH')}</dd></div><div className={summary.failed?'bad':''}><dt>ไม่สำเร็จ</dt><dd>{summary.failed.toLocaleString('th-TH')}</dd></div>{summary.skipped>0&&<div><dt>ยังไม่ได้เริ่ม</dt><dd>{summary.skipped.toLocaleString('th-TH')}</dd></div>}</dl>
    {failedNames.length>0&&<details open className="fga-upload-failures"><summary>ดูรายชื่อไฟล์ที่ไม่สำเร็จทั้งหมด ({failedNames.length} ไฟล์)</summary><ul>{failedNames.map((name,i)=><li key={i}>{name}</li>)}</ul><p>เลือกไฟล์ชุดเดิมและกดอัปโหลดต่อ ระบบตรวจ SHA-256 แล้วข้ามต้นฉบับที่มีครบอยู่แล้ว</p></details>}
    {summary.duplicate>0&&<p>ไฟล์ที่ "มีอยู่แล้ว" คือไฟล์เดียวกันที่เคยอัปโหลดเข้าอัลบั้มนี้ ระบบไม่เก็บซ้ำ</p>}
+   {summary.reconciled&&<p className="fga-upload-audit">ระบบบันทึกจำนวนที่เลือกและสรุปผลชุดอัปโหลดไว้บนเซิร์ฟเวอร์แล้ว · ไฟล์ใหม่ที่เริ่มในชุดนี้ {Number(summary.serverStarted||0).toLocaleString('th-TH')} · ตรวจครบ {Number(summary.serverVerified||0).toLocaleString('th-TH')} (ไม่นับไฟล์ที่มีอยู่แล้วหรือไฟล์อัปโหลดต่อจากรอบก่อน)</p>}
    {(summary.ok>0||album.pending>0)&&onReview&&<button className="fga-primary" onClick={onReview}>ไปแท็กภาพ{album.pending>0?` (${album.pending.toLocaleString('th-TH')} รูปพร้อมจัดการ)`:''} ›</button>}
   </div>}
   {!summary&&!running&&files.length===0&&album.media>0&&!album.live&&onPublish&&<button className="fga-quiet-btn" onClick={onPublish}>อัปโหลดครบแล้ว ไปเผยแพร่ ›</button>}
