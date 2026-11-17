@@ -55,12 +55,22 @@ export default function ReviewClient({event,players,retentionMonths,uploadKey=0,
  // Basis and evidence usually apply to the whole match, so they are kept between photos; the confirmations are per photo.
  const select=item=>{setActive(item);setTags(item.players||[]);setApproval({noChildren:false});setNewName('');setError('');setInfo('')};
  const run=async(task,ok)=>{if(busy)return;setBusy(true);setError('');setInfo('');try{await task();if(ok)setInfo(ok)}catch(e){setError(e.message)}finally{setBusy(false)}};
+ const savePhotoTags=next=>{
+  if(!active||busy)return;
+  const original=active.players||[];
+  setTags(next);
+  setBusy(true);setError('');setInfo('');
+  post('/review',{action:'tag',eventId:event.id,mediaId:active.id,players:next})
+   .then(()=>{setItems(xs=>xs.map(x=>x.id===active.id?{...x,players:[...next]}:x));setActive(x=>x?.id===active.id?{...x,players:[...next]}:x);setInfo('บันทึกแท็กอัตโนมัติแล้ว')})
+   .catch(e=>{setTags(original);setError(e.message)})
+   .finally(()=>setBusy(false));
+ };
  const review=(action,data={},ok)=>run(async()=>{await post('/review',{action,eventId:event.id,mediaId:active?.id,...data});await load(1);setActive(null);await onUpdated?.();await loadSide()},ok);
  const savedTags=active?.players||[];
  const tagsDirty=!!active&&(tags.length!==savedTags.length||tags.some(t=>!savedTags.includes(t)));
  // Typing a name that is not in the list adds the child to the album and selects them. "Name #10" also stores the shirt number.
  const addName=e=>{e.preventDefault();const raw=newName.trim();if(!raw||busy)return;const m=/^(.*?)\s*#\s*([0-9A-Za-z-]{1,12})$/.exec(raw);const name=(m?m[1]:raw).trim().slice(0,100);if(!name)return;
-  run(async()=>{const r=await fetch(api+'/players',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({event:event.id,name,jersey:m?m[2]:''})});const d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d.message||'เพิ่มชื่อไม่สำเร็จ');await onPlayersChanged?.();setTags(t=>[...t,d.player.id]);setApproval({noChildren:false});setNewName('')},'เพิ่มชื่อแล้ว')};
+  run(async()=>{const r=await fetch(api+'/players',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({event:event.id,name,jersey:m?m[2]:''})});const d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d.message||'เพิ่มชื่อไม่สำเร็จ');await onPlayersChanged?.();const next=[...new Set([...tags,d.player.id])];await post('/review',{action:'tag',eventId:event.id,mediaId:active.id,players:next});setTags(next);setActive(a=>a?{...a,players:next}:a);setItems(xs=>xs.map(x=>x.id===active.id?{...x,players:next}:x));setNewName('')},'เพิ่มชื่อแล้ว')};
  // Permanent delete: rows first on the server, then the files in Google Drive. "all" repeats in batches.
  const removeForever=({ids,all,label})=>{
   if(!confirm(`ลบถาวร ${label}?\n\nไฟล์ต้นฉบับใน Google Drive จะถูกลบด้วย และกู้คืนไม่ได้`))return;
@@ -148,25 +158,22 @@ export default function ReviewClient({event,players,retentionMonths,uploadKey=0,
     <div className="fga-review-form">
     {active.status==='hidden'?<button className="fga-quiet" disabled={busy} onClick={()=>review('restore',{},'กู้คืนแล้ว ต้องตรวจใหม่ก่อนเผยแพร่')}>กู้คืนเพื่อตรวจใหม่</button>:<>
     <section className="fga-step-card">
-     <h3>ใครอยู่ในภาพนี้</h3>
-     <p className="fga-hint">แตะชื่อเด็กทุกคนที่เห็นหน้าในภาพ ถ้าไม่มีในรายการ พิมพ์ชื่อเพิ่มได้เลย</p>
-     <div className="fga-pick">{players.map(p=><label key={p.id} className={tags.includes(p.id)?'on':''}><input type="checkbox" checked={tags.includes(p.id)} onChange={e=>{setTags(s=>e.target.checked?[...s,p.id]:s.filter(x=>x!==p.id));if(e.target.checked)setApproval({noChildren:false})}}/>{p.name}{p.jersey?' #'+p.jersey:''}</label>)}
-      <label className={tags.length===0&&approval.noChildren?'on fga-pick-none':'fga-pick-none'}><input type="checkbox" checked={tags.length===0&&approval.noChildren} onChange={e=>{if(e.target.checked)setTags([]);setApproval({noChildren:e.target.checked})}}/>ไม่มีเด็กที่จำหน้าได้</label>
+     <h3>แท็กชื่อนักฟุตบอล</h3>
+     <p className="fga-hint">แตะชื่อเด็กเพื่อแท็ก รูปจะบันทึกทันทีโดยไม่ต้องกดอนุมัติซ้ำ หากต้องแท็กหลายรูปพร้อมกันให้กดค้างรูปจากหน้ารวม</p>
+     <div className="fga-pick">{players.map(p=><label key={p.id} className={tags.includes(p.id)?'on':''}><input type="checkbox" checked={tags.includes(p.id)} disabled={busy} onChange={e=>savePhotoTags(e.target.checked?[...tags,p.id]:tags.filter(x=>x!==p.id))}/>{p.name}{p.jersey?' #'+p.jersey:''}</label>)}
      </div>
      <form className="fga-add-name" onSubmit={addName}><input value={newName} onChange={e=>setNewName(e.target.value)} placeholder="พิมพ์ชื่อเด็ก เช่น น้องบอล #10" maxLength={100} aria-label="เพิ่มชื่อเด็กที่ไม่มีในรายการ"/><button className="fga-quiet" disabled={busy||!newName.trim()}>เพิ่ม</button></form>
-     {tagsDirty&&<p className="fga-hint" role="status">ระบบจะบันทึกชื่อที่เลือกให้ตอนกดอนุมัติ</p>}
+     {busy&&<p className="fga-hint" role="status">กำลังบันทึกแท็ก…</p>}
      {active.has_gps&&<p className="fga-gps-note" role="note">ไฟล์นี้มีตำแหน่งที่ถ่าย (GPS) ผู้ปกครองที่ดาวน์โหลดไฟล์ต้นฉบับจะเห็นตำแหน่งนี้ ถ้าไม่ควรเปิดเผย ให้กด "ซ่อนภาพนี้"</p>}
     </section>
-    <Missing items={approveMissing}/>
     <div className="fga-approve-bar">
-     <button disabled={busy||approveMissing.length>0} onClick={approve}>{approveMissing.length>0?`ยังขาด ${approveMissing.length} ข้อ`:tagsDirty?'บันทึกแท็กและอนุมัติภาพนี้':'อนุมัติภาพนี้'}</button>
      <button className="fga-danger" disabled={busy} onClick={()=>review('hide',{},'ซ่อนแล้ว')}>ซ่อนภาพนี้</button>
     </div></>}
     <button className="fga-link fga-delete-link" disabled={busy} onClick={()=>removeForever({ids:[active.id],label:'ภาพนี้'})}>ลบภาพนี้ถาวร</button>
     </div>
     </div>
   </div>:<>
-   <div className="fga-actions">{[['','ทั้งหมด'],['review','รอตรวจ'],['published','เผยแพร่'],['hidden','ซ่อน']].map(([v,l])=><button key={v} className={filter===v?'fga-chip active':'fga-chip'} onClick={()=>{setFilter(v);setPicked([]);setPickAll(false);load(1,v)}}>{l}</button>)}</div>
+   <div className="fga-actions">{[['','ทั้งหมด'],['review','พร้อมจัดการ'],['published','แสดงในอัลบั้ม'],['hidden','ซ่อน']].map(([v,l])=><button key={v} className={filter===v?'fga-chip active':'fga-chip'} onClick={()=>{setFilter(v);setPicked([]);setPickAll(false);load(1,v)}}>{l}</button>)}</div>
    {items.length>0&&(!picking?<div className="fga-pick-bar"><button className="fga-chip" onClick={()=>setPicking(true)}>เลือกหลายรูปเพื่อแท็กหรือลบ</button><span>แตะค้างที่รูปเพื่อเริ่มเลือกหลายรูป</span></div>
    :<div className="fga-pick-bar" role="toolbar" aria-label="เลือกภาพเพื่อแท็กหรือลบ">
     <label className="fga-check"><input type="checkbox" checked={pickAll} onChange={e=>{setPickAll(e.target.checked);setPicked(e.target.checked?items.map(i=>i.id):[])}}/>เลือกทั้งหมดในหมวด "{filterLabel}"{hasMore?' (รวมที่ยังไม่ได้โหลด)':''}</label>
@@ -178,7 +185,7 @@ export default function ReviewClient({event,players,retentionMonths,uploadKey=0,
    </div>)}
    <div className="fga-review-grid">{items.map((item,index)=><button key={item.id} className={'fga-review-tile'+(picking&&(pickAll||picked.includes(item.id))?' picked':'')} aria-pressed={picking?(pickAll||picked.includes(item.id)):undefined} onPointerDown={e=>beginHold(e,item)} onPointerMove={moveHold} onPointerUp={endHold} onPointerCancel={endHold} onContextMenu={e=>{e.preventDefault();endHold();if(!picking)longPress(item)}} onClick={()=>{if(holdTriggered.current){holdTriggered.current=false;return}picking?togglePick(item.id):select(item)}}>{picking&&<span className="fga-tile-check" aria-hidden="true">{pickAll||picked.includes(item.id)?'✓':''}</span>}{item.thumb?<img src={item.thumb} alt="ภาพรอตรวจ" loading={index<8?"eager":"lazy"} fetchPriority={index<4?"high":"auto"} decoding="async"/>:<div className="fga-review-placeholder">ยังไม่มี Preview</div>}<strong>{item.title||(item.kind==='photo'?'รูปภาพ':'วิดีโอ')}</strong><span>{STATUS[item.status]||item.status} · {item.files.filter(originals).map(f=>f.variant==='VIDEO_ORIGINAL'?'VIDEO':f.variant).join('+')}{item.has_gps?' · GPS':''}</span></button>)}</div>
    {loading&&<p>กำลังโหลด…</p>}{items.length===0&&!loading&&<p>ยังไม่มีไฟล์ในหมวดนี้{onNavigate&&filter===''?' ':''}{onNavigate&&filter===''&&<button className="fga-link" onClick={()=>onNavigate('upload')}>ไปอัปโหลด ›</button>}</p>}{hasMore&&<button className="fga-quiet" onClick={()=>load(page+1)} disabled={loading}>โหลดเพิ่ม</button>}
-   {onNavigate&&event.status==='draft'&&publishedCount>0&&<button className="fga-next" onClick={()=>onNavigate('publish')}>อนุมัติภาพแล้ว ไปเผยแพร่ & แชร์ ›</button>}
+   {onNavigate&&<button className="fga-next" onClick={()=>onNavigate('publish')}>จัดการแท็กแล้ว ไปเผยแพร่รูปและแชร์ ›</button>}
   </>}
   </>}
 
