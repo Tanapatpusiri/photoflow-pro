@@ -15,8 +15,17 @@ export async function GET(request){
   EXISTS(SELECT 1 FROM fg_media_files f WHERE f.media_id=m.id AND f.variant='THUMB' AND f.verified_bytes=true) AS has_thumb,
   COALESCE((SELECT array_agg(mp.player_id) FROM fg_media_players mp WHERE mp.media_id=m.id),'{}'::uuid[]) AS players
   FROM fg_media m WHERE m.event_id=$1 AND ($3::text IS NULL OR m.status=$3) ORDER BY m.created_at DESC,m.id LIMIT ${PAGE} OFFSET $2`,[event,(page-1)*PAGE,status||null]);
+  // Counts cover the entire album, not just one paginated screen.
+  const countsResult=await db().query(`SELECT COUNT(*)::int AS total,
+    COUNT(*) FILTER (WHERE status='review')::int AS ready,
+    COUNT(*) FILTER (WHERE status='published')::int AS published,
+    COUNT(*) FILTER (WHERE status='uploading')::int AS uploading,
+    COUNT(*) FILTER (WHERE status='hidden')::int AS hidden,
+    COUNT(*) FILTER (WHERE ($2::text IS NULL OR status=$2))::int AS filtered
+    FROM fg_media WHERE event_id=$1`,[event,status||null]);
+  const counts=countsResult.rows[0];
   // Same-origin preview URL: the admin session is checked again every time the image loads.
   const items=q.rows.map(({has_thumb,...row})=>({...row,thumb:has_thumb?'/api/football-gallery/admin/preview?media='+row.id:null}));
-  return reply({items,hasMore:items.length===PAGE,page});
+  return reply({items,hasMore:page*PAGE<counts.filtered,page,counts});
  }catch(e){console.error('fg admin list',e?.code||'unknown');return reply({message:'โหลดไฟล์ไม่สำเร็จ'},503)}
 }

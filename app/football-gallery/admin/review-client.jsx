@@ -1,5 +1,5 @@
 'use client';
-import {useEffect,useState} from 'react';
+import {useEffect,useRef,useState} from 'react';
 import {addRetentionMonths,oneYearAfterEvent} from '../../../lib/football-gallery-retention';
 import {formatBytes,formatCaptureTime} from '../../../lib/football-gallery-format';
 const api='/api/football-gallery/admin';
@@ -10,7 +10,7 @@ const EVIDENCE_HINT='เขียนว่าหลักฐานอยู่�
 // Standard notice shown to parents; the admin can publish it as is or edit it.
 const fmtThaiDate=v=>v?new Date(v+'T00:00:00Z').toLocaleDateString('th-TH',{dateStyle:'long',timeZone:'UTC'}):'วันที่กำหนด';
 const defaultNotice=(title,until)=>`ภาพและวิดีโอในอัลบั้ม "${title}" ใช้เพื่อให้ผู้ปกครองที่ได้รับลิงก์หรือรหัสจากผู้ดูแล ดูและดาวน์โหลดภาพของบุตรหลานตนเองเท่านั้น ห้ามนำไปเผยแพร่ต่อสาธารณะ ผู้ดูแลอัลบั้มเป็นผู้ควบคุมข้อมูล อัลบั้มเปิดให้เข้าถึงถึงวันที่ ${fmtThaiDate(until)} หลังจากนั้นลิงก์และรหัสทั้งหมดจะใช้ไม่ได้ และผู้ดูแลจะลบไฟล์ตามขั้นตอน ผู้ปกครองขอถอดภาพที่มีบุตรหลานของตนได้ทุกเมื่อ โดยกด "ขอถอดภาพ" ในอัลบั้ม หรือติดต่อผู้ดูแลอัลบั้มโดยตรง`;
-const STATUS={uploading:'กำลังอัปโหลด',review:'รอตรวจ',published:'เผยแพร่แล้ว',hidden:'ซ่อน'};
+const STATUS={uploading:'กำลังอัปโหลด',review:'พร้อมจัดการ',published:'แสดงในอัลบั้ม',hidden:'ซ่อน'};
 const fmtDate=v=>v?new Date(v).toLocaleString('th-TH',{dateStyle:'medium',timeStyle:'short'}):'';
 // Calendar dates follow Thailand, matching the server's Bangkok "today".
 const inDays=n=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Bangkok'}).format(new Date(Date.now()+n*86400000));
@@ -19,13 +19,47 @@ const inDays=n=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Bangkok'}).forma
 export default function ReviewClient({event,players,retentionMonths,uploadKey=0,onUpdated,onPlayersChanged,view='all',onNavigate}){
  const show=part=>view==='all'||view===part;
  const [items,setItems]=useState([]),[active,setActive]=useState(null),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false),[error,setError]=useState(''),[info,setInfo]=useState(''),[page,setPage]=useState(1),[hasMore,setHasMore]=useState(false),[filter,setFilter]=useState('');
+ const [counts,setCounts]=useState({total:0,ready:0,published:0,uploading:0,hidden:0,filtered:0});
+ const moreRef=useRef(null),pageInProgress=useRef(false);
  const [picking,setPicking]=useState(false),[picked,setPicked]=useState([]),[pickAll,setPickAll]=useState(false);
+ const [bulkPlayer,setBulkPlayer]=useState('');
+ const holdTimer=useRef(null),holdTriggered=useRef(false),holdStart=useRef(null);
+ const longPress=item=>{
+  holdTriggered.current=true;
+  setPicking(true);
+  setPicked(previous=>previous.includes(item.id)?previous:[...previous,item.id]);
+  setPickAll(false);
+ };
+ const beginHold=(e,item)=>{
+  if(e.pointerType==='mouse')return;
+  holdTriggered.current=false;
+  holdStart.current={x:e.clientX,y:e.clientY};
+  clearTimeout(holdTimer.current);
+  holdTimer.current=setTimeout(()=>longPress(item),480);
+ };
+ const moveHold=e=>{
+  if(holdStart.current&&Math.hypot(e.clientX-holdStart.current.x,e.clientY-holdStart.current.y)>12)clearTimeout(holdTimer.current);
+ };
+ const endHold=()=>{clearTimeout(holdTimer.current);holdStart.current=null};
+ useEffect(()=>()=>clearTimeout(holdTimer.current),[]);
+
  const [tags,setTags]=useState([]),[approval,setApproval]=useState({noChildren:false}),[newName,setNewName]=useState('');
  const [privacy,setPrivacy]=useState({player:'',basis:'',evidence:'',attest:false});
  const [publish,setPublish]=useState({notice:'',edited:false,retention:addRetentionMonths(event.event_date,retentionMonths),attest:false});
  const [grants,setGrants]=useState([]),[grantLabel,setGrantLabel]=useState(''),[grantDays,setGrantDays]=useState(14),[issued,setIssued]=useState(null);
  const [thumbFailed,setThumbFailed]=useState({}),[removals,setRemovals]=useState([]),[auditLog,setAuditLog]=useState([]),[verifying,setVerifying]=useState({});
- const load=async(p=1,f=filter)=>{setLoading(true);try{const d=await get('/media?event='+encodeURIComponent(event.id)+'&page='+p+(f?'&status='+f:''));setItems(old=>p===1?d.items:[...old,...d.items]);setHasMore(d.hasMore);setPage(p);setError('')}catch(e){setError(e.message)}finally{setLoading(false)}};
+ const load=async(p=1,f=filter)=>{setLoading(true);try{const d=await get('/media?event='+encodeURIComponent(event.id)+'&page='+p+(f?'&status='+f:''));setItems(old=>p===1?d.items:[...old,...d.items]);if(d.counts)setCounts(d.counts);setHasMore(d.hasMore);setPage(p);setError('')}catch(e){setError(e.message)}finally{setLoading(false)}};
+ useEffect(()=>{
+  if(!show('review')||active||!hasMore||loading||!moreRef.current)return;
+  const observer=new IntersectionObserver(entries=>{
+   if(entries.some(e=>e.isIntersecting)&&!pageInProgress.current){
+    pageInProgress.current=true;
+    load(page+1).finally(()=>{pageInProgress.current=false});
+   }
+  },{rootMargin:'350px'});
+  observer.observe(moreRef.current);
+  return()=>observer.disconnect();
+ },[view,active,hasMore,loading,page,filter,items.length,event.id]);
  const loadSide=async()=>{try{const [g,r,a]=await Promise.all([get('/grants?event='+event.id),get('/removals?event='+event.id),get('/audit?event='+event.id)]);setGrants(g.grants);setRemovals(r.requests);setAuditLog(a.entries.slice(0,20))}catch(e){setError(e.message)}};
  useEffect(()=>{setActive(null);setItems([]);setPage(1);setPicking(false);setPicked([]);setPickAll(false);setIssued(null);setPublish({notice:'',edited:false,retention:addRetentionMonths(event.event_date,retentionMonths),attest:false});load(1);loadSide()},[event.id,event.event_date]);
  // Show newly uploaded files without leaving the current filter or the file being reviewed.
@@ -34,12 +68,22 @@ export default function ReviewClient({event,players,retentionMonths,uploadKey=0,
  // Basis and evidence usually apply to the whole match, so they are kept between photos; the confirmations are per photo.
  const select=item=>{setActive(item);setTags(item.players||[]);setApproval({noChildren:false});setNewName('');setError('');setInfo('')};
  const run=async(task,ok)=>{if(busy)return;setBusy(true);setError('');setInfo('');try{await task();if(ok)setInfo(ok)}catch(e){setError(e.message)}finally{setBusy(false)}};
+ const savePhotoTags=next=>{
+  if(!active||busy)return;
+  const original=active.players||[];
+  setTags(next);
+  setBusy(true);setError('');setInfo('');
+  post('/review',{action:'tag',eventId:event.id,mediaId:active.id,players:next})
+   .then(()=>{setItems(xs=>xs.map(x=>x.id===active.id?{...x,players:[...next]}:x));setActive(x=>x?.id===active.id?{...x,players:[...next]}:x);setInfo('บันทึกแท็กอัตโนมัติแล้ว')})
+   .catch(e=>{setTags(original);setError(e.message)})
+   .finally(()=>setBusy(false));
+ };
  const review=(action,data={},ok)=>run(async()=>{await post('/review',{action,eventId:event.id,mediaId:active?.id,...data});await load(1);setActive(null);await onUpdated?.();await loadSide()},ok);
  const savedTags=active?.players||[];
  const tagsDirty=!!active&&(tags.length!==savedTags.length||tags.some(t=>!savedTags.includes(t)));
  // Typing a name that is not in the list adds the child to the album and selects them. "Name #10" also stores the shirt number.
  const addName=e=>{e.preventDefault();const raw=newName.trim();if(!raw||busy)return;const m=/^(.*?)\s*#\s*([0-9A-Za-z-]{1,12})$/.exec(raw);const name=(m?m[1]:raw).trim().slice(0,100);if(!name)return;
-  run(async()=>{const r=await fetch(api+'/players',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({event:event.id,name,jersey:m?m[2]:''})});const d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d.message||'เพิ่มชื่อไม่สำเร็จ');await onPlayersChanged?.();setTags(t=>[...t,d.player.id]);setApproval({noChildren:false});setNewName('')},'เพิ่มชื่อแล้ว')};
+  run(async()=>{const r=await fetch(api+'/players',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({event:event.id,name,jersey:m?m[2]:''})});const d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d.message||'เพิ่มชื่อไม่สำเร็จ');await onPlayersChanged?.();const next=[...new Set([...tags,d.player.id])];await post('/review',{action:'tag',eventId:event.id,mediaId:active.id,players:next});setTags(next);setActive(a=>a?{...a,players:next}:a);setItems(xs=>xs.map(x=>x.id===active.id?{...x,players:next}:x));setNewName('')},'เพิ่มชื่อแล้ว')};
  // Permanent delete: rows first on the server, then the files in Google Drive. "all" repeats in batches.
  const removeForever=({ids,all,label})=>{
   if(!confirm(`ลบถาวร ${label}?\n\nไฟล์ต้นฉบับใน Google Drive จะถูกลบด้วย และกู้คืนไม่ได้`))return;
@@ -55,6 +99,50 @@ export default function ReviewClient({event,players,retentionMonths,uploadKey=0,
  };
  const filterLabel={'':'ทั้งหมด',review:'รอตรวจ',published:'เผยแพร่',hidden:'ซ่อน'}[filter]||'ทั้งหมด';
  const togglePick=id=>{setPickAll(false);setPicked(p=>p.includes(id)?p.filter(x=>x!==id):[...p,id])};
+ const publishReady=()=>{
+  if(event.status!=='published')return onNavigate?.('publish');
+  if(!window.confirm('รูปที่อัปโหลดและตรวจ SHA-256 ครบจะมองเห็นได้ทันทีในอัลบั้มที่เผยแพร่แล้ว รวมถึงผู้ที่มีลิงก์เดิม ยืนยันว่ามีสิทธิ์เผยแพร่ภาพเด็กและตรวจความเสี่ยงจาก GPS แล้ว?'))return;
+  run(async()=>{
+   const result=await post('/review',{action:'publish-ready',eventId:event.id,confirmed:true});
+   await load(1);await onUpdated?.();await loadSide();
+   setInfo('เปิดรูปที่พร้อมให้ผู้ชมแล้ว '+Number(result.published||0).toLocaleString('th-TH')+' รายการ');
+  });
+ };
+ const bulkTag=()=>run(async()=>{
+  if(!bulkPlayer||picked.length===0)throw Error('เลือกนักฟุตบอลและรูปก่อน');
+  const photos=items.filter(x=>picked.includes(x.id)&&x.kind==='photo'&&x.status!=='hidden');
+  if(photos.length!==picked.length)throw Error('เลือกได้เฉพาะรูปภาพที่ไม่ถูกซ่อน');
+  const r=await post('/review',{action:'tag-many',eventId:event.id,playerId:bulkPlayer,mediaIds:photos.map(x=>x.id)});
+  setItems(prev=>prev.map(x=>picked.includes(x.id)?{...x,players:[...new Set([...(x.players||[]),bulkPlayer])]}:x));
+  setPicked([]);setPicking(false);setPickAll(false);setBulkPlayer('');
+  setInfo('แท็ก '+photos.length+' รูปสำเร็จ');
+ },undefined);
+ const activeIndex=active?items.findIndex(i=>i.id===active.id):-1;
+ const navigatePhoto=async delta=>{
+  const index=activeIndex+delta;
+  if(index<0)return;
+  if(index<items.length){select(items[index]);return}
+  if(delta>0&&hasMore&&!loading){
+   setLoading(true);
+   try{
+    const d=await get('/media?event='+encodeURIComponent(event.id)+'&page='+(page+1)+(filter?'&status='+filter:''));
+    setItems(current=>[...current,...d.items]);setHasMore(d.hasMore);setPage(page+1);
+    if(d.counts)setCounts(d.counts);
+    if(d.items.length)select(d.items[0]);
+   }catch(e){setError(e.message)}finally{setLoading(false)}
+  }
+ };
+ useEffect(()=>{
+  if(!active)return;
+  const keys=e=>{
+   if(e.target?.matches?.('input,textarea,select,[contenteditable]'))return;
+   if(e.key==='ArrowRight'&&(activeIndex<items.length-1||hasMore))navigatePhoto(1);
+   if(e.key==='ArrowLeft'&&activeIndex>0)navigatePhoto(-1);
+  };
+  window.addEventListener('keydown',keys);
+  return()=>window.removeEventListener('keydown',keys);
+ },[active,activeIndex,items,hasMore,loading,page,filter,event.id]);
+
  const approve=()=>run(async()=>{
   if(tagsDirty){await post('/review',{action:'tag',eventId:event.id,mediaId:active.id,players:tags});setActive(a=>a&&{...a,players:[...tags]})}
   await post('/review',{action:'approve',eventId:event.id,mediaId:active.id,noChildrenConfirmed:tags.length===0&&approval.noChildren});
@@ -87,12 +175,12 @@ export default function ReviewClient({event,players,retentionMonths,uploadKey=0,
   {error&&<div className="fga-message" role="alert">{error}</div>}
   {info&&<div className="fga-message fga-ok" role="status">{info}</div>}
   {show('review')&&<>
-  <h2>ตรวจภาพก่อนเผยแพร่</h2><p>ผู้ปกครองจะเห็นเฉพาะภาพที่คุณอนุมัติแล้ว กดที่ภาพเพื่อแท็กนักฟุตบอลและอนุมัติ</p>
+  <h2>จัดการรูปและแท็กนักฟุตบอล</h2><p>รูปที่อัปโหลดครบพร้อมให้แท็กได้เลย เลือกหลายรูปแล้วแท็กเด็กคนเดียวพร้อมกันได้ ส่วนการเปิดรูปให้ผู้ชมเห็นยังควบคุมแยกจากหน้าเผยแพร่</p>
    {active?<div className="fga-review-detail">
-    <button className="fga-link" onClick={()=>setActive(null)}>‹ กลับรายการ</button>
+    <div className="fga-detail-nav"><button className="fga-link" onClick={()=>setActive(null)}>‹ กลับรายการ</button><span>{activeIndex+1} / {items.length}</span><button type="button" className="fga-chip" onClick={()=>navigatePhoto(-1)} disabled={busy||activeIndex<=0} aria-label="รูปก่อนหน้า">‹ ก่อนหน้า</button><button type="button" className="fga-chip" onClick={()=>navigatePhoto(1)} disabled={busy||loading||(activeIndex>=items.length-1&&!hasMore)} aria-label="รูปถัดไป">ถัดไป ›</button></div>
     <div className="fga-review-layout">
     <div className="fga-review-media">
-    {active.thumb&&!thumbFailed[active.id]?<img className="fga-review-photo" src={active.thumb} alt="ภาพสำหรับผู้ดูแลตรวจสอบก่อนเผยแพร่" onError={()=>setThumbFailed(s=>({...s,[active.id]:true}))}/>:<div className="fga-review-photo fga-review-nophoto" role="note">{active.thumb?'โหลดภาพตัวอย่างไม่ได้ ตอนนี้ระบบส่งภาพ (Download Worker) ยังไม่พร้อม เปิดไฟล์ต้นฉบับใน Google Drive เพื่อตรวจแทนได้':'ไฟล์นี้ไม่มีภาพตัวอย่าง (เช่น RAW หรือวิดีโอบางชนิด) เปิดไฟล์ต้นฉบับใน Google Drive เพื่อตรวจ'}</div>}
+    {active.thumb&&!thumbFailed[active.id]?<img className="fga-review-photo" src={active.thumb} alt="ภาพตัวอย่างสำหรับแท็กนักฟุตบอล" onError={()=>setThumbFailed(s=>({...s,[active.id]:true}))}/>:<div className="fga-review-photo fga-review-nophoto" role="note">{active.thumb?'โหลดภาพตัวอย่างไม่ได้ ตอนนี้ระบบส่งภาพ (Download Worker) ยังไม่พร้อม เปิดไฟล์ต้นฉบับใน Google Drive เพื่อตรวจแทนได้':'ไฟล์นี้ไม่มีภาพตัวอย่าง (เช่น RAW หรือวิดีโอบางชนิด) เปิดไฟล์ต้นฉบับใน Google Drive เพื่อตรวจ'}</div>}
     <h3>{active.title||active.id.slice(0,8)} · {active.kind==='photo'?'รูปภาพ':'วิดีโอ'}</h3>
     <p>สถานะ: {STATUS[active.status]||active.status}{active.captured_at?' · ถ่ายเมื่อ '+formatCaptureTime(active.captured_at):''}</p>
    {(()=>{const list=<div className="fga-items">{active.files.map(f=><div key={f.id}><strong>{f.variant} · {f.filename}</strong><span>{formatBytes(f.bytes)} · {f.pending?'อัปโหลดยังไม่ครบ':!originals(f)?'ภาพตัวอย่าง':f.verifiedHash?'ไฟล์ครบถ้วน ✓':verifying[f.id]!==undefined?'กำลังตรวจ '+verifying[f.id]+'%':'ยังไม่ได้ตรวจความครบถ้วน'}</span>{!f.verifiedHash&&!f.pending&&originals(f)&&<button onClick={()=>verify(f)} disabled={busy}>ตรวจความครบถ้วน</button>}</div>)}</div>;
@@ -102,40 +190,41 @@ export default function ReviewClient({event,players,retentionMonths,uploadKey=0,
     <div className="fga-review-form">
     {active.status==='hidden'?<button className="fga-quiet" disabled={busy} onClick={()=>review('restore',{},'กู้คืนแล้ว ต้องตรวจใหม่ก่อนเผยแพร่')}>กู้คืนเพื่อตรวจใหม่</button>:<>
     <section className="fga-step-card">
-     <h3>ใครอยู่ในภาพนี้</h3>
-     <p className="fga-hint">แตะชื่อเด็กทุกคนที่เห็นหน้าในภาพ ถ้าไม่มีในรายการ พิมพ์ชื่อเพิ่มได้เลย</p>
-     <div className="fga-pick">{players.map(p=><label key={p.id} className={tags.includes(p.id)?'on':''}><input type="checkbox" checked={tags.includes(p.id)} onChange={e=>{setTags(s=>e.target.checked?[...s,p.id]:s.filter(x=>x!==p.id));if(e.target.checked)setApproval({noChildren:false})}}/>{p.name}{p.jersey?' #'+p.jersey:''}</label>)}
-      <label className={tags.length===0&&approval.noChildren?'on fga-pick-none':'fga-pick-none'}><input type="checkbox" checked={tags.length===0&&approval.noChildren} onChange={e=>{if(e.target.checked)setTags([]);setApproval({noChildren:e.target.checked})}}/>ไม่มีเด็กที่จำหน้าได้</label>
+     <h3>แท็กชื่อนักฟุตบอล</h3>
+     <p className="fga-hint">แตะชื่อเด็กเพื่อแท็ก รูปจะบันทึกทันทีโดยไม่ต้องกดอนุมัติซ้ำ หากต้องแท็กหลายรูปพร้อมกันให้กดค้างรูปจากหน้ารวม</p>
+     <div className="fga-pick">{players.map(p=><label key={p.id} className={tags.includes(p.id)?'on':''}><input type="checkbox" checked={tags.includes(p.id)} disabled={busy} onChange={e=>savePhotoTags(e.target.checked?[...tags,p.id]:tags.filter(x=>x!==p.id))}/>{p.name}{p.jersey?' #'+p.jersey:''}</label>)}
      </div>
      <form className="fga-add-name" onSubmit={addName}><input value={newName} onChange={e=>setNewName(e.target.value)} placeholder="พิมพ์ชื่อเด็ก เช่น น้องบอล #10" maxLength={100} aria-label="เพิ่มชื่อเด็กที่ไม่มีในรายการ"/><button className="fga-quiet" disabled={busy||!newName.trim()}>เพิ่ม</button></form>
-     {tagsDirty&&<p className="fga-hint" role="status">ระบบจะบันทึกชื่อที่เลือกให้ตอนกดอนุมัติ</p>}
+     {busy&&<p className="fga-hint" role="status">กำลังบันทึกแท็ก…</p>}
      {active.has_gps&&<p className="fga-gps-note" role="note">ไฟล์นี้มีตำแหน่งที่ถ่าย (GPS) ผู้ปกครองที่ดาวน์โหลดไฟล์ต้นฉบับจะเห็นตำแหน่งนี้ ถ้าไม่ควรเปิดเผย ให้กด "ซ่อนภาพนี้"</p>}
     </section>
-    <Missing items={approveMissing}/>
     <div className="fga-approve-bar">
-     <button disabled={busy||approveMissing.length>0} onClick={approve}>{approveMissing.length>0?`ยังขาด ${approveMissing.length} ข้อ`:tagsDirty?'บันทึกแท็กและอนุมัติภาพนี้':'อนุมัติภาพนี้'}</button>
      <button className="fga-danger" disabled={busy} onClick={()=>review('hide',{},'ซ่อนแล้ว')}>ซ่อนภาพนี้</button>
     </div></>}
     <button className="fga-link fga-delete-link" disabled={busy} onClick={()=>removeForever({ids:[active.id],label:'ภาพนี้'})}>ลบภาพนี้ถาวร</button>
     </div>
     </div>
   </div>:<>
-   <div className="fga-actions">{[['','ทั้งหมด'],['review','รอตรวจ'],['published','เผยแพร่'],['hidden','ซ่อน']].map(([v,l])=><button key={v} className={filter===v?'fga-chip active':'fga-chip'} onClick={()=>{setFilter(v);setPicked([]);setPickAll(false);load(1,v)}}>{l}</button>)}</div>
-   {items.length>0&&(!picking?<div className="fga-pick-bar"><button className="fga-chip" onClick={()=>setPicking(true)}>เลือกภาพเพื่อลบ</button></div>
-   :<div className="fga-pick-bar" role="toolbar" aria-label="เลือกภาพเพื่อลบ">
+   <div className="fga-actions">{[['','ทั้งหมด'],['review','พร้อมจัดการ'],['published','แสดงในอัลบั้ม'],['hidden','ซ่อน']].map(([v,l])=><button key={v} className={filter===v?'fga-chip active':'fga-chip'} onClick={()=>{setFilter(v);setPicked([]);setPickAll(false);load(1,v)}}>{l}</button>)}</div>
+   {items.length>0&&(!picking?<div className="fga-pick-bar"><button className="fga-chip" onClick={()=>setPicking(true)}>เลือกหลายรูปเพื่อแท็กหรือลบ</button><span>แตะค้างที่รูปเพื่อเริ่มเลือกหลายรูป</span></div>
+   :<div className="fga-pick-bar" role="toolbar" aria-label="เลือกภาพเพื่อแท็กหรือลบ">
     <label className="fga-check"><input type="checkbox" checked={pickAll} onChange={e=>{setPickAll(e.target.checked);setPicked(e.target.checked?items.map(i=>i.id):[])}}/>เลือกทั้งหมดในหมวด "{filterLabel}"{hasMore?' (รวมที่ยังไม่ได้โหลด)':''}</label>
     <span>{pickAll?`ทั้งหมด ${items.length.toLocaleString('th-TH')}${hasMore?'+':''} รายการ`:`เลือกแล้ว ${picked.length.toLocaleString('th-TH')} รายการ`}</span>
+    <label className="fga-bulk-player">แท็กเด็กให้รูปที่เลือก<select aria-label="เลือกเด็กที่ต้องการแท็ก" value={bulkPlayer} onChange={e=>setBulkPlayer(e.target.value)}><option value="">เลือกนักฟุตบอล</option>{players.map(p=><option key={p.id} value={p.id}>{p.name}{p.jersey?' #'+p.jersey:''}</option>)}</select></label>
+    <button className="fga-chip fga-bulk-save" disabled={busy||!bulkPlayer||picked.length===0||picked.some(id=>items.find(x=>x.id===id)?.kind!=='photo')} onClick={bulkTag}>แท็ก {picked.length} รูปพร้อมกัน</button>
     <button className="fga-chip fga-chip-danger" disabled={busy||(!pickAll&&picked.length===0)} onClick={()=>removeForever(pickAll?{all:true,label:`ทั้งหมดในหมวด "${filterLabel}" (${items.length.toLocaleString('th-TH')}${hasMore?'+':''} รายการ)`}:{ids:picked,label:`${picked.length.toLocaleString('th-TH')} รายการที่เลือก`})}>ลบถาวร</button>
     <button className="fga-chip" onClick={()=>{setPicking(false);setPicked([]);setPickAll(false)}}>ยกเลิก</button>
    </div>)}
-   <div className="fga-review-grid">{items.map((item,index)=><button key={item.id} className={'fga-review-tile'+(picking&&(pickAll||picked.includes(item.id))?' picked':'')} aria-pressed={picking?(pickAll||picked.includes(item.id)):undefined} onClick={()=>picking?togglePick(item.id):select(item)}>{picking&&<span className="fga-tile-check" aria-hidden="true">{pickAll||picked.includes(item.id)?'✓':''}</span>}{item.thumb?<img src={item.thumb} alt="ภาพรอตรวจ" loading={index<8?"eager":"lazy"} fetchPriority={index<4?"high":"auto"} decoding="async"/>:<div className="fga-review-placeholder">ยังไม่มี Preview</div>}<strong>{item.title||(item.kind==='photo'?'รูปภาพ':'วิดีโอ')}</strong><span>{STATUS[item.status]||item.status} · {item.files.filter(originals).map(f=>f.variant==='VIDEO_ORIGINAL'?'VIDEO':f.variant).join('+')}{item.has_gps?' · GPS':''}</span></button>)}</div>
-   {loading&&<p>กำลังโหลด…</p>}{items.length===0&&!loading&&<p>ยังไม่มีไฟล์ในหมวดนี้{onNavigate&&filter===''?' ':''}{onNavigate&&filter===''&&<button className="fga-link" onClick={()=>onNavigate('upload')}>ไปอัปโหลด ›</button>}</p>}{hasMore&&<button className="fga-quiet" onClick={()=>load(page+1)} disabled={loading}>โหลดเพิ่ม</button>}
-   {onNavigate&&event.status==='draft'&&publishedCount>0&&<button className="fga-next" onClick={()=>onNavigate('publish')}>อนุมัติภาพแล้ว ไปเผยแพร่ & แชร์ ›</button>}
+   <p className="fga-review-count" role="status">แสดง {items.length.toLocaleString('th-TH')} จาก {Number(counts.filtered||0).toLocaleString('th-TH')} รายการในหมวดนี้ · รวมทั้งอัลบั้ม {Number(counts.total||0).toLocaleString('th-TH')} รูป/คลิป ({Number(counts.ready||0).toLocaleString('th-TH')} พร้อมจัดการ, {Number(counts.uploading||0).toLocaleString('th-TH')} กำลังอัปโหลด)</p>
+   <div className="fga-review-grid">{items.map((item,index)=><button key={item.id} className={'fga-review-tile'+(picking&&(pickAll||picked.includes(item.id))?' picked':'')} aria-pressed={picking?(pickAll||picked.includes(item.id)):undefined} onPointerDown={e=>beginHold(e,item)} onPointerMove={moveHold} onPointerUp={endHold} onPointerCancel={endHold} onContextMenu={e=>{e.preventDefault();endHold();if(!picking)longPress(item)}} onClick={()=>{if(holdTriggered.current){holdTriggered.current=false;return}picking?togglePick(item.id):select(item)}}>{picking&&<span className="fga-tile-check" aria-hidden="true">{pickAll||picked.includes(item.id)?'✓':''}</span>}{item.thumb?<img src={item.thumb} alt="ภาพรอตรวจ" loading={index<8?"eager":"lazy"} fetchPriority={index<4?"high":"auto"} decoding="async"/>:<div className="fga-review-placeholder">ยังไม่มี Preview</div>}<strong>{item.title||(item.kind==='photo'?'รูปภาพ':'วิดีโอ')}</strong><span>{STATUS[item.status]||item.status} · {item.files.filter(originals).map(f=>f.variant==='VIDEO_ORIGINAL'?'VIDEO':f.variant).join('+')}{item.has_gps?' · GPS':''}</span></button>)}</div>
+   {loading&&<p>กำลังโหลด…</p>}{items.length===0&&!loading&&<p>ยังไม่มีไฟล์ในหมวดนี้{onNavigate&&filter===''?' ':''}{onNavigate&&filter===''&&<button className="fga-link" onClick={()=>onNavigate('upload')}>ไปอัปโหลด ›</button>}</p>}{hasMore&&<div ref={moreRef} className="fga-more-anchor"><button className="fga-quiet" onClick={()=>load(page+1)} disabled={loading}>โหลดรูปเพิ่ม ({(counts.filtered-items.length).toLocaleString('th-TH')} รายการที่เหลือ)</button></div>}
+   {event.status==='published'&&Number(counts.ready)>0&&<div className="fga-release-row"><p>หลังแท็กเสร็จ สามารถเปิดรูปที่พร้อมให้ผู้ชมได้พร้อมกันครั้งเดียว โดยไม่ต้องอนุมัติทีละภาพ</p><button disabled={busy} onClick={publishReady}>เปิดรูปที่พร้อมให้ผู้ชมทั้งหมด ({counts.ready})</button></div>}
+   {onNavigate&&event.status!=='published'&&<button className="fga-next" onClick={()=>onNavigate('publish')}>จัดการแท็กแล้ว ไปเผยแพร่รูปและแชร์ ›</button>}
   </>}
   </>}
 
   {show('players')&&<div className="fga-review-policy">
-   <h3>สิทธิ์ของนักฟุตบอล</h3><p>บันทึกฐานกฎหมายของเด็กแต่ละคนก่อนอนุมัติภาพที่แท็กเด็กคนนั้น หากผู้ปกครองถอนความยินยอม ให้ถอนสิทธิ์ ภาพที่แท็กเด็กคนนั้นจะถูกปิดทันที</p>
+   <h3>สิทธิ์ของนักฟุตบอล</h3><p>ข้อมูลสิทธิ์เด็กอยู่แยกจากการแท็ก ไม่ต้องกรอกซ้ำทุกภาพ หากผู้ปกครองถอนความยินยอม ให้บันทึกการถอนสิทธิ์เพื่อปิดภาพที่เกี่ยวข้องทันที</p>
    <select value={privacy.player} onChange={e=>setPrivacy(p=>({...p,player:e.target.value}))}><option value="">เลือกนักฟุตบอล</option>{players.map(p=><option key={p.id} value={p.id}>{p.name} {p.jersey&&'#'+p.jersey} · {p.privacy_recorded?'บันทึกแล้ว':'ยังไม่บันทึก'}</option>)}</select>
    {selectedPlayer?.privacy_recorded?<button className="fga-danger" disabled={busy} onClick={()=>confirm('ถอนสิทธิ์ของ '+selectedPlayer.name+'?')&&savePrivacy('revoke-player-privacy')}>ถอนสิทธิ์ / ผู้ปกครองถอนความยินยอม</button>:<>
    <label>ฐานการอนุญาต<input value={privacy.basis} onChange={e=>setPrivacy(p=>({...p,basis:e.target.value}))} placeholder="เช่น ผู้ปกครองยินยอมให้เผยแพร่ในอัลบั้มส่วนตัวของงานนี้"/><small className="fga-hint">{BASIS_HINT}</small></label><label>หลักฐานอ้างอิง<input value={privacy.evidence} onChange={e=>setPrivacy(p=>({...p,evidence:e.target.value}))} placeholder="เช่น แบบฟอร์มยินยอม เลขที่ 2569-014"/><small className="fga-hint">{EVIDENCE_HINT}</small></label>
@@ -146,6 +235,7 @@ export default function ReviewClient({event,players,retentionMonths,uploadKey=0,
   {show('publish')&&<>
   <div className="fga-review-policy">
    <h3>เปิดงานให้ผู้ปกครอง</h3>
+   {event.status==='published'&&<div className="fga-release-row"><p>รูปใหม่ที่อัปโหลดครบและตรวจ SHA-256 ผ่านแล้วสามารถเปิดให้ผู้ชมเห็นพร้อมกันได้โดยไม่ต้องกดอนุมัติทีละภาพ ผู้ชมที่มีลิงก์เดิมอาจเห็นทันทีเมื่อเปิดรูป</p><button disabled={busy||counts.ready===0} onClick={publishReady}>เปิดรูปที่พร้อมทั้งหมด ({Number(counts.ready||0)})</button></div>}
    {event.status==='published'?<><p>เผยแพร่แล้ว{event.retention_until?' · เข้าถึงถึง '+new Date(event.retention_until).toLocaleDateString('th-TH',{dateStyle:'medium',timeZone:'UTC'}):''} ระงับได้ทันทีหากพบปัญหา</p>{(event.deletion_after||oneYearAfterEvent(event.event_date))&&<p>เตรียมตรวจเพื่อลบได้หลังวันที่ {new Date(event.deletion_after||oneYearAfterEvent(event.event_date)).toLocaleDateString('th-TH',{dateStyle:'medium',timeZone:'UTC'})} และต้องรอเจ้าของยืนยัน</p>}<button className="fga-danger" disabled={busy} onClick={()=>confirm('ระงับการเผยแพร่ทั้งงาน? ผู้ปกครองทุกคนจะเข้าไม่ได้จนกว่าจะเปิดอีกครั้ง')&&review('suspend-event',{},'ระงับการเผยแพร่แล้ว')}>ระงับการเผยแพร่ทั้งงาน</button></>
    :event.status==='suspended'?<><p>งานนี้ถูกระงับอยู่ ผู้ปกครองเข้าไม่ได้</p><button disabled={busy} onClick={()=>review('resume-event',{},'เปิดการเผยแพร่อีกครั้งแล้ว')}>เปิดการเผยแพร่อีกครั้ง</button></>
    :event.status==='archived'?<p>งานนี้เก็บถาวรแล้ว ผู้ปกครองเข้าไม่ได้</p>
@@ -156,8 +246,8 @@ export default function ReviewClient({event,players,retentionMonths,uploadKey=0,
      {publish.edited&&<button className="fga-link" type="button" onClick={()=>setPublish(p=>({...p,notice:'',edited:false}))}>ใช้ข้อความมาตรฐาน</button>}
     </details>
     <p>{event.event_date&&retentionMonths?`เข้าถึงได้ไม่เกิน ${retentionMonths} เดือนหลังวันจัดงาน`:!event.event_date?'กรุณาบันทึกวันจัดงานก่อนเผยแพร่':'กำลังโหลดระยะเวลาที่เจ้าของตั้ง'} เมื่อครบกำหนดระบบจะปิดการเข้าถึง แต่ไฟล์ยังอยู่ในที่เก็บจนกว่าเจ้าของจะยืนยันและดำเนินการลบ</p>{event.event_date&&retentionMonths&&publish.retention>addRetentionMonths(event.event_date,retentionMonths)&&<p role="alert">กรุณาปรับวันสิ้นสุดให้ไม่เกินระยะเวลาที่ตั้งไว้</p>}
-    <label className="fga-check"><input type="checkbox" checked={publish.attest} onChange={e=>setPublish(p=>({...p,attest:e.target.checked}))}/>ยืนยันว่าผู้ปกครองของเด็กทุกคนในภาพที่อนุมัติ อนุญาตให้เผยแพร่ในอัลบั้มส่วนตัวนี้แล้ว และข้อความแจ้งผู้ปกครองถูกต้อง</label>
-    {event.published===0&&<p className="fga-message" role="note">ยังไม่มีภาพที่อนุมัติ ถ้าเผยแพร่ตอนนี้ ผู้ปกครองจะเห็นอัลบั้มว่าง</p>}<Missing items={publishMissing}/>
+    <label className="fga-check"><input type="checkbox" checked={publish.attest} onChange={e=>setPublish(p=>({...p,attest:e.target.checked}))}/>ยืนยันว่ามีฐานทางกฎหมายสำหรับเผยแพร่ภาพเด็กทั้งหมดที่อัปโหลดในอัลบั้มนี้ และข้อความแจ้งผู้ปกครองถูกต้อง</label>
+    {event.published===0&&counts.ready===0&&<p className="fga-message" role="note">ยังไม่มีรูปที่ตรวจไฟล์ต้นฉบับครบ หากเผยแพร่ตอนนี้ ผู้ปกครองจะเห็นอัลบั้มว่าง</p>}<Missing items={publishMissing}/>
     <button disabled={busy||publishMissing.length>0} onClick={()=>review('publish-event',{notice,retentionUntil:publish.retention,confirmed:publish.attest},'เผยแพร่อัลบั้มส่วนตัวแล้ว')}>เผยแพร่อัลบั้มส่วนตัว</button></>}
   </div>
 

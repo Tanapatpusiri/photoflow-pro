@@ -99,25 +99,25 @@ function AlbumStatus({album,onReview}){
  const n=v=>v.toLocaleString('th-TH');
  return <div className="fga-album-status" role="note">
   <strong>สถานะอัลบั้มตอนนี้</strong>
-  <p>{album.media>0?`มีภาพ/วิดีโอในอัลบั้มแล้ว ${n(album.media)} รายการ · รอตรวจ ${n(album.pending)} · ${album.live?'อัลบั้มเผยแพร่แล้ว':'ยังไม่เผยแพร่'}`:'อัลบั้มนี้ยังไม่มีภาพ'}</p>
-  {album.pending>0&&onReview&&<button className="fga-link" onClick={onReview}>ไปตรวจภาพที่ค้างอยู่ ›</button>}
+  <p>{album.media>0?`มีภาพ/วิดีโอในอัลบั้มแล้ว ${n(album.media)} รายการ · พร้อมจัดการ ${n(album.pending)} · ${album.live?'อัลบั้มเปิดแล้ว แต่รูปที่ยังพร้อมจัดการไม่ได้แสดง':'ยังไม่เผยแพร่'}`:'อัลบั้มนี้ยังไม่มีภาพ'}</p>
+  {album.pending>0&&onReview&&<button className="fga-link" onClick={onReview}>ไปแท็กภาพ ›</button>}
  </div>;
 }
 // Steps of this upload round only: they start fresh every time new files are chosen.
 function Steps({files,running,progress,summary,album}){
  const uploaded=!!summary&&!summary.stopped&&summary.failed===0&&summary.skipped===0;
- const reviewed=uploaded&&album.pending===0;
- const done=[files>0,uploaded,reviewed,reviewed&&album.live];
+ const reviewed=uploaded; // tagging is optional; album-level publication remains explicit
+ const done=[files>0,uploaded,reviewed,reviewed&&album.live&&album.pending===0];
  // Only the first unfinished step is the current one.
  const current=done.indexOf(false);
  const n=v=>v.toLocaleString('th-TH');
- const notes=[files>0?n(files)+' ไฟล์':'ยังไม่ได้เลือก',running?`${n(progress)}/${n(files)} ไฟล์`:summary&&summary.failed?`ไม่สำเร็จ ${n(summary.failed)} ไฟล์`:summary&&(summary.stopped||summary.skipped)?'หยุดไว้':'',uploaded&&album.pending>0?`รอตรวจ ${n(album.pending)}`:'',''];
- const steps=['เลือกไฟล์','อัปโหลด','ตรวจภาพ','เผยแพร่'].map((label,i)=>[label,done[i]&&(current===-1||i<current)?'done':i===current?'now':'todo',notes[i]]);
+ const notes=[files>0?n(files)+' ไฟล์':'ยังไม่ได้เลือก',running?`${n(progress)}/${n(files)} ไฟล์`:summary&&summary.failed?`ไม่สำเร็จ ${n(summary.failed)} ไฟล์`:summary&&(summary.stopped||summary.skipped)?'หยุดไว้':'',uploaded&&album.pending>0?`พร้อมแท็ก ${n(album.pending)}`:'',''];
+ const steps=['เลือกไฟล์','อัปโหลด','แท็กชื่อ (ไม่บังคับ)','เผยแพร่'].map((label,i)=>[label,done[i]&&(current===-1||i<current)?'done':i===current?'now':'todo',notes[i]]);
  return <div className="fga-round"><small className="fga-round-title">ขั้นตอนของรอบอัปโหลดนี้</small><ol className="fga-steps" aria-label="ขั้นตอนของรอบอัปโหลดนี้">{steps.map(([label,state,note],i)=><li key={label} className={state} aria-current={state==='now'?'step':undefined}><span>{state==='done'?'✓':i+1}</span><strong>{label}</strong>{note&&<small>{note}</small>}</li>)}</ol></div>;
 }
 
 export default function Uploader({eventId,album={media:0,pending:0,live:false},onUploaded,onReview,onPublish}){
- const [files,setFiles]=useState([]),[camera,setCamera]=useState(''),[running,setRunning]=useState(false),[errors,setErrors]=useState([]),[status,setStatus]=useState({}),[summary,setSummary]=useState(null),[progress,setProgress]=useState(0),[failedNames,setFailedNames]=useState([]);
+ const [files,setFiles]=useState([]),[camera,setCamera]=useState(''),[running,setRunning]=useState(false),[errors,setErrors]=useState([]),[status,setStatus]=useState({}),[summary,setSummary]=useState(null),[progress,setProgress]=useState(0),[failedNames,setFailedNames]=useState([]),[showAllFiles,setShowAllFiles]=useState(false);
  const controller=useRef(null);
  const set=(key,value)=>setStatus(s=>({...s,[key]:value}));
  async function uploadOne(f,key,batch,signal){
@@ -174,7 +174,7 @@ export default function Uploader({eventId,album={media:0,pending:0,live:false},o
    if(/\.jpe?g$/i.test(f.name))await savePreview(info.mediaId,await createPreview(f));
    else if(/\.(mp4|mov|m4v)$/i.test(f.name))await savePreview(info.mediaId,await videoPoster(f));
   }catch(e){setErrors(s=>[...s,f.name+': '+e.message+' (ไฟล์ต้นฉบับอัปโหลดครบแล้ว)'])}
-  set(key,'เสร็จ · รอตรวจสิทธิ์ก่อนเผยแพร่');
+  set(key,'อัปโหลดและตรวจไฟล์ครบแล้ว · พร้อมแท็ก');
   return 'ok';
  }
  async function run(){
@@ -182,7 +182,10 @@ export default function Uploader({eventId,album={media:0,pending:0,live:false},o
   setRunning(true);setErrors([]);setSummary(null);setProgress(0);setFailedNames([]);
   controller.current=new AbortController();
   // JPEG and RAW of the same frame must be in the same batch to be paired into one item.
-  const batch=crypto.randomUUID();let cursor=0;const counts={ok:0,duplicate:0,failed:0};
+  const batch=crypto.randomUUID(),batchContext={eventId,batch,selected:files.length,bytes:files.reduce((sum,file)=>sum+file.size,0)};
+  const started=await post('/api/football-gallery/admin/upload-batches',{action:'begin',...batchContext});
+  if(!started.ok){setRunning(false);setErrors([started.data.message||'บันทึกจำนวนไฟล์ที่เลือกไม่สำเร็จ กรุณาลองใหม่']);return}
+  let cursor=0;const counts={ok:0,duplicate:0,failed:0};
   const worker=async()=>{
    while(cursor<files.length&&!controller.current.signal.aborted){
     const index=cursor++,f=files[index],key=f.name+'-'+index;
@@ -192,7 +195,10 @@ export default function Uploader({eventId,album={media:0,pending:0,live:false},o
    }
   };
   await Promise.all([worker(),worker(),worker()]);
-  const stopped=controller.current.signal.aborted;setRunning(false);setSummary({...counts,skipped:files.length-counts.ok-counts.duplicate-counts.failed,stopped});onUploaded?.();
+  const stopped=controller.current.signal.aborted,skipped=files.length-counts.ok-counts.duplicate-counts.failed;
+  const recorded=await post('/api/football-gallery/admin/upload-batches',{action:'end',...batchContext,...counts,skipped,stopped}).catch(()=>({ok:false,data:{message:'บันทึกยอดอัปโหลดบนเซิร์ฟเวอร์ไม่สำเร็จ'}}));
+  if(!recorded.ok)setErrors(xs=>[...xs,recorded.data.message||'ยังยืนยันยอดชุดอัปโหลดไม่ได้']);
+  setRunning(false);setSummary({...counts,skipped,stopped,reconciled:recorded.ok,serverStarted:recorded.data.serverStarted,serverVerified:recorded.data.serverVerified});onUploaded?.();
  }
  const total=files.reduce((n,f)=>n+f.size,0);
  return <div className="fga-uploader">
@@ -200,19 +206,20 @@ export default function Uploader({eventId,album={media:0,pending:0,live:false},o
   <Steps files={files.length} running={running} progress={progress} summary={summary} album={album}/>
   <label>ชื่อกล้อง (ไม่บังคับ)<input value={camera} onChange={e=>setCamera(e.target.value)} placeholder="เช่น Canon R6 กล้อง 1" disabled={running}/></label>
   <label>เลือกรูปหรือวิดีโอ (เลือกได้หลายไฟล์พร้อมกัน)<input type="file" multiple disabled={running} accept=".jpg,.jpeg,.arw,.cr2,.cr3,.nef,.raf,.dng,.orf,.rw2,.pef,.srw,.3fr,.iiq,.mov,.mp4,.m4v" onChange={e=>{setFiles(Array.from(e.target.files||[]));setStatus({});setErrors([]);setSummary(null)}}/></label>
-  <p>เลือกแล้ว {files.length.toLocaleString('th-TH')} ไฟล์ · {fmtBytes(total)} · ถ้ามีไฟล์ JPEG และ RAW ของรูปเดียวกัน ให้เลือกพร้อมกัน ระบบจะรวมเป็นรูปเดียว</p>
+  <p role="status"><strong>เบราว์เซอร์ส่งไฟล์ที่เลือกมา {files.length.toLocaleString('th-TH')} ไฟล์</strong> · {fmtBytes(total)} · หากตั้งใจเลือก 300 รูปแต่ตรงนี้น้อยกว่า 300 ให้เลือกไฟล์ใหม่ก่อนเริ่ม (ไฟล์ JPEG และ RAW ของรูปเดียวกันให้เลือกพร้อมกัน ระบบจะจับคู่ให้)</p>
   {running?<button onClick={()=>controller.current?.abort()} className="fga-quiet-btn">หยุดชั่วคราว (อัปโหลดต่อได้ภายหลัง)</button>:<button disabled={files.length===0} onClick={run}>{Object.keys(status).length?'อัปโหลดต่อ / ลองใหม่':'เริ่มอัปโหลด'}</button>}
   {running&&<div className="fga-progress" role="progressbar" aria-valuemin={0} aria-valuemax={files.length} aria-valuenow={progress} aria-label="ความคืบหน้าการอัปโหลด"><i style={{width:(files.length?progress/files.length*100:0)+'%'}}/></div>}
   {summary&&<div role="status" className="fga-summary">
-   <strong>{summary.stopped?'หยุดอัปโหลดไว้ชั่วคราว':summary.failed?'อัปโหลดเสร็จ แต่มีบางไฟล์ไม่สำเร็จ':'อัปโหลดเสร็จแล้ว'}</strong>
+   <strong>{summary.stopped?'หยุดอัปโหลดไว้ชั่วคราว':summary.failed||summary.skipped?'ยังมีไฟล์ที่ไม่สำเร็จหรือไม่ได้เริ่ม':!summary.reconciled?'อัปโหลดแล้ว แต่ยังบันทึกยอดชุดอัปโหลดไม่สำเร็จ':'ตรวจสอบไฟล์ที่เลือกครบแล้ว'}</strong><p>เลือก {files.length.toLocaleString('th-TH')} ไฟล์ · สำเร็จ {summary.ok.toLocaleString('th-TH')} · มีอยู่แล้ว {summary.duplicate.toLocaleString('th-TH')} · ไม่สำเร็จ {summary.failed.toLocaleString('th-TH')} · ยังไม่ได้เริ่ม {summary.skipped.toLocaleString('th-TH')}</p>
    <dl><div><dt>สำเร็จ</dt><dd>{summary.ok.toLocaleString('th-TH')}</dd></div><div><dt>มีอยู่แล้ว (ข้าม)</dt><dd>{summary.duplicate.toLocaleString('th-TH')}</dd></div><div className={summary.failed?'bad':''}><dt>ไม่สำเร็จ</dt><dd>{summary.failed.toLocaleString('th-TH')}</dd></div>{summary.skipped>0&&<div><dt>ยังไม่ได้เริ่ม</dt><dd>{summary.skipped.toLocaleString('th-TH')}</dd></div>}</dl>
-   {failedNames.length>0&&<p>ไฟล์ที่ไม่สำเร็จ: {failedNames.slice(0,10).join(', ')}{failedNames.length>10?` และอีก ${failedNames.length-10} ไฟล์`:''} · กด "อัปโหลดต่อ / ลองใหม่" ระบบจะอัปโหลดเฉพาะไฟล์ที่ยังไม่ครบ ไฟล์ที่สำเร็จแล้วจะถูกข้าม</p>}
+   {failedNames.length>0&&<details open className="fga-upload-failures"><summary>ดูรายชื่อไฟล์ที่ไม่สำเร็จทั้งหมด ({failedNames.length} ไฟล์)</summary><ul>{failedNames.map((name,i)=><li key={i}>{name}</li>)}</ul><p>เลือกไฟล์ชุดเดิมและกดอัปโหลดต่อ ระบบตรวจ SHA-256 แล้วข้ามต้นฉบับที่มีครบอยู่แล้ว</p></details>}
    {summary.duplicate>0&&<p>ไฟล์ที่ "มีอยู่แล้ว" คือไฟล์เดียวกันที่เคยอัปโหลดเข้าอัลบั้มนี้ ระบบไม่เก็บซ้ำ</p>}
-   {(summary.ok>0||album.pending>0)&&onReview&&<button className="fga-primary" onClick={onReview}>ไปตรวจภาพ{album.pending>0?` (รอตรวจ ${album.pending.toLocaleString('th-TH')})`:''} ›</button>}
+   {summary.reconciled&&<p className="fga-upload-audit">ระบบบันทึกจำนวนที่เลือกและสรุปผลชุดอัปโหลดไว้บนเซิร์ฟเวอร์แล้ว · ไฟล์ใหม่ที่เริ่มในชุดนี้ {Number(summary.serverStarted||0).toLocaleString('th-TH')} · ตรวจครบ {Number(summary.serverVerified||0).toLocaleString('th-TH')} (ไม่นับไฟล์ที่มีอยู่แล้วหรือไฟล์อัปโหลดต่อจากรอบก่อน)</p>}
+   {(summary.ok>0||album.pending>0)&&onReview&&<button className="fga-primary" onClick={onReview}>ไปแท็กภาพ{album.pending>0?` (${album.pending.toLocaleString('th-TH')} รูปพร้อมจัดการ)`:''} ›</button>}
   </div>}
-  {!summary&&!running&&files.length===0&&album.media>0&&album.pending===0&&!album.live&&onPublish&&<button className="fga-quiet-btn" onClick={onPublish}>ตรวจครบแล้ว ไปเผยแพร่ ›</button>}
-  {files.length>0&&<div className="fga-upload-list">{files.slice(0,200).map((f,i)=><div key={i}><span>{f.name} · {fmtBytes(f.size)}</span><small>{status[f.name+'-'+i]||'รออัปโหลด'}</small></div>)}{files.length>200&&<p>แสดงสถานะ 200 ไฟล์แรกจาก {files.length.toLocaleString('th-TH')} ไฟล์</p>}</div>}
+  {!summary&&!running&&files.length===0&&album.media>0&&!album.live&&onPublish&&<button className="fga-quiet-btn" onClick={onPublish}>อัปโหลดครบแล้ว ไปเผยแพร่ ›</button>}
+  {files.length>0&&<><p className="fga-upload-count">{showAllFiles?'แสดงไฟล์ครบทั้งหมด':`แสดง 200 ไฟล์แรกจาก ${files.length.toLocaleString('th-TH')} ไฟล์ที่เลือก`}</p>{files.length>200&&<button className="fga-quiet-btn" type="button" onClick={()=>setShowAllFiles(v=>!v)}>{showAllFiles?'ย่อรายการไฟล์':'ดูสถานะครบทุกไฟล์ ('+files.length.toLocaleString('th-TH')+')'}</button>}<div className="fga-upload-list">{(showAllFiles?files:files.slice(0,200)).map((f,i)=><div key={i}><span>{f.name} · {fmtBytes(f.size)}</span><small>{status[f.name+'-'+i]||'รออัปโหลด'}</small></div>)}</div></>}
   {errors.length>0&&<div role="alert">{errors.slice(-12).map((e,i)=><p key={i} className="fga-message">{e}</p>)}</div>}
-  <p>ระบบเก็บไฟล์ต้นฉบับตามจริง ไม่ย่อขนาดและไม่แก้ไขรูป ถ้าอัปโหลดค้างหรือหยุดไว้ กลับมากดอัปโหลดต่อได้ ผู้ปกครองจะยังมองไม่เห็นรูปจนกว่าคุณจะตรวจภาพและกดเผยแพร่</p>
+  <p>ระบบเก็บไฟล์ต้นฉบับตามจริง ไม่ย่อขนาดและไม่แก้ไขรูป ถ้าอัปโหลดค้างหรือหยุดไว้ ให้เลือกไฟล์ชุดเดิมแล้วกดอัปโหลดต่อได้ ระบบตรวจไฟล์ที่มีอยู่แล้วและจะไม่เก็บซ้ำ การแท็กทำได้ทันทีหลังอัปโหลดครบ ส่วนรูปที่ยังไม่ได้เปิดเผยต่อผู้ชมจะเปิดพร้อมกันจากหน้าเผยแพร่</p>
  </div>
 }
