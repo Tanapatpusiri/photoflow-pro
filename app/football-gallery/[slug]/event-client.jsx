@@ -25,8 +25,9 @@ export default function EventExperience({slug,initialData=null}){
  const [archive,setArchive]=useState(null),[preparing,setPreparing]=useState(false),[downloadProgress,setDownloadProgress]=useState('');
  const [removal,setRemoval]=useState({description:'',contact:'',sent:null,busy:false});
  const listingCache=useRef(new Map());
+ const cacheKey=(kind,personId,pageNumber)=>[slug,kind,personId||'',pageNumber].join(':');
  function listMedia(kind,personId,pageNumber){
-  const key=[kind,personId||'',pageNumber].join(':');
+  const key=cacheKey(kind,personId,pageNumber);
   const entry=listingCache.current.get(key);
   if(entry&&Date.now()-entry.at<20000)return entry.promise;
   const params=new URLSearchParams({page:String(pageNumber),kind});
@@ -43,15 +44,16 @@ export default function EventExperience({slug,initialData=null}){
  useEffect(()=>{if(initialData?.event)return;let live=true;(async()=>{setLoading(true);try{let r=await fetch(base(slug),{cache:'no-store'}),d=await r.json();
   // An unlocked album opens without a code: ask for its public pass once, then load again.
   if(!r.ok&&d.needsAccess){const o=await fetch('/api/football-gallery/open',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({slug}),cache:'no-store'});if(o.ok){r=await fetch(base(slug),{cache:'no-store'});d=await r.json()}}
-  if(!r.ok){if(d.needsAccess&&live)setNeedsAccess(true);throw Error(d.message||'ไม่สามารถเปิดอัลบั้ม')}if(live){setEvent(d.event);setPlayers(d.players||[]);setError('');if(!navigator.connection?.saveData){listMedia('photo',null,1).catch(()=>{});listMedia('video',null,1).catch(()=>{})}}}catch(e){if(live)setError(e.message)}finally{if(live)setLoading(false)}})();return()=>{live=false}},[slug]);
+  if(!r.ok){if(d.needsAccess&&live)setNeedsAccess(true);throw Error(d.message||'ไม่สามารถเปิดอัลบั้ม')}if(live){setEvent(d.event);setPlayers(d.players||[]);setError('');if(!navigator.connection?.saveData){listMedia('photo',null,1).catch(()=>{})}}}catch(e){if(live)setError(e.message)}finally{if(live)setLoading(false)}})();return()=>{live=false}},[slug]);
  useEffect(()=>{if(!event||!['photos','videos','player'].includes(page))return;let live=true;(async()=>{setLoading(true);try{const d=await listMedia(page==='videos'||page==='player'&&tab==='video'?'video':'photo',page==='player'?player?.id:null,pageNo);if(live){setItems(old=>{const merged=pageNo===1?d.items:[...old,...d.items];const seen=new Set();return merged.filter(item=>{if(seen.has(item.id))return false;seen.add(item.id);return true})});setHasMore(d.hasMore);setError('')}}catch(e){if(live)setError(e.message)}finally{if(live)setLoading(false)}})();return()=>{live=false}},[slug,event,page,player,tab,pageNo]);
- const change=(next,who=null,newTab='photo')=>{setPage(next);setPlayer(who);setTab(newTab);setPageNo(1);setItems([]);setSelected([]);setDetail(null);setFilter('all');setArchive(null);window.scrollTo({top:0,behavior:'instant'})};
+ const change=(next,who=null,newTab='photo')=>{if(next===page&&who?.id===player?.id&&newTab===tab)return;setPage(next);setPlayer(who);setTab(newTab);setPageNo(1);setItems([]);setSelected([]);setDetail(null);setFilter('all');setArchive(null);window.scrollTo({top:0,behavior:'instant'})};
  const toggleFav=id=>{setFavorites(prev=>{const next=prev.includes(id)?prev.filter(x=>x!==id):[...prev,id];try{localStorage.setItem('fg_fav_'+slug,JSON.stringify(next))}catch{}return next})};
  const toggleSelected=id=>setSelected(prev=>prev.includes(id)?prev.filter(x=>x!==id):[...prev,id]);
  const viewed=useMemo(()=>items.filter(item=>filter==='favorites'?favorites.includes(item.id):filter==='JPEG'||filter==='RAW'?item.files.some(f=>f.variant===filter):true),[items,filter,favorites]);
  const fileUrl=file=>base(slug)+'/files/'+encodeURIComponent(file.id);
  const preview=item=>item.files.find(f=>f.variant==='THUMB')||item.files.find(f=>f.variant==='PREVIEW');
  const imageFor=item=>{if(item.thumbUrl)return item.thumbUrl;const file=preview(item);return file?fileUrl(file):''};
+ const retryPreview=(e,file)=>{const img=e.currentTarget;if(!file||img.dataset.retried==='1')return;img.dataset.retried='1';img.src=fileUrl(file)+'?retry='+Date.now()};
  const openDetail=item=>{setDetail(item);setPage('detail');setArchive(null);window.scrollTo({top:0,behavior:'instant'})};
  const title={overview:event?.title,photos:'All Photos',videos:'Videos',players:'Players',player:player?.name,detail:detail?.kind==='video'?'Video Detail':'Photo Detail',downloads:'Download All',removal:'ขอถอดภาพ',privacy:'ความเป็นส่วนตัว'}[page]||'Football Gallery';
  const goBack=()=>{if(page==='detail')setPage(player?'player':detail?.kind==='video'?'videos':'photos');else if(page==='removal'&&detail)setPage('detail');else if(page==='player')change('players');else if(page==='downloads'&&(selected.length||player))setPage(player?'player':'photos');else if(page==='players'||page==='videos')change('photos');else if(page==='photos')window.location.assign('/football-gallery');else change('photos')};
@@ -128,7 +130,7 @@ export default function EventExperience({slug,initialData=null}){
   </nav>}
   {error&&<div className="fge-alert" role="alert">{error}</div>}
   {page==='players'&&<><input className="fge-search" type="search" enterKeyHint="search" placeholder="ค้นหาชื่อหรือหมายเลขเสื้อ" aria-label="ค้นหาชื่อหรือหมายเลขเสื้อ" value={query} onChange={e=>setQuery(e.target.value)}/><div className="fge-playergrid">{players.filter(p=>!query.trim()||[p.name,p.jersey,p.team,p.jersey?'#'+p.jersey:''].some(x=>String(x||'').toLowerCase().includes(query.trim().toLowerCase()))).map((p,index)=><button className="fge-player" key={p.id} onClick={()=>change('player',p)}><div className="fge-player-cover">{p.coverUrl||p.cover?<img src={p.coverUrl||fileUrl({id:p.cover})} alt="" loading={index<4?"eager":"lazy"} fetchPriority={index<2?"high":"auto"} decoding="async"/>:<Icon name="players" size={44}/>}</div><strong>{p.name}{p.jersey?' #'+p.jersey:''}</strong><span>{fmt(p.photos)} รูป · {fmt(p.videos)} คลิป</span></button>)}</div>{players.length===0&&<Empty message="ยังไม่มีรายชื่อนักฟุตบอลที่เผยแพร่"/>}</>}
-  {page==='player'&&<><div className="fge-player-banner"><h2>{player.name}{player.jersey?' #'+player.jersey:''}</h2><span>{fmt(player.photos)} รูป · {fmt(player.videos)} คลิป</span></div><div className="fge-segments" role="tablist"><button role="tab" aria-selected={tab==='photo'} className={tab==='photo'?'selected':''} onClick={()=>{setItems([]);setPageNo(1);setTab('photo')}}>Photos</button><button role="tab" aria-selected={tab==='video'} className={tab==='video'?'selected':''} onClick={()=>{setItems([]);setPageNo(1);setTab('video')}}>Videos</button></div></>}
+  {page==='player'&&<><div className="fge-player-banner"><h2>{player.name}{player.jersey?' #'+player.jersey:''}</h2><span>{fmt(player.photos)} รูป · {fmt(player.videos)} คลิป</span></div><div className="fge-segments" role="tablist"><button role="tab" aria-selected={tab==='photo'} className={tab==='photo'?'selected':''} onClick={()=>{if(tab==='photo')return;setItems([]);setPageNo(1);setTab('photo')}}>Photos</button><button role="tab" aria-selected={tab==='video'} className={tab==='video'?'selected':''} onClick={()=>{if(tab==='video')return;setItems([]);setPageNo(1);setTab('video')}}>Videos</button></div></>}
   {['photos','videos','player'].includes(page)&&<>
    {loading&&items.length===0?<p className="fge-loading">กำลังโหลด…</p>:viewed.length===0?<Empty message="ยังไม่มีไฟล์ในหมวดนี้"/>:null}
    <div className={isVideo?'fge-video-list':'fge-photo-grid'}>
@@ -136,7 +138,7 @@ export default function EventExperience({slug,initialData=null}){
      <div className={isVideo?'fge-video-column':'fge-photo-column'} key={columnIndex}>
       {column.map((item,index)=><article className={'fge-tile'+(selected.includes(item.id)?' is-selected':'')} key={item.id}>
        <button className="fge-tile-image" onClick={()=>openDetail(item)} aria-label={'เปิด '+(item.title||'ไฟล์')}>
-        {imageFor(item)?<img src={imageFor(item)} loading={columnIndex===0&&index<3||columnIndex===1&&index<3?"eager":"lazy"} fetchPriority={index<2?"high":"auto"} decoding="async" alt={item.title||'ภาพการแข่งขัน'}/>:<span className="fge-photo-fallback"><Icon name={item.kind==='video'?'video':'image'} size={34}/></span>}
+        {imageFor(item)?<img src={imageFor(item)} onError={e=>retryPreview(e,preview(item))} loading={columnIndex===0&&index<3||columnIndex===1&&index<3?"eager":"lazy"} fetchPriority={index<2?"high":"auto"} decoding="async" alt={item.title||'ภาพการแข่งขัน'}/>:<span className="fge-photo-fallback"><Icon name={item.kind==='video'?'video':'image'} size={34}/></span>}
        </button>
        <div className="fge-tile-actions">
         <button onClick={()=>toggleFav(item.id)} aria-label="รายการโปรด" aria-pressed={favorites.includes(item.id)}><Icon name="heart" size={17} filled={favorites.includes(item.id)}/></button>
@@ -150,7 +152,7 @@ export default function EventExperience({slug,initialData=null}){
    {hasMore&&<button className="fge-load" onClick={()=>setPageNo(n=>n+1)} disabled={loading}>โหลดเพิ่ม</button>}
    {selected.length>0&&<button className="fge-primary fge-sticky" onClick={()=>{setArchive(null);setDownloadProgress('');setPage('downloads')}}>ดาวน์โหลดรูปที่เลือก {fmt(selected.length)} รายการ</button>}
   </>}
-  {page==='detail'&&detail&&<><div className="fge-detail-image">{imageFor(detail)?<img src={imageFor(detail)} loading="eager" fetchPriority="high" decoding="async" alt={detail.title||'ภาพการแข่งขัน'}/>:<Empty message="ไฟล์นี้ไม่มีภาพตัวอย่าง"/>}</div>
+  {page==='detail'&&detail&&<><div className="fge-detail-image">{imageFor(detail)?<img src={imageFor(detail)} onError={e=>retryPreview(e,preview(detail))} loading="eager" fetchPriority="high" decoding="async" alt={detail.title||'ภาพการแข่งขัน'}/>:<Empty message="ไฟล์นี้ไม่มีภาพตัวอย่าง"/>}</div>
    <div className="fge-card"><h2>{detail.title||'ภาพการแข่งขัน'}</h2><p>{event.title}{detail.captured_at?' · '+new Date(detail.captured_at).toLocaleString('th-TH',{dateStyle:'medium',timeStyle:'short',timeZone:'UTC'}):''}</p><p>ไฟล์ต้นฉบับที่มีอยู่จริง</p></div>
    {detail.kind==='photo'&&<button className="fge-primary" disabled={preparing} onClick={()=>savePhotos({mediaIds:[detail.id]})}><Icon name="download"/><span style={{marginLeft:10}}>{preparing?'กำลังเตรียมรูปภาพ…':'ดาวน์โหลดรูปภาพ'}</span></button>}
    {detail.kind==='video'&&<a className="fge-primary fge-link-button" href={fileUrl(detail.files.find(f=>f.variant==='VIDEO_ORIGINAL')||{id:''})}>ดาวน์โหลดวิดีโอต้นฉบับ</a>}
