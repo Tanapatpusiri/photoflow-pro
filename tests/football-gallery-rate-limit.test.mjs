@@ -40,5 +40,11 @@ assert.equal(await mod.publicLimitOk({},{codeId:'public-grant',eventId:'ev'},'or
 assert.deepEqual(calls,[['public-original','ev:198.51.100.9',300,60],['public-original-album','ev',20000,1440]]);
 const worst=mod.PUBLIC_LIMITS.list[1]*36+mod.PUBLIC_LIMITS.preview[1]+mod.PUBLIC_LIMITS.original[1]+mod.PUBLIC_LIMITS.part[1];
 assert.ok(worst<100000,'one public album stays under the Worker free-plan daily allowance: '+worst);
-for(const f of ['media/route.js','files/[fileId]/route.js','archive/route.js','archive/[jobId]/[part]/route.js'])assert.match(await readFile('app/api/football-gallery/events/[slug]/'+f,'utf8'),/await publicLimitOk\(request,grant,/,f);
+for(const f of ['files/[fileId]/route.js','archive/route.js','archive/[jobId]/[part]/route.js'])assert.match(await readFile('app/api/football-gallery/events/[slug]/'+f,'utf8'),/await publicLimitOk\(request,grant,/,f);
+const media=await readFile('lib/football-gallery-media.js','utf8');
+assert.match(media,/await publicLimitOk\(request,grant,'list'\)/);
+const mediaRoute=await readFile('app/api/football-gallery/events/[slug]/media/route.js','utf8');
+assert.match(mediaRoute,/await listGalleryMedia\(request,/);
+const eventReader=await readFile('lib/football-gallery-event.js','utf8');
+assert.match(eventReader,/includePhotos\?listGalleryMedia\(request,/);
 console.log('PASS: rate limits follow the grant per network and cap the shared code; unlocked albums are limited per IP and per album');

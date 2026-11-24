@@ -75,7 +75,7 @@ export default function FootballAdmin(){
  const counts={upload:0,review:pending(active),requests:active?.open_removals||0,players:active?.players||0};
  const canUpload=active&&['draft','published'].includes(active.status);
 
- return <main className="fga-root"><div className="fga-shell"><a href="/football-gallery" className="fga-back">‹ Football Gallery</a><header><h1>Studio</h1><p>จัดการอัลบั้มการแข่งขัน • เฉพาะผู้ดูแล</p>{authorized&&<button className="fga-logout" onClick={logout}>ออกจากระบบ</button>}</header>
+ return <main className={'fga-root'+(authorized&&active&&view==='albums'&&albumTab==='review'?' fga-review-mode':'')}><div className="fga-shell"><a href="/football-gallery" className="fga-back">‹ Football Gallery</a><header><h1>Studio</h1><p>จัดการอัลบั้มการแข่งขัน • เฉพาะผู้ดูแล</p>{authorized&&<button className="fga-logout" onClick={logout}>ออกจากระบบ</button>}</header>
   {loading?<p>กำลังตรวจสอบสิทธิ์…</p>:!authorized?<>{message&&<div className="fga-message" role="status">{message}</div>}<section className="fga-card"><h2>เข้าสู่ระบบแอดมิน</h2><p>ต้องเป็นบัญชีที่ได้รับอนุญาตจากเจ้าของระบบ</p><form onSubmit={login}><label>อีเมล<input type="email" value={email} onChange={e=>setEmail(e.target.value)} required autoComplete="username"/></label><label>รหัสผ่าน<input type="password" value={password} onChange={e=>setPassword(e.target.value)} required autoComplete="current-password"/></label><button disabled={busy}>{busy?'กำลังตรวจสอบ…':'เข้าสู่ระบบ'}</button></form></section></>:<>
    <nav className="fga-tabs fga-tabs-main" aria-label="ส่วนของ Studio">
     <button className={view==='albums'?'active':''} aria-current={view==='albums'?'page':undefined} onClick={()=>setView('albums')}>อัลบั้ม</button>

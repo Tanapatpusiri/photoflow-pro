@@ -28,10 +28,15 @@ try{lib=await import('data:text/javascript;base64,'+Buffer.from(server).toString
 catch(e){console.error('Could not load server library in isolation:',e.message);process.exit(1)}
 assert.ok(lib.configured(),'test configuration is complete');
 const cookie=(eventId)=>{const payload=Buffer.from(JSON.stringify({eventId,codeId:grant,until:Date.now()+60000,nonce:'n'})).toString('base64url');return payload+'.'+createHmac('sha256',process.env.FG_SESSION_SECRET).update(payload).digest('base64url')};
-globalThis.__eventTest={NextResponse:globalThis.__suspendTest.NextResponse,db:lib.db,configured:()=>true,grantFor:lib.grantFor,suspendedForGrant:lib.suspendedForGrant,SUSPENDED_MESSAGE:lib.SUSPENDED_MESSAGE,privateHeaders:{},thumbUrl:()=>''};
+globalThis.__eventTest={NextResponse:globalThis.__suspendTest.NextResponse,db:lib.db,configured:()=>true,grantFor:lib.grantFor,suspendedForGrant:lib.suspendedForGrant,SUSPENDED_MESSAGE:lib.SUSPENDED_MESSAGE,privateHeaders:{},thumbUrl:()=>'',listGalleryMedia:async()=>{throw Error('Access denied must not load media')}};
+let reader=await readFile('lib/football-gallery-event.js','utf8');
+reader=reader.replace(/^import .*;\n/gm,'');
+reader='const {db,configured,grantFor,suspendedForGrant,SUSPENDED_MESSAGE,thumbUrl,listGalleryMedia}=globalThis.__eventTest;\n'+reader;
+const {readGalleryEvent}=await import('data:text/javascript;base64,'+Buffer.from(reader).toString('base64'));
+globalThis.__eventTest.readGalleryEvent=readGalleryEvent;
 let route=await readFile('app/api/football-gallery/events/[slug]/route.js','utf8');
 route=route.replace(/^import .*;\n/gm,'');
-route='const {NextResponse,db,configured,grantFor,suspendedForGrant,SUSPENDED_MESSAGE,privateHeaders,thumbUrl}=globalThis.__eventTest;\n'+route;
+route='const {NextResponse,privateHeaders,readGalleryEvent}=globalThis.__eventTest;\n'+route;
 const {GET}=await import('data:text/javascript;base64,'+Buffer.from(route).toString('base64'));
 const call=value=>GET({cookies:{get:name=>value&&name===lib.grantCookieName(event)?{value}:undefined}},{params:Promise.resolve({slug:'s'})});
 let r=await call(cookie(event));

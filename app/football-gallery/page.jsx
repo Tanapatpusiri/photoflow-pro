@@ -13,12 +13,26 @@ const Icon=({name,size=22})=>{
  };
  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>
 };
+function AlbumCover({src,eager}){
+ const [attempt,setAttempt]=useState(0);
+ if(attempt===2)return <Icon name="image" size={34}/>;
+ return <img
+  src={attempt===0?src+'&width=540':src}
+  srcSet={attempt===0?src+'&width=540 540w, '+src+'&width=768 768w':undefined}
+  sizes="(max-width: 540px) 43vw, 244px"
+  alt=""
+  loading={eager?'eager':'lazy'}
+  fetchPriority={eager?'high':'auto'}
+  decoding="async"
+  onError={()=>setAttempt(attempt+1)}
+ />;
+}
 export default function FootballGallery() {
  const [code,setCode]=useState('');
  const [busy,setBusy]=useState(false);
  const [message,setMessage]=useState('');
  const [status,setStatus]=useState('idle');
- const [albums,setAlbums]=useState(null),[broken,setBroken]=useState({});
+ const [albums,setAlbums]=useState(null);
  const codeInput=useRef(null);
  useEffect(()=>{fetch('/api/football-gallery/albums',{cache:'no-store'}).then(r=>r.json()).then(d=>setAlbums(d.albums||[])).catch(()=>setAlbums([]))},[]);
  // A locked album needs the code from the organiser: take the visitor to the code box.
@@ -50,8 +64,8 @@ export default function FootballGallery() {
     <section className="fg-albums" aria-label="อัลบั้ม">
      {albums===null?<div className="fg-album-grid">{[0,1].map(i=><div key={i} className="fg-album-card fg-album-loading"/>)}</div>
      :albums.length===0?<div className="fg-cover"><div className="fg-cover-art"><Icon name="image" size={56}/></div><div className="fg-cover-bottom"><h2>ภาพการแข่งขันฟุตบอล</h2><p>ยังไม่มีอัลบั้มที่เปิดให้ชม</p></div></div>
-     :<div className="fg-album-grid">{albums.map(a=>{const body=<>
-       <div className="fg-album-cover">{a.cover&&!broken[a.slug]?<img src={a.cover} alt="" loading="lazy" onError={()=>setBroken(b=>({...b,[a.slug]:true}))}/>:<Icon name="image" size={34}/>}{a.locked&&<span className="fg-album-lock" aria-label="ล็อก ต้องใช้รหัส"><Icon name="lock" size={14}/></span>}</div>
+     :<div className="fg-album-grid">{albums.map((a,index)=>{const body=<>
+       <div className="fg-album-cover">{a.cover?<AlbumCover key={a.cover} src={a.cover} eager={index<2}/>:<Icon name="image" size={34}/>}{a.locked&&<span className="fg-album-lock" aria-label="ล็อก ต้องใช้รหัส"><Icon name="lock" size={14}/></span>}</div>
        <strong>{a.title}</strong><span>{[fmtDate(a.date),a.venue].filter(Boolean).join(' · ')}</span></>;
       return a.locked?<button key={a.slug} type="button" className="fg-album-card" onClick={()=>askCode(a.title)}>{body}</button>:<a key={a.slug} className="fg-album-card" href={'/football-gallery/'+encodeURIComponent(a.slug)}>{body}</a>})}</div>}
     </section>
