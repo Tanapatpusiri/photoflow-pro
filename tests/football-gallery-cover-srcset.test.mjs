@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
-import {coverSrc,coverSrcSet,coverSizes} from '../lib/football-gallery-cover-srcset.js';
+import {coverSrc,coverSrcSet,COVER_SIZES} from '../lib/football-gallery-cover-srcset.js';
 import {coverWidth} from '../lib/football-gallery-cover-image.js';
 
 const cover='/api/football-gallery/cover/11111111-1111-4111-8111-111111111111?v=1795586538';
@@ -16,15 +16,15 @@ for(const [url,d] of candidates){
  assert.equal(coverWidth(new URL(url,'https://app.test').searchParams.get('w')),Number.parseInt(d));
 }
 
-// Slot sizes follow the .fg-shell (max 540px, 5vw gutter): two grid columns, or the horizontal
-// carousel whose cards are 80% of the track (--card-width in home-v2.css).
-assert.equal(coverSizes(false),'(min-width: 540px) 238px, 44vw');
-assert.equal(coverSizes(true),'(min-width: 540px) 394px, 72vw');
+// One slot size for both layouts (the carousel card, 80% of the .fg-shell track), so switching
+// between grid and carousel never makes the browser pick and download another crop.
+assert.equal(COVER_SIZES,'(min-width: 540px) 394px, 72vw');
 
-// The home page uses these helpers for its album cards, following the layout switch.
+// The home page uses these helpers for its album cards, with the same sizes in both layouts.
 const home=await readFile('app/football-gallery/home-client.jsx','utf8');
 assert.match(home,/src=\{coverSrc\(a\.cover\)\}/);
 assert.match(home,/srcSet=\{coverSrcSet\(a\.cover\)\}/);
-assert.match(home,/sizes=\{coverSizes\(singleColumn\)\}/);
+assert.match(home,/sizes=\{COVER_SIZES\}/);
+assert.doesNotMatch(home,/coverSizes/);
 
 console.log('football gallery cover srcset ok');
