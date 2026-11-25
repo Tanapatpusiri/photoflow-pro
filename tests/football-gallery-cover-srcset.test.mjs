@@ -16,9 +16,10 @@ for(const [url,d] of candidates){
  assert.equal(coverWidth(new URL(url,'https://app.test').searchParams.get('w')),Number.parseInt(d));
 }
 
-// Slot sizes follow the .fg-shell (max 540px, 5vw padding) for two columns and for one column.
+// Slot sizes follow the .fg-shell (max 540px, 5vw gutter): two grid columns, or the horizontal
+// carousel whose cards are 80% of the track (--card-width in home-v2.css).
 assert.equal(coverSizes(false),'(min-width: 540px) 238px, 44vw');
-assert.equal(coverSizes(true),'(min-width: 540px) 492px, 90vw');
+assert.equal(coverSizes(true),'(min-width: 540px) 394px, 72vw');
 
 // The home page uses these helpers for its album cards, following the layout switch.
 const home=await readFile('app/football-gallery/home-client.jsx','utf8');
