@@ -1,7 +1,9 @@
 'use client';
 import {useEffect,useMemo,useRef,useState} from 'react';
+import {flushSync} from 'react-dom';
 import {formatBytes as fmtBytes} from '../../../lib/football-gallery-format';
 import {watchImage,imageShown,imageFailed} from '../../../lib/football-gallery-image-fade';
+import {withViewTransition} from '../../../lib/football-gallery-motion';
 import './event.css';
 import '../gallery-motion.css';
 const paths={
@@ -108,9 +110,18 @@ export default function EventExperience({slug,initialData=null}){
  const preview=item=>item.files.find(f=>f.variant==='THUMB')||item.files.find(f=>f.variant==='PREVIEW');
  const imageFor=item=>{if(item.thumbUrl)return item.thumbUrl;const file=preview(item);return file?fileUrl(file):''};
  const retryPreview=(e,file)=>{const img=e.currentTarget;if(!file||img.dataset.retried==='1')return;img.dataset.retried='1';img.src=fileUrl(file)+'?retry='+Date.now()};
- const openDetail=item=>{setDetail(item);setPage('detail');setArchive(null);window.scrollTo({top:0,behavior:'instant'})};
+ // Opening a photo: the tapped preview grows into the detail photo (View Transitions where supported).
+ // Going back returns to the same place in the grid and the photo shrinks into its own tile.
+ const gridScroll=useRef(0);
+ const detailReady=()=>{const img=document.querySelector('.fge-detail-image img');return img?.decode?Promise.race([img.decode().catch(()=>{}),new Promise(r=>setTimeout(r,150))]):null};
+ const openDetail=(item,img)=>{gridScroll.current=window.scrollY;if(img)img.style.viewTransitionName='fg-photo';
+  const transition=withViewTransition(()=>{flushSync(()=>{setDetail(item);setPage('detail');setArchive(null)});window.scrollTo({top:0,behavior:'instant'});return detailReady()});
+  const clear=()=>{if(img)img.style.viewTransitionName=''};if(transition)transition.finished.then(clear,clear);else clear()};
+ const closeDetail=()=>{const id=detail?.id,target=player?'player':detail?.kind==='video'?'videos':'photos';let tile=null;
+  const transition=withViewTransition(()=>{flushSync(()=>setPage(target));window.scrollTo({top:gridScroll.current,behavior:'instant'});tile=id?document.querySelector('.fge-tile-image img[data-media-id="'+CSS.escape(id)+'"]'):null;if(tile)tile.style.viewTransitionName='fg-photo'});
+  const clear=()=>{if(tile)tile.style.viewTransitionName=''};if(transition)transition.finished.then(clear,clear);else clear()};
  const title={overview:event?.title,photos:'All Photos',videos:'Videos',players:'Players',player:player?.name,detail:detail?.kind==='video'?'Video Detail':'Photo Detail',downloads:'Download All',removal:'ขอถอดภาพ',privacy:'ความเป็นส่วนตัว'}[page]||'Football Gallery';
- const goBack=()=>{if(page==='detail')setPage(player?'player':detail?.kind==='video'?'videos':'photos');else if(page==='removal'&&detail)setPage('detail');else if(page==='player')change('players');else if(page==='downloads'&&(selected.length||player))setPage(player?'player':'photos');else if(page==='players'||page==='videos')change('photos');else if(page==='photos')window.location.assign('/football-gallery');else change('photos')};
+ const goBack=()=>{if(page==='detail')closeDetail();else if(page==='removal'&&detail)setPage('detail');else if(page==='player')change('players');else if(page==='downloads'&&(selected.length||player))setPage(player?'player':'photos');else if(page==='players'||page==='videos')change('photos');else if(page==='photos')window.location.assign('/football-gallery');else change('photos')};
  async function prepare(formats,scope){
   if(preparing)return;setPreparing(true);setError('');setArchive(null);
   try{
@@ -190,8 +201,8 @@ export default function EventExperience({slug,initialData=null}){
     {(isVideo?[viewed]:[viewed.filter((_,index)=>index%2===0),viewed.filter((_,index)=>index%2===1)]).map((column,columnIndex)=>
      <div className={isVideo?'fge-video-column':'fge-photo-column'} key={columnIndex}>
       {column.map((item,index)=><article className={'fge-tile'+(selected.includes(item.id)?' is-selected':'')} key={item.id}>
-       <button className="fge-tile-image" onClick={()=>openDetail(item)} aria-label={'เปิด '+(item.title||'ไฟล์')}>
-        {imageFor(item)?<img src={imageFor(item)} ref={watchImage} onLoad={imageShown} onError={e=>imageFailed(e,event=>retryPreview(event,preview(item)))} loading={columnIndex===0&&index<3||columnIndex===1&&index<3?"eager":"lazy"} fetchPriority={index<2?"high":"auto"} decoding="async" alt={item.title||'ภาพการแข่งขัน'}/>:<span className="fge-photo-fallback"><Icon name={item.kind==='video'?'video':'image'} size={34}/></span>}
+       <button className="fge-tile-image" onClick={e=>openDetail(item,e.currentTarget.querySelector('img'))} aria-label={'เปิด '+(item.title||'ไฟล์')}>
+        {imageFor(item)?<img src={imageFor(item)} data-media-id={item.id} ref={watchImage} onLoad={imageShown} onError={e=>imageFailed(e,event=>retryPreview(event,preview(item)))} loading={columnIndex===0&&index<3||columnIndex===1&&index<3?"eager":"lazy"} fetchPriority={index<2?"high":"auto"} decoding="async" alt={item.title||'ภาพการแข่งขัน'}/>:<span className="fge-photo-fallback"><Icon name={item.kind==='video'?'video':'image'} size={34}/></span>}
        </button>
        <div className="fge-tile-actions">
         <button onClick={()=>{toggleFav(item.id);setPopFav(item.id)}} data-pop={popFav===item.id&&favorites.includes(item.id)?'true':undefined} aria-label="รายการโปรด" aria-pressed={favorites.includes(item.id)}><Icon name="heart" size={17} filled={favorites.includes(item.id)}/></button>
