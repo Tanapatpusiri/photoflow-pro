@@ -3,7 +3,8 @@ import {useEffect,useMemo,useRef,useState} from 'react';
 import {flushSync} from 'react-dom';
 import {formatBytes as fmtBytes} from '../../../lib/football-gallery-format';
 import {watchImage,imageShown,imageFailed} from '../../../lib/football-gallery-image-fade';
-import {flyHeart,headerState,withViewTransition} from '../../../lib/football-gallery-motion';
+import {flyHeart,headerState,prefersReducedMotion,withViewTransition} from '../../../lib/football-gallery-motion';
+import {dragOffset,swipeStep} from '../../../lib/football-gallery-swipe';
 import './event.css';
 import '../gallery-motion.css';
 const paths={
@@ -152,10 +153,34 @@ export default function EventExperience({slug,initialData=null}){
   const transition=withViewTransition(()=>{flushSync(()=>{setDetail(item);setPage('detail');setArchive(null)});window.scrollTo({top:0,behavior:'instant'});return detailReady()});
   const clear=()=>{if(img)img.style.viewTransitionName=''};if(transition)transition.finished.then(clear,clear);else clear()};
  const closeDetail=()=>{const id=detail?.id,target=player?'player':detail?.kind==='video'?'videos':'photos';let tile=null;
-  const transition=withViewTransition(()=>{flushSync(()=>setPage(target));window.scrollTo({top:gridScroll.current,behavior:'instant'});tile=id?document.querySelector('.fge-tile-image img[data-media-id="'+CSS.escape(id)+'"]'):null;if(tile)tile.style.viewTransitionName='fg-photo'});
+  const transition=withViewTransition(()=>{flushSync(()=>setPage(target));window.scrollTo({top:gridScroll.current,behavior:'instant'});tile=id?document.querySelector('.fge-tile-image img[data-media-id="'+CSS.escape(id)+'"]'):null;if(tile){const r=tile.getBoundingClientRect();if(r.bottom<0||r.top>innerHeight)window.scrollTo({top:window.scrollY+r.top+r.height/2-innerHeight/2,behavior:'instant'});tile.style.viewTransitionName='fg-photo'}});
   const clear=()=>{if(tile)tile.style.viewTransitionName=''};if(transition)transition.finished.then(clear,clear);else clear()};
  const title={overview:event?.title,photos:'All Photos',videos:'Videos',players:'Players',player:player?.name,detail:detail?.kind==='video'?'Video Detail':'Photo Detail',downloads:'Download All',removal:'ขอถอดภาพ',privacy:'ความเป็นส่วนตัว'}[page]||'Football Gallery';
  const goBack=()=>{if(page==='detail')closeDetail();else if(page==='removal'&&detail)setPage('detail');else if(page==='player')change('players');else if(page==='downloads'&&(selected.length||player))setPage(player?'player':'photos');else if(page==='players'||page==='videos')change('photos');else if(page==='photos')window.location.assign('/football-gallery');else change('photos')};
+ // Photo detail: swipe left/right (or the arrow keys) to the next/previous photo of the list the
+ // visitor came from. The photo follows the finger (transform only), with resistance at the ends.
+ const detailIndex=detail?viewed.findIndex(item=>item.id===detail.id):-1;
+ const swipe=useRef(null),detailFrame=useRef(null);
+ const stepDetail=(step,fromDx=0)=>{const next=viewed[detailIndex+step],img=detailFrame.current?.querySelector('img');if(!next||preparing)return false;
+  const swap=()=>{flushSync(()=>{setDetail(next);setDownloadProgress('');setSavedAt(0)})};
+  if(prefersReducedMotion()||typeof img?.animate!=='function'){if(img)img.style.transform='';swap();return true}
+  const out=img.animate([{transform:'translateX('+fromDx+'px)',opacity:1},{transform:'translateX('+(-step*110)+'%)',opacity:0}],{duration:170,easing:'ease-in',fill:'forwards'});
+  let done=false;const enter=()=>{if(done)return;done=true;out.cancel();img.style.transform='';swap();
+   detailFrame.current?.querySelector('img')?.animate?.([{transform:'translateX('+(step*40)+'%)',opacity:0},{transform:'none',opacity:1}],{duration:260,easing:'cubic-bezier(.2,.8,.2,1)'})};
+  out.onfinish=enter;out.oncancel=enter;setTimeout(enter,300);return true};
+ const dragStart=e=>{if(!e.isPrimary||detailIndex<0||e.pointerType==='mouse'&&e.button!==0)return;swipe.current={x:e.clientX,y:e.clientY,t:e.timeStamp,id:e.pointerId,dx:0,active:false}};
+ const dragMove=e=>{const s=swipe.current;if(!s||e.pointerId!==s.id)return;const dx=e.clientX-s.x,dy=e.clientY-s.y;
+  if(!s.active){if(Math.abs(dy)>10&&Math.abs(dy)>Math.abs(dx)){swipe.current=null;return}if(Math.abs(dx)<8)return;s.active=true;e.currentTarget.setPointerCapture?.(e.pointerId)}
+  s.dx=dragOffset(dx,{atStart:detailIndex===0,atEnd:detailIndex===viewed.length-1});const img=e.currentTarget.querySelector('img');if(img)img.style.transform='translateX('+s.dx+'px)'};
+ const dragEnd=e=>{const s=swipe.current;swipe.current=null;if(!s?.active)return;
+  const step=e.type==='pointerup'?swipeStep({dx:e.clientX-s.x,dy:e.clientY-s.y,ms:e.timeStamp-s.t,width:e.currentTarget.clientWidth,index:detailIndex,count:viewed.length}):0;
+  if(step&&stepDetail(step,s.dx))return;
+  const img=e.currentTarget.querySelector('img');if(!img)return;const from=img.style.transform;img.style.transform='';
+  if(from&&!prefersReducedMotion()&&typeof img.animate==='function')img.animate([{transform:from},{transform:'none'}],{duration:220,easing:'cubic-bezier(.2,.8,.2,1)'})};
+ useEffect(()=>{if(page!=='detail')return;const onKey=e=>{if(e.defaultPrevented||e.altKey||e.metaKey||e.ctrlKey||/^(INPUT|TEXTAREA|SELECT)$/.test(e.target?.tagName||''))return;if(e.key==='ArrowRight'&&stepDetail(1))e.preventDefault();else if(e.key==='ArrowLeft'&&stepDetail(-1))e.preventDefault()};
+  window.addEventListener('keydown',onKey);return()=>window.removeEventListener('keydown',onKey)});
+ // The photos next to the one shown are fetched ahead, so a swipe lands on a ready photo.
+ useEffect(()=>{if(page!=='detail'||detailIndex<0)return;for(const step of [-1,1]){const near=viewed[detailIndex+step],src=near&&imageFor(near);if(src){const pre=new Image();pre.decoding='async';pre.src=src}}},[page,detailIndex,viewed]);
  async function prepare(formats,scope){
   if(preparing)return;setPreparing(true);setError('');setArchive(null);
   try{
@@ -256,7 +281,7 @@ export default function EventExperience({slug,initialData=null}){
    {!hasMore&&!loading&&!listFailed&&viewed.length>0&&<p className="fge-end"><Icon name="done" size={16}/>ดูครบแล้ว</p>}
    {selected.length>0&&<button className="fge-primary fge-sticky" onClick={()=>{setArchive(null);setDownloadProgress('');setPage('downloads')}}>ดาวน์โหลดรูปที่เลือก {fmt(selected.length)} รายการ</button>}
   </>}
-  {page==='detail'&&detail&&<><div className="fge-detail-image">{imageFor(detail)?<img src={imageFor(detail)} onError={e=>retryPreview(e,preview(detail))} loading="eager" fetchPriority="high" decoding="async" alt={detail.title||'ภาพการแข่งขัน'}/>:<Empty message="ไฟล์นี้ไม่มีภาพตัวอย่าง"/>}</div>
+  {page==='detail'&&detail&&<><div className="fge-detail-image" ref={detailFrame} onPointerDown={dragStart} onPointerMove={dragMove} onPointerUp={dragEnd} onPointerCancel={dragEnd}>{imageFor(detail)?<img src={imageFor(detail)} draggable={false} key={detail.id} onError={e=>retryPreview(e,preview(detail))} loading="eager" fetchPriority="high" decoding="async" alt={detail.title||'ภาพการแข่งขัน'}/>:<Empty message="ไฟล์นี้ไม่มีภาพตัวอย่าง"/>}</div>
    <div className="fge-card"><h2>{detail.title||'ภาพการแข่งขัน'}</h2><p>{event.title}{detail.captured_at?' · '+new Date(detail.captured_at).toLocaleString('th-TH',{dateStyle:'medium',timeStyle:'short',timeZone:'UTC'}):''}</p><p>ไฟล์ต้นฉบับที่มีอยู่จริง</p></div>
    {detail.kind==='photo'&&<button className="fge-primary" data-saved={savedAt?'true':undefined} disabled={preparing} onClick={()=>savePhotos({mediaIds:[detail.id]})}><Icon name={savedAt?'done':'download'}/><span style={{marginLeft:10}}>{preparing?'กำลังเตรียมรูปภาพ…':savedAt?'บันทึกแล้ว':'ดาวน์โหลดรูปภาพ'}</span>{savedAt?<span className="fge-celebrate" aria-hidden="true" key={savedAt}>{[0,1,2,3,4,5,6,7].map(i=><i key={i} style={{'--i':i}}/>)}</span>:null}</button>}
    {detail.kind==='video'&&<a className="fge-primary fge-link-button" href={fileUrl(detail.files.find(f=>f.variant==='VIDEO_ORIGINAL')||{id:''})}>ดาวน์โหลดวิดีโอต้นฉบับ</a>}

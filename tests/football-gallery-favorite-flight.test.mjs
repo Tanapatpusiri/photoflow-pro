@@ -62,7 +62,7 @@ assert.equal(arrived,1);
 
 // Album page wiring.
 const album=await readFile('app/football-gallery/[slug]/event-client.jsx','utf8');
-assert.match(album,/import \{flyHeart,headerState,withViewTransition\} from '\.\.\/\.\.\/\.\.\/lib\/football-gallery-motion';/);
+assert.match(album,/import \{flyHeart,headerState,(?:\w+,)*withViewTransition\} from '\.\.\/\.\.\/\.\.\/lib\/football-gallery-motion';/);
 // The count is the favourites among the photos/videos listed now, so it matches what the filter shows.
 assert.match(album,/const favCount=useMemo\(\(\)=>items\.reduce\(\(n,item\)=>n\+\(favorites\.includes\(item\.id\)\?1:0\),0\),\[items,favorites\]\);/);
 assert.match(album,/const showFav=isMediaPage&&\(favCount>0\|\|filter==='favorites'\);/);
