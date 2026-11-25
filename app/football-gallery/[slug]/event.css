@@ -2,12 +2,13 @@
 
 /* Natural-aspect masonry only for photo galleries (all photos and each player).
    Keep two stable columns while loading more; no cropped photos or visible captions.
-   The 3:4 ratio below is only a placeholder until the JPEG's intrinsic size arrives. */
+   The 3:2 ratio below is only a placeholder until the JPEG's intrinsic size arrives; nearly all
+   match previews are landscape 3:2, so the reserved box rarely changes when the photo loads (CLS). */
 .fge-photo-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;align-items:start;min-width:0}
 .fge-photo-column{display:flex;flex-direction:column;gap:10px;min-width:0}
 .fge-photo-column .fge-tile{width:100%;min-width:0;border-radius:18px;overflow:hidden;background:#f1f1f2}
 .fge-photo-column .fge-tile-image{width:100%;height:auto;aspect-ratio:auto;border:0;display:block;line-height:0}
-.fge-photo-column .fge-tile-image img{display:block;width:100%;height:auto;aspect-ratio:auto 3/4;object-fit:contain}
+.fge-photo-column .fge-tile-image img{display:block;width:100%;height:auto;aspect-ratio:auto 3/2;object-fit:contain}
 .fge-photo-column .fge-photo-fallback{width:100%;height:auto;aspect-ratio:3/4}
 .fge-video-column{display:grid;gap:13px;min-width:0}
 @media(max-width:370px){.fge-photo-grid,.fge-photo-column{gap:8px}}
