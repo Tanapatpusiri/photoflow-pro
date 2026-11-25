@@ -1,6 +1,7 @@
 'use client';
 import {useEffect,useRef,useState} from 'react';
 import Link from 'next/link';
+import {coverSrc,coverSrcSet,coverSizes} from '../../lib/football-gallery-cover-srcset';
 import './gallery.css';
 import './home-v2.css';
 
@@ -112,7 +113,7 @@ export default function FootballGallery({initialAlbums=[]}) {
     <section className="fg-albums" aria-label="อัลบั้ม">
      {albums.length===0?<div className="fg-albums-empty" role="status"><Icon name="image" size={28}/><span>{filtering?'ไม่พบอัลบั้มที่ตรงกับตัวกรอง':'ยังไม่มีอัลบั้มที่เปิดให้ชม'}</span></div>
      :<div className="fg-album-grid" data-single={singleColumn}>{albums.map((a,index)=>{const body=<>
-       <div className="fg-album-cover">{a.cover&&!broken[a.slug]?<img src={a.cover} alt="" loading={index<2?"eager":"lazy"} fetchPriority={index<2?"high":"auto"} decoding="async" onError={()=>setBroken(b=>({...b,[a.slug]:true}))}/>:<Icon name="image" size={34}/>}</div>
+       <div className="fg-album-cover">{a.cover&&!broken[a.slug]?<img src={coverSrc(a.cover)} srcSet={coverSrcSet(a.cover)} sizes={coverSizes(singleColumn)} alt="" loading={index<2?"eager":"lazy"} fetchPriority={index<2?"high":"auto"} decoding="async" onError={()=>setBroken(b=>({...b,[a.slug]:true}))}/>:<Icon name="image" size={34}/>}</div>
        <div className="fg-home-cover-shade" aria-hidden="true"/>
        {a.locked&&<span className="fg-album-lock"><Icon name="lock" size={14}/><span className="fg-home-sr-only">ล็อก ต้องใช้รหัส</span></span>}
        <div className="fg-home-caption"><div><strong>{a.title}</strong>{a.date&&<time dateTime={filterDate.format(new Date(a.date))}>{thaiDate.format(new Date(a.date))}</time>}</div><span className="fg-home-arrow" aria-hidden="true"><Icon name="arrow" size={17}/></span></div>
