@@ -1,3 +1,5 @@
+body:has(> .fg-home-v2) { margin: 0; }
+
 .fg-home-v2 .fg-shell {
   padding: clamp(28px, 10vw, 48px) clamp(14px, 5vw, 24px) calc(36px + env(safe-area-inset-bottom));
 }
