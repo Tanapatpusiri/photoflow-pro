@@ -23,14 +23,19 @@ for(const action of ['createEvent','saveEventDate','addPlayer','<Uploader ','<Re
 // Approving saves unsaved tag changes first, and "no identifiable child" is only offered when no child is selected.
 assert.match(review,/if\(tagsDirty\)\{await post\('\/review',\{action:'tag'/);
 assert.match(review,/noChildrenConfirmed:tags\.length===0&&approval\.noChildren/);
-// Owner policy: approving only asks who is in the photo; "no identifiable child" is one of the choices.
-assert.match(review,/ไม่มีเด็กที่จำหน้าได้<\/label>/);
+// Owner policy (2026-11-17, c9054b6 / f6c97f2): there is no per-photo approval. Tapping a child's name saves the tag at once.
+assert.match(review,/onChange=\{e=>savePhotoTags\(e\.target\.checked\?\[\.\.\.tags,p\.id\]:tags\.filter\(x=>x!==p\.id\)\)\}/);
+assert.match(review,/post\('\/review',\{action:'tag',eventId:event\.id,mediaId:active\.id,players:next\}\)/);
+assert.doesNotMatch(review,/onClick=\{approve\}/);
+// Photos reach viewers only through the album-level release, after the admin confirms the rights and the GPS check.
+assert.match(review,/if\(!window\.confirm\('[^']*ยืนยันว่ามีสิทธิ์เผยแพร่ภาพเด็กและตรวจความเสี่ยงจาก GPS แล้ว\?'\)\)return;/);
+assert.match(review,/post\('\/review',\{action:'publish-ready',eventId:event\.id,confirmed:true\}\)/);
 assert.match(review,/<form className="fga-add-name" onSubmit=\{addName\}>/);
 assert.match(review,/fetch\(api\+'\/players',\{method:'POST'/);
 assert.doesNotMatch(review,/gpsConfirmed|approval\.basis|approval\.attest/);
-// Disabled buttons say what is missing.
-for(const list of ['approveMissing','privacyMissing','publishMissing'])assert.match(review,new RegExp('<Missing items=\\{'+list+'\\}/>'));
-assert.match(review,/disabled=\{busy\|\|approveMissing\.length>0\}/);
+// Disabled buttons say what is missing (the per-photo approve button is gone, see above).
+for(const list of ['privacyMissing','publishMissing'])assert.match(review,new RegExp('<Missing items=\\{'+list+'\\}/>'));
+assert.match(review,/disabled=\{busy\|\|privacyMissing\.length>0\}/);
 assert.match(review,/disabled=\{busy\|\|publishMissing\.length>0\}/);
 // The album header always offers the next step and a visible upload button.
 assert.match(page,/function nextStep\(e\)/);
@@ -47,7 +52,8 @@ assert.match(review,/<div className="fga-approve-bar">/);
 assert.match(css,/\.fga-approve-bar\{position:sticky;bottom:0/);
 // Upload shows the album flow, live progress and a result summary with a way on to review.
 const upload=await readFile('app/football-gallery/admin/upload-client.jsx','utf8');
-assert.ok(upload.includes("['เลือกไฟล์','อัปโหลด','ตรวจภาพ','เผยแพร่']"),'upload steps');
+// Tagging is optional since the review step stopped being mandatory (f6c97f2, 1c2106f).
+assert.ok(upload.includes("['เลือกไฟล์','อัปโหลด','แท็กชื่อ (ไม่บังคับ)','เผยแพร่']"),'upload steps');
 assert.match(upload,/const current=done\.indexOf\(false\)/);
 assert.match(upload,/role="progressbar"/);
 for(const label of ['สำเร็จ','มีอยู่แล้ว (ข้าม)','ไม่สำเร็จ'])assert.ok(upload.includes('<dt>'+label+'</dt>'),label);
@@ -56,7 +62,8 @@ assert.match(page,/<Uploader eventId=\{active\.id\} album=\{\{/);
 // Upload steps describe only the files picked now; what is already in the album is shown separately.
 assert.match(upload,/function AlbumStatus\(/);
 assert.match(upload,/ขั้นตอนของรอบอัปโหลดนี้/);
-assert.match(upload,/const done=\[files>0,uploaded,reviewed,reviewed&&album\.live\]/);
+// "Published" is ticked only when the album is live and none of its photos still wait for release (508dd4b).
+assert.match(upload,/const done=\[files>0,uploaded,reviewed,reviewed&&album\.live&&album\.pending===0\]/);
 assert.doesNotMatch(upload,/files>0\|\|!!summary\|\|album\.media>0/);
 // The publish step gets the retention period on sign-in, without opening Settings first.
 assert.match(page,/fetch\(api\+'\/retention-settings'/);
@@ -81,8 +88,11 @@ assert.match(players,/if\(used\.rows\[0\]\.published\|\|used\.rows\[0\]\.history
 const reviewRoute=await readFile('app/api/football-gallery/admin/review/route.js','utf8');
 assert.match(reviewRoute,/if\(!withdrawn\.rowCount\)await client\.query\(`INSERT INTO fg_privacy_records/);
 // The public page links to the admin Studio, and /admin is a short address for it.
+// The front page renders the client home page, where the link is an icon button with a Thai label (homepage V2, #31).
 const front=await readFile('app/football-gallery/page.jsx','utf8');
-assert.match(front,/<a className="fg-admin-link" href="\/admin">จัดการหลังบ้าน<\/a>/);
+assert.match(front,/import FootballGallery from '\.\/home-client';/);
+const home=await readFile('app/football-gallery/home-client.jsx','utf8');
+assert.match(home,/<a className="fg-home-control" href="\/admin" aria-label="จัดการหลังบ้าน">/);
 assert.match(await readFile('app/admin/page.js','utf8'),/redirect\('\/football-gallery\/admin'\)/);
 // Photos can be deleted for good one at a time or all in a filter, after a confirmation.
 assert.match(review,/post\('\/media-delete',\{event:event\.id,mediaIds:ids\}\)/);

@@ -45,6 +45,9 @@ const access=await readFile('app/api/football-gallery/access/route.js','utf8');
 assert.match(access,/e\.status='suspended'[^`]*c\.revoked_at IS NULL|c\.revoked_at IS NULL[^`]*e\.status='suspended'/);
 const invite=await readFile('app/football-gallery/invite/[token]/route.js','utf8');
 assert.match(invite,/invite=suspended/);assert.match(invite,/i\.revoked_at IS NULL AND i\.expires_at>NOW\(\) AND e\.status='suspended'/);
+// The landing page is a server wrapper around the client home page, which reads ?invite= and shows the paused message.
 const landing=await readFile('app/football-gallery/page.jsx','utf8');
-assert.match(landing,/invite==='suspended'/);
+assert.match(landing,/import FootballGallery from '\.\/home-client';/);
+const home=await readFile('app/football-gallery/home-client.jsx','utf8');
+assert.match(home,/else if\(invite==='suspended'\)\{setAccessOpen\(true\);setStatus\('error'\);setMessage\('ผู้จัดงานปิดอัลบั้มนี้ไว้ชั่วคราว/);
 console.log('PASS: suspended albums tell valid invitees they are paused and stay hidden from everyone else');
