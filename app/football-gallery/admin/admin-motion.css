@@ -1,0 +1,22 @@
+/* Motion for the Football Gallery admin (upload progress and the review selection toolbar).
+   Opacity and transform only; everything is switched off for people who reduce motion. */
+
+/* Upload progress: soft diagonal stripes keep moving over the filled part while files upload.
+   The fill (admin.css) keeps its colour; a pseudo-element clipped by it moves with transform.
+   135deg stripes with a 20px period repeat every 28.28px horizontally, so the loop is seamless. */
+.fga-progress i{position:relative;overflow:hidden}
+.fga-progress i::after{
+ content:"";position:absolute;top:0;bottom:0;right:0;left:-29px;pointer-events:none;
+ background:repeating-linear-gradient(135deg,rgba(255,255,255,.18) 0 10px,transparent 10px 20px);
+ animation:fga-stripes .9s linear infinite;
+}
+@keyframes fga-stripes{to{transform:translateX(28.28px)}}
+
+/* Review: the selection toolbar rises in when picking starts (it is a new element each time). */
+.fga-pick-bar[role="toolbar"]{animation:fga-rise .24s cubic-bezier(.2,.8,.2,1) both}
+@keyframes fga-rise{from{opacity:0;transform:translateY(8px)}}
+
+@media (prefers-reduced-motion:reduce){
+ .fga-progress i::after,
+ .fga-pick-bar[role="toolbar"]{animation:none}
+}
