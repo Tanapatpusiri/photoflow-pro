@@ -30,6 +30,38 @@
 .fg-home-control:active,
 .fge-album-tabs button:active{transform:scale(.97)}
 
+/* Access-code popup: the backdrop fades in and the sheet rises from the bottom; both reverse
+   while data-closing is set (the close itself is finished by a timer, see lib/football-gallery-motion.js). */
+.fg-access-overlay{animation:fg-fade-in .22s ease-out both}
+.fg-access-modal{animation:fg-sheet-up .32s cubic-bezier(.2,.8,.2,1) both}
+.fg-access-overlay[data-closing="true"]{animation:fg-fade-out .2s ease-in both}
+.fg-access-overlay[data-closing="true"] .fg-access-modal{animation:fg-sheet-down .2s ease-in both}
+@keyframes fg-fade-in{from{opacity:0}}
+@keyframes fg-fade-out{to{opacity:0}}
+@keyframes fg-sheet-up{from{transform:translateY(calc(100% + 24px))}}
+@keyframes fg-sheet-down{to{transform:translateY(calc(100% + 24px))}}
+/* Wide screens show the popup centred (gallery.css), so it scales in instead of rising. */
+@media (min-width:620px){
+ .fg-access-modal{animation-name:fg-pop-in}
+ .fg-access-overlay[data-closing="true"] .fg-access-modal{animation-name:fg-pop-out}
+}
+@keyframes fg-pop-in{from{opacity:0;transform:scale(.96)}}
+@keyframes fg-pop-out{to{opacity:0;transform:scale(.96)}}
+
+/* Wrong code: the field shakes once and the message eases in. */
+.fg-access-modal input[aria-invalid="true"]{animation:fg-shake .36s ease-in-out}
+@keyframes fg-shake{20%{transform:translateX(-6px)}40%{transform:translateX(5px)}60%{transform:translateX(-3px)}80%{transform:translateX(2px)}}
+.fg-access-modal .fg-error{animation:fg-fade-up .22s ease-out both}
+@keyframes fg-fade-up{from{opacity:0;transform:translateY(-4px)}}
+
+/* Checking the code: a small spinner in place of the arrow (white on the dark button). */
+.fg-spinner{width:18px;height:18px;flex-shrink:0;border-radius:50%;border:2px solid rgba(255,255,255,.35);border-top-color:#fff;animation:fg-spin .8s linear infinite}
+@keyframes fg-spin{to{transform:rotate(360deg)}}
+
+/* Favourite: the heart pops once when it is added (data-pop is set only by that tap). */
+.fge-tile-actions button[data-pop="true"] .fg-icon{animation:fg-heart-pop .45s cubic-bezier(.3,1.6,.5,1)}
+@keyframes fg-heart-pop{35%{transform:scale(1.35)}}
+
 @media (prefers-reduced-motion:reduce){
  .fg-album-cover img,
  .fge-photo-column .fge-tile-image img,
@@ -43,4 +75,12 @@
  .fge-tile-image:active,
  .fg-home-control:active,
  .fge-album-tabs button:active{transform:none}
+ .fg-access-overlay,
+ .fg-access-modal,
+ .fg-access-overlay[data-closing="true"],
+ .fg-access-overlay[data-closing="true"] .fg-access-modal,
+ .fg-access-modal input[aria-invalid="true"],
+ .fg-access-modal .fg-error,
+ .fg-spinner,
+ .fge-tile-actions button[data-pop="true"] .fg-icon{animation:none}
 }

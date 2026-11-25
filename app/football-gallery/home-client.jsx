@@ -3,6 +3,7 @@ import {useEffect,useRef,useState} from 'react';
 import Link from 'next/link';
 import {coverSrc,coverSrcSet,COVER_SIZES} from '../../lib/football-gallery-cover-srcset';
 import {watchImage,imageShown} from '../../lib/football-gallery-image-fade';
+import {animatedClose,prefersReducedMotion} from '../../lib/football-gallery-motion';
 import './gallery.css';
 import './home-v2.css';
 import './gallery-motion.css';
@@ -39,6 +40,7 @@ export default function FootballGallery({initialAlbums=[]}) {
  const [draftDate,setDraftDate]=useState('');
  const hasPendingDate=draftDate!==date;
  const [accessOpen,setAccessOpen]=useState(false),[selectedAlbum,setSelectedAlbum]=useState('');
+ const [closingAccess,setClosingAccess]=useState(false),closeTimer=useRef(null);
  const codeInput=useRef(null);
  const page=useRef(null);
  const track=useRef(null);
@@ -62,8 +64,11 @@ export default function FootballGallery({initialAlbums=[]}) {
  },[]);
 
  // A locked album needs the code from the organiser: take the visitor to the code box.
- const askCode=title=>{setSelectedAlbum(title);setStatus('idle');setMessage('');setAccessOpen(true)};
- const closeAccess=()=>{if(busy)return;setAccessOpen(false);setStatus('idle');setMessage('');setCode('')};
+ const askCode=title=>{clearTimeout(closeTimer.current);setClosingAccess(false);setSelectedAlbum(title);setStatus('idle');setMessage('');setAccessOpen(true)};
+ // The popup plays its exit animation, and a timer always finishes the close (see animatedClose).
+ const finishClose=()=>{setClosingAccess(false);setAccessOpen(false);setStatus('idle');setMessage('');setCode('')};
+ const closeAccess=()=>{if(busy||closingAccess)return;closeTimer.current=animatedClose({reduce:prefersReducedMotion(),start:()=>setClosingAccess(true),finish:finishClose,ms:200})};
+ useEffect(()=>()=>clearTimeout(closeTimer.current),[]);
  useEffect(()=>{if(!accessOpen)return;const t=setTimeout(()=>codeInput.current?.focus(),80);const dismiss=e=>{if(e.key==='Escape'&&!busy)closeAccess()};window.addEventListener('keydown',dismiss);return()=>{clearTimeout(t);window.removeEventListener('keydown',dismiss)}},[accessOpen,busy]);
  useEffect(()=>{
   try{setSingleColumn(localStorage.getItem(layoutKey)==='single')}catch{}
@@ -202,14 +207,14 @@ export default function FootballGallery({initialAlbums=[]}) {
      </>}
     </section>
    </div>
-   {accessOpen&&<div className="fg-access-overlay" onClick={closeAccess}>
+   {accessOpen&&<div className="fg-access-overlay" data-closing={closingAccess?'true':undefined} onClick={closeAccess}>
     <section className="fg-access-modal" role="dialog" aria-modal="true" aria-labelledby="fg-access-title" onClick={e=>e.stopPropagation()}>
      <div className="fg-access-modal-head"><h2 id="fg-access-title">{selectedAlbum||'อัลบั้มส่วนตัว'}</h2><button type="button" className="fg-access-close" onClick={closeAccess} aria-label="ปิดหน้ากรอกรหัส">×</button></div>
      <p className="fg-subtitle">กรอกรหัสประจำงานที่ได้รับจากผู้จัดงาน หรือเปิดลิงก์เชิญจาก LINE</p>
      <p className="fg-subtitle">อัลบั้มที่มีรูปกุญแจเปิดได้เฉพาะผู้ที่ได้รับรหัสหรือลิงก์จากผู้จัดงาน</p>
      <form onSubmit={enter} noValidate><label htmlFor="fg-code">รหัสอัลบั้ม</label><input ref={codeInput} id="fg-code" name="code" autoComplete="off" autoCapitalize="characters" spellCheck="false" placeholder="กรอกรหัสจากผู้จัดงาน" value={code} onChange={e=>{setCode(e.target.value);setMessage('');}} aria-invalid={status==='error'}/>
       {message&&<p className="fg-error" role="alert">{message}</p>}
-      <button type="submit" disabled={busy} className="fg-primary">{busy?'กำลังตรวจสอบ…':'เข้าสู่อัลบั้ม'}<Icon name="arrow" size={20}/></button>
+      <button type="submit" disabled={busy} className="fg-primary">{busy?'กำลังตรวจสอบ…':'เข้าสู่อัลบั้ม'}{busy?<span className="fg-spinner" aria-hidden="true"/>:<Icon name="arrow" size={20}/>}</button>
      </form>
     </section>
    </div>}
