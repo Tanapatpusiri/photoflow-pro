@@ -1,0 +1,226 @@
+body:has(> .fg-home-v2) { margin: 0; }
+
+.fg-home-v2 .fg-shell {
+  padding: clamp(28px, 10vw, 48px) clamp(14px, 5vw, 24px) calc(36px + env(safe-area-inset-bottom));
+}
+
+.fg-home-v2 .fg-header {
+  gap: clamp(8px, 3vw, 13px);
+  margin: 0 0 clamp(22px, 6.6vw, 34px);
+}
+
+.fg-home-v2 .fg-brand-icon {
+  width: clamp(36px, 12.7vw, 54px);
+  height: clamp(36px, 12.7vw, 54px);
+}
+
+.fg-home-v2 .fg-brand-icon svg {
+  width: clamp(21px, 7vw, 29px);
+}
+
+.fg-home-v2 h1 {
+  font-size: clamp(15px, 5.1vw, 24px);
+  letter-spacing: -.045em;
+  line-height: 1.12;
+  margin: 0;
+}
+
+.fg-home-v2 .fg-brand-text span {
+  font-size: clamp(11px, 3.4vw, 15px);
+  line-height: 1.25;
+}
+
+.fg-home-controls {
+  display: flex;
+  gap: clamp(4px, 2.7vw, 14px);
+  margin-left: auto;
+}
+
+.fg-home-control {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 50%;
+  background: #f3f3f5;
+  color: inherit;
+  cursor: pointer;
+}
+
+.fg-home-search {
+  display: flex;
+  align-items: center;
+  gap: clamp(8px, 2.6vw, 12px);
+  min-height: 46px;
+  border: 1px solid #e9e9ed;
+  border-radius: 999px;
+  padding-left: clamp(12px, 4.7vw, 22px);
+  background: #f4f4f6;
+}
+
+.fg-home-search > svg {
+  flex: none;
+  color: #76767e;
+}
+
+.fg-home-search > input {
+  flex: 1;
+  width: 0;
+  min-width: 0;
+  min-height: 44px;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 16px;
+}
+
+.fg-home-search input::placeholder {
+  color: #686871;
+  opacity: 1;
+}
+
+.fg-home-calendar {
+  position: relative;
+  display: grid;
+  place-items: center;
+  flex: 0 0 clamp(46px, 15vw, 66px);
+  height: 44px;
+  border-radius: 0 999px 999px 0;
+}
+
+.fg-home-calendar::before {
+  position: absolute;
+  inset: 9px auto 9px 0;
+  border-left: 1px solid #c6c6cd;
+  content: "";
+}
+
+.fg-home-calendar[data-active="true"] { background: #e5e5e9; }
+
+.fg-home-calendar input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  opacity: 0;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.fg-home-calendar input::-webkit-calendar-picker-indicator {
+  position: absolute;
+  inset: 0;
+  width: auto;
+  height: auto;
+  margin: 0;
+  padding: 0;
+  cursor: pointer;
+}
+
+.fg-home-control:focus-visible,
+.fg-home-search:focus-within { outline: 2px solid #55555d; outline-offset: 2px; }
+.fg-home-calendar:focus-within { outline: 2px solid #55555d; outline-offset: -3px; }
+
+.fg-home-filters {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 12px;
+  font-size: 14px;
+}
+
+.fg-home-filters button {
+  min-height: 44px;
+  padding: 0 8px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-decoration: underline;
+  font: inherit;
+  cursor: pointer;
+}
+
+.fg-home-v2 .fg-albums { margin: clamp(22px, 7.8vw, 36px) 0 0; }
+.fg-home-v2 .fg-home-filters + .fg-albums { margin-top: 8px; }
+.fg-home-v2 .fg-album-grid { gap: clamp(10px, 2.7vw, 16px); }
+.fg-home-v2 .fg-album-grid[data-single="true"] { grid-template-columns: minmax(0, 1fr); }
+
+.fg-home-v2 .fg-album-card {
+  position: relative;
+  display: block;
+  isolation: isolate;
+  overflow: hidden;
+  width: 100%;
+  aspect-ratio: 2 / 3;
+  border-radius: clamp(16px, 4.7vw, 20px);
+  background: #e9eaed;
+  box-shadow: 0 10px 18px #252c3a25;
+}
+
+.fg-home-v2 .fg-album-cover {
+  position: absolute;
+  inset: 0;
+  aspect-ratio: auto;
+  border-radius: 0;
+  margin: 0;
+}
+
+.fg-home-v2 .fg-album-cover img { position: absolute; inset: 0; }
+
+.fg-home-cover-shade {
+  position: absolute;
+  inset: auto 0 0;
+  height: 43%;
+  background: linear-gradient(to bottom, transparent, #10151c8c 72%, #10151ca8);
+  -webkit-backdrop-filter: blur(9px);
+  backdrop-filter: blur(9px);
+  -webkit-mask-image: linear-gradient(transparent, #000 75%);
+  mask-image: linear-gradient(transparent, #000 75%);
+  pointer-events: none;
+}
+
+.fg-home-v2 .fg-album-lock { color: #303033; }
+
+.fg-home-caption {
+  position: absolute;
+  inset: auto clamp(10px, 4vw, 20px) clamp(13px, 4.5vw, 21px);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 5px;
+  color: white;
+  text-shadow: 0 1px 4px #0008;
+}
+
+.fg-home-caption strong {
+  font-size: clamp(14px, 4.2vw, 21px);
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.fg-home-caption time {
+  display: block;
+  margin-top: 4px;
+  font-size: clamp(11px, 3.2vw, 15px);
+}
+
+.fg-home-v2 .fg-home-arrow {
+  display: grid;
+  place-items: center;
+  width: clamp(24px, 7.4vw, 36px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: white;
+  color: #171719;
+}
+
+.fg-home-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  clip-path: inset(50%);
+}
