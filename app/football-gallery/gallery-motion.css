@@ -85,6 +85,13 @@
 .fg-carousel-dots button::before{width:22px;border-radius:5px;clip-path:inset(0 6px round 5px);transition:clip-path .28s cubic-bezier(.2,.8,.2,1),background-color .28s}
 .fg-carousel-dots button[aria-current="true"]::before{clip-path:inset(0 round 5px)}
 
+/* Opening a photo (View Transitions API, where supported): the tapped preview grows into the
+   detail photo and shrinks back into its tile on the way back. The tile gets the same name from
+   JavaScript only during the transition, so the name is never on two elements at once. */
+.fge-detail-image img{view-transition-name:fg-photo}
+::view-transition-group(fg-photo){animation-duration:.34s;animation-timing-function:cubic-bezier(.2,.8,.2,1)}
+::view-transition-old(root),::view-transition-new(root){animation-duration:.2s}
+
 @media (prefers-reduced-motion:reduce){
  .fg-album-cover img,
  .fge-photo-column .fge-tile-image img,
@@ -109,4 +116,7 @@
  .fge-album-tabs::before,
  .fge-segments::before,
  .fg-carousel-dots button::before{transition:none}
+ ::view-transition-group(*),
+ ::view-transition-old(*),
+ ::view-transition-new(*){animation:none}
 }
