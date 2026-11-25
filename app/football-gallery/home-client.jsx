@@ -30,6 +30,7 @@ export default function FootballGallery({initialAlbums=[]}) {
  const [status,setStatus]=useState('idle');
  const [broken,setBroken]=useState({});
  const [singleColumn,setSingleColumn]=useState(false);
+ const [activeAlbum,setActiveAlbum]=useState(0);
  const [query,setQuery]=useState('');
  const [date,setDate]=useState('');
  const [draftDate,setDraftDate]=useState('');
@@ -37,6 +38,10 @@ export default function FootballGallery({initialAlbums=[]}) {
  const [accessOpen,setAccessOpen]=useState(false),[selectedAlbum,setSelectedAlbum]=useState('');
  const codeInput=useRef(null);
  const page=useRef(null);
+ const track=useRef(null);
+ const scrollTimer=useRef(null);
+ const mouseDrag=useRef(null);
+ const suppressClick=useRef(false);
 
  useEffect(()=>{
   const preventZoom=event=>event.preventDefault();
@@ -65,10 +70,65 @@ export default function FootballGallery({initialAlbums=[]}) {
  const albums=initialAlbums.filter(album=>
   album.title.normalize('NFC').toLocaleLowerCase('th').includes(search)&&
   (!date||(album.date&&filterDate.format(new Date(album.date))===date)));
+ const albumOrder=JSON.stringify(albums.map(album=>album.slug));
+ useEffect(()=>{
+  setActiveAlbum(0);
+  if(singleColumn)track.current?.scrollTo({left:0,behavior:'instant'});
+  return ()=>clearTimeout(scrollTimer.current);
+ },[singleColumn,albumOrder]);
+
+ function centeredIndex(){
+  const list=track.current;
+  const first=list?.children[0],second=list?.children[1];
+  return second?Math.round(list.scrollLeft/(second.offsetLeft-first.offsetLeft)):0;
+ }
+ function selectAlbum(index){
+  const list=track.current;
+  const card=list?.children[index];
+  if(!card)return;
+  const left=card.offsetLeft-list.firstElementChild.offsetLeft;
+  list.scrollTo({left,behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth'});
+ }
+ function handleCarouselKey(event){
+  const target={ArrowLeft:centeredIndex()-1,ArrowRight:centeredIndex()+1,Home:0,End:albums.length-1}[event.key];
+  if(target===undefined)return;
+  event.preventDefault();
+  selectAlbum(Math.max(0,Math.min(albums.length-1,target)));
+ }
+ function beginDrag(event){
+  suppressClick.current=false;
+  if(event.pointerType==='mouse'&&event.button===0){
+   mouseDrag.current={x:event.clientX,left:event.currentTarget.scrollLeft};
+  }
+ }
+ function dragCarousel(event){
+  const drag=mouseDrag.current;
+  if(!drag)return;
+  const distance=event.clientX-drag.x;
+  if(!suppressClick.current&&Math.abs(distance)<6)return;
+  const list=event.currentTarget;
+  if(!suppressClick.current){
+   suppressClick.current=true;
+   list.setPointerCapture(event.pointerId);
+   list.dataset.dragging='true';
+  }
+  list.scrollLeft=drag.left-distance;
+ }
+ function endDrag(event){
+  mouseDrag.current=null;
+  const list=event.currentTarget;
+  if(!list.dataset.dragging)return;
+  const index=centeredIndex();
+  delete list.dataset.dragging;
+  selectAlbum(index);
+ }
  function toggleLayout(){
   const next=!singleColumn;
   setSingleColumn(next);
   try{localStorage.setItem(layoutKey,next?'single':'grid')}catch{}
+ }
+ function markCoverBroken(slug){
+  setBroken(previous=>previous[slug]?previous:{...previous,[slug]:true});
  }
  useEffect(()=>{const invite=new URLSearchParams(window.location.search).get('invite');if(invite==='invalid'){setAccessOpen(true);setStatus('error');setMessage('ลิงก์เชิญหมดอายุหรือถูกยกเลิก กรุณาขอลิงก์ใหม่จากผู้จัดงาน หรือกรอกรหัสอัลบั้ม')}else if(invite==='suspended'){setAccessOpen(true);setStatus('error');setMessage('ผู้จัดงานปิดอัลบั้มนี้ไว้ชั่วคราว กรุณาติดต่อผู้จัดงาน')}},[]);
  async function enter(e){
@@ -85,13 +145,13 @@ export default function FootballGallery({initialAlbums=[]}) {
   catch{setStatus('error');setMessage('เชื่อมต่อระบบไม่สำเร็จ กรุณาลองใหม่')}
   finally{setBusy(false)}
  }
- return <main className="fg-page fg-home-v2" ref={page} onPointerDownCapture={()=>{page.current.dataset.pointerFocus='true'}}>
+ return <main className="fg-page fg-home-v2" data-carousel={singleColumn} ref={page} onPointerDownCapture={()=>{page.current.dataset.pointerFocus='true'}}>
   <div className="fg-shell">
    <header className="fg-header">
     <div className="fg-brand-icon"><Icon name="camera" size={29}/></div>
     <div className="fg-brand-text"><h1>Football Gallery</h1><span>Private photo albums for families</span></div>
     <div className="fg-home-controls">
-     <button type="button" className="fg-home-control" onClick={toggleLayout} aria-label="มุมมองหนึ่งคอลัมน์" aria-pressed={singleColumn}><Icon name={singleColumn?'list':'grid'}/></button>
+     <button type="button" className="fg-home-control" onClick={toggleLayout} aria-label="มุมมองอัลบั้มแบบเลื่อนแนวนอน" aria-pressed={singleColumn}><Icon name={singleColumn?'list':'grid'}/></button>
      <a className="fg-home-control" href="/admin" aria-label="จัดการหลังบ้าน"><Icon name="home"/></a>
     </div>
    </header>
@@ -111,13 +171,32 @@ export default function FootballGallery({initialAlbums=[]}) {
     </div>}
     <section className="fg-albums" aria-label="อัลบั้ม">
      {albums.length===0?<div className="fg-albums-empty" role="status"><Icon name="image" size={28}/><span>{filtering?'ไม่พบอัลบั้มที่ตรงกับตัวกรอง':'ยังไม่มีอัลบั้มที่เปิดให้ชม'}</span></div>
-     :<div className="fg-album-grid" data-single={singleColumn}>{albums.map((a,index)=>{const body=<>
-       <div className="fg-album-cover">{a.cover&&!broken[a.slug]?<img src={a.cover} alt="" loading={index<2?"eager":"lazy"} fetchPriority={index<2?"high":"auto"} decoding="async" onError={()=>setBroken(b=>({...b,[a.slug]:true}))}/>:<Icon name="image" size={34}/>}</div>
+     :<><div className={singleColumn?'fg-album-carousel':'fg-album-grid'} ref={track}
+      tabIndex={singleColumn&&albums.length>1?0:undefined}
+      role={singleColumn?'group':undefined} aria-label={singleColumn?'เลื่อนดูอัลบั้ม':undefined}
+      onKeyDown={singleColumn?handleCarouselKey:undefined}
+      onScroll={singleColumn?()=>{
+       clearTimeout(scrollTimer.current);
+       scrollTimer.current=setTimeout(()=>setActiveAlbum(centeredIndex()),100);
+      }:undefined}
+      onPointerDown={singleColumn?beginDrag:undefined} onPointerMove={singleColumn?dragCarousel:undefined}
+      onPointerUp={singleColumn?endDrag:undefined} onPointerCancel={singleColumn?endDrag:undefined}
+      onPointerLeave={singleColumn?event=>{if(!event.currentTarget.dataset.dragging)mouseDrag.current=null}:undefined}
+      onDragStart={singleColumn?event=>event.preventDefault():undefined}
+      onClickCapture={singleColumn?event=>{
+       if(suppressClick.current&&event.detail!==0){event.preventDefault();event.stopPropagation();}
+      }:undefined}
+     >{albums.map((a,index)=>{const body=<>
+       <div className="fg-album-cover">{a.cover&&!broken[a.slug]?<img src={a.cover} alt="" loading={index<2?"eager":"lazy"} fetchPriority={index<2?"high":"auto"} decoding="async" ref={img=>{if(img?.complete&&!img.naturalWidth)markCoverBroken(a.slug)}} onError={()=>markCoverBroken(a.slug)}/>:<Icon name="image" size={34}/>}</div>
        <div className="fg-home-cover-shade" aria-hidden="true"/>
        {a.locked&&<span className="fg-album-lock"><Icon name="lock" size={14}/><span className="fg-home-sr-only">ล็อก ต้องใช้รหัส</span></span>}
        <div className="fg-home-caption"><div><strong>{a.title}</strong>{a.date&&<time dateTime={filterDate.format(new Date(a.date))}>{thaiDate.format(new Date(a.date))}</time>}</div><span className="fg-home-arrow" aria-hidden="true"><Icon name="arrow" size={17}/></span></div>
       </>;
-      return a.locked?<button key={a.slug} type="button" className="fg-album-card" onClick={()=>askCode(a.title)}>{body}</button>:<Link key={a.slug} className="fg-album-card" href={"/football-gallery/"+encodeURIComponent(a.slug)} prefetch={false}>{body}</Link>})}</div>}
+      return a.locked?<button key={a.slug} type="button" className="fg-album-card" onClick={()=>askCode(a.title)}>{body}</button>:<Link key={a.slug} className="fg-album-card" href={"/football-gallery/"+encodeURIComponent(a.slug)} prefetch={false}>{body}</Link>})}</div>
+      {singleColumn&&albums.length>1&&<div className="fg-carousel-dots" role="group" aria-label="ตำแหน่งอัลบั้ม">
+       {albums.map((album,index)=><button key={album.slug} type="button" aria-label={'แสดงอัลบั้ม '+album.title} aria-current={index===activeAlbum?'true':undefined} onClick={()=>selectAlbum(index)}/>)}
+      </div>}
+     </>}
     </section>
    </div>
    {accessOpen&&<div className="fg-access-overlay" onClick={closeAccess}>
