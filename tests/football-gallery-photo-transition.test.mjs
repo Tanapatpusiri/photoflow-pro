@@ -27,7 +27,7 @@ await tick();assert.equal(unhandled,0);
 // Album page wiring.
 const album=await readFile('app/football-gallery/[slug]/event-client.jsx','utf8');
 assert.match(album,/import \{flushSync\} from 'react-dom';/);
-assert.match(album,/import \{withViewTransition\} from '\.\.\/\.\.\/\.\.\/lib\/football-gallery-motion';/);
+assert.match(album,/import \{(?:\w+,)*withViewTransition(?:,\w+)*\} from '\.\.\/\.\.\/\.\.\/lib\/football-gallery-motion';/);
 // The tapped tile hands its image over, and every tile image can be found again on the way back.
 assert.match(album,/<button className="fge-tile-image" onClick=\{e=>openDetail\(item,e\.currentTarget\.querySelector\('img'\)\)\}/);
 assert.match(album,/<img src=\{imageFor\(item\)\} data-media-id=\{item\.id\}/);
