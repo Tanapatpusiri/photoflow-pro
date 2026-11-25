@@ -8,8 +8,6 @@ const layoutKey='football-gallery-layout';
 const dateOptions={timeZone:'Asia/Bangkok',day:'numeric',month:'short',year:'numeric'};
 const thaiDate=new Intl.DateTimeFormat('th-TH',dateOptions);
 const filterDate=new Intl.DateTimeFormat('sv-SE',{...dateOptions,day:'2-digit',month:'2-digit'});
-const monthLabel=new Intl.DateTimeFormat('th-TH',{timeZone:'UTC',month:'long',year:'numeric'});
-const weekdays=['อา.','จ.','อ.','พ.','พฤ.','ศ.','ส.'];
 
 const Icon=({name,size=22})=>{
  const paths={
@@ -21,9 +19,6 @@ const Icon=({name,size=22})=>{
   grid:<>{[[3,3],[13,3],[3,13],[13,13]].map(([x,y])=><rect key={x+','+y} x={x} y={y} width="8" height="8" rx="1.5"/>)}</>,
   list:<><rect x="3" y="3" width="18" height="8" rx="2"/><rect x="3" y="13" width="18" height="8" rx="2"/></>,
   home:<path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v6H4a1 1 0 0 1-1-1z"/>,
-  previous:<path d="m15 5-7 7 7 7"/>,
-  next:<path d="m9 5 7 7-7 7"/>,
-  check:<path d="m5 12 4 4L19 6"/>,
   arrow:<><path d="M5 12h14m-6-6 6 6-6 6"/></>,
  };
  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>
@@ -38,22 +33,10 @@ export default function FootballGallery({initialAlbums=[]}) {
  const [query,setQuery]=useState('');
  const [date,setDate]=useState('');
  const [draftDate,setDraftDate]=useState('');
- const [month,setMonth]=useState(null);
+ const hasPendingDate=draftDate!==date;
  const [accessOpen,setAccessOpen]=useState(false),[selectedAlbum,setSelectedAlbum]=useState('');
  const codeInput=useRef(null);
  const page=useRef(null);
- const calendar=useRef(null);
-
- function openCalendar(){
-  const [year,monthNumber]=(date||filterDate.format(new Date())).split('-').map(Number);
-  setDraftDate(date);
-  setMonth(new Date(Date.UTC(year,monthNumber-1,1)));
-  calendar.current.showModal();
- }
- function moveMonth(delta){
-  setMonth(current=>new Date(Date.UTC(current.getUTCFullYear(),current.getUTCMonth()+delta,1)));
- }
- const monthDays=month?new Date(Date.UTC(month.getUTCFullYear(),month.getUTCMonth()+1,0)).getUTCDate():0;
 
  useEffect(()=>{
   const preventZoom=event=>event.preventDefault();
@@ -116,35 +99,15 @@ export default function FootballGallery({initialAlbums=[]}) {
     <div className="fg-home-search" role="search">
      <Icon name="search" size={20}/>
      <input type="search" aria-label="ค้นหาอัลบั้ม / งานแข่งขัน" placeholder="ค้นหาอัลบั้ม / งานแข่งขัน" value={query} onChange={e=>setQuery(e.target.value)}/>
-     <button type="button" className="fg-home-calendar" aria-label="กรองตามวันที่แข่งขัน" aria-haspopup="dialog" onClick={openCalendar}>
+     <label className="fg-home-calendar">
       <Icon name="calendar" size={21}/>
-     </button>
+      <input type="date" aria-label="เลือกวันที่แข่งขัน" value={draftDate} onChange={e=>setDraftDate(e.target.value)}/>
+     </label>
     </div>
-    <dialog ref={calendar} className="fg-date-dialog" aria-label="เลือกวันที่แข่งขัน">
-     {month&&<>
-      <div className="fg-date-header">
-       <strong aria-live="polite">{monthLabel.format(month)}</strong>
-       <button type="button" aria-label="เดือนก่อนหน้า" onClick={()=>moveMonth(-1)}><Icon name="previous" size={18}/></button>
-       <button type="button" aria-label="เดือนถัดไป" onClick={()=>moveMonth(1)}><Icon name="next" size={18}/></button>
-      </div>
-      <div className="fg-date-days">
-       {weekdays.map(day=><span key={day} aria-hidden="true">{day}</span>)}
-       {Array.from({length:month.getUTCDay()},(_,index)=><span key={'blank-'+index} aria-hidden="true"/>)}
-       {Array.from({length:monthDays},(_,index)=>{
-        const day=index+1;
-        const value=month.toISOString().slice(0,8)+String(day).padStart(2,'0');
-        return <button key={value} type="button" aria-label={thaiDate.format(new Date(value+'T00:00:00Z'))} aria-pressed={draftDate===value} onClick={()=>setDraftDate(value)}>{day}</button>;
-       })}
-      </div>
-      <div className="fg-date-actions">
-       <button type="button" onClick={()=>calendar.current.close()}>ยกเลิก</button>
-       <button type="button" className="fg-date-confirm" aria-label="ยืนยันวันที่" disabled={!draftDate} onClick={()=>{setDate(draftDate);calendar.current.close()}}><Icon name="check" size={23}/></button>
-      </div>
-     </>}
-    </dialog>
-    {filtering&&<div className="fg-home-filters">
-     {date&&<span>{thaiDate.format(new Date(date+'T12:00:00+07:00'))}</span>}
-     <button type="button" onClick={()=>{setQuery('');setDate('')}}>ล้างตัวกรอง</button>
+    {(filtering||hasPendingDate)&&<div className="fg-home-filters">
+     {(draftDate||date)&&<span>{draftDate?thaiDate.format(new Date(draftDate+'T12:00:00+07:00')):'ทุกวันที่'}</span>}
+     {hasPendingDate?<><button type="button" onClick={()=>setDraftDate(date)}>ยกเลิก</button><button type="button" onClick={()=>setDate(draftDate)}>ยืนยันวันที่ ✓</button></>
+      :<button type="button" onClick={()=>{setQuery('');setDate('');setDraftDate('')}}>ล้างตัวกรอง</button>}
     </div>}
     <section className="fg-albums" aria-label="อัลบั้ม">
      {albums.length===0?<div className="fg-albums-empty" role="status"><Icon name="image" size={28}/><span>{filtering?'ไม่พบอัลบั้มที่ตรงกับตัวกรอง':'ยังไม่มีอัลบั้มที่เปิดให้ชม'}</span></div>
