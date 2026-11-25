@@ -1,0 +1,46 @@
+/* Motion for Football Gallery photos: home album covers and the album photo grid.
+   Opacity and transform only, so nothing here moves layout (CLS) or repaints large areas.
+   Everything is switched off for people who ask their device to reduce motion. */
+
+/* Photos fade in once loaded. data-fade="pending" is set by lib/football-gallery-image-fade.js
+   only while an image is still loading, so cached photos and no-JavaScript pages never hide. */
+.fg-album-cover img,
+.fge-photo-column .fge-tile-image img{transition:opacity .3s ease-out}
+.fg-album-cover img[data-fade="pending"],
+.fge-photo-column .fge-tile-image img[data-fade="pending"]{opacity:0}
+
+/* A soft light sweep while a photo is on its way (also over eager photos, which are never hidden).
+   It sits under the card caption/shade and under the photo buttons, and never takes taps. */
+.fge-photo-column .fge-tile-image{position:relative}
+.fg-album-cover:has(img[data-fade="pending"],img[data-fade="loading"])::after,
+.fge-photo-column .fge-tile-image:has(img[data-fade="pending"],img[data-fade="loading"])::after{
+ content:"";position:absolute;inset:0;pointer-events:none;
+ background:linear-gradient(100deg,transparent 25%,rgba(255,255,255,.45) 50%,transparent 75%);
+ transform:translateX(-100%);animation:fg-shimmer 1.4s ease-in-out infinite;
+}
+@keyframes fg-shimmer{to{transform:translateX(100%)}}
+
+/* Press feedback: album cards, photos and small buttons sink a little while pressed. */
+.fg-album-card,
+.fge-tile-image,
+.fg-home-control,
+.fge-album-tabs button{transition:transform .15s ease-out}
+.fg-album-card:active,
+.fge-tile-image:active,
+.fg-home-control:active,
+.fge-album-tabs button:active{transform:scale(.97)}
+
+@media (prefers-reduced-motion:reduce){
+ .fg-album-cover img,
+ .fge-photo-column .fge-tile-image img,
+ .fg-album-card,
+ .fge-tile-image,
+ .fg-home-control,
+ .fge-album-tabs button{transition:none}
+ .fg-album-cover:has(img[data-fade="pending"],img[data-fade="loading"])::after,
+ .fge-photo-column .fge-tile-image:has(img[data-fade="pending"],img[data-fade="loading"])::after{animation:none}
+ .fg-album-card:active,
+ .fge-tile-image:active,
+ .fg-home-control:active,
+ .fge-album-tabs button:active{transform:none}
+}

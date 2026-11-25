@@ -2,8 +2,10 @@
 import {useEffect,useRef,useState} from 'react';
 import Link from 'next/link';
 import {coverSrc,coverSrcSet,COVER_SIZES} from '../../lib/football-gallery-cover-srcset';
+import {watchImage,imageShown} from '../../lib/football-gallery-image-fade';
 import './gallery.css';
 import './home-v2.css';
+import './gallery-motion.css';
 
 const layoutKey='football-gallery-layout';
 const dateOptions={timeZone:'Asia/Bangkok',day:'numeric',month:'short',year:'numeric'};
@@ -188,7 +190,7 @@ export default function FootballGallery({initialAlbums=[]}) {
        if(suppressClick.current&&event.detail!==0){event.preventDefault();event.stopPropagation();}
       }:undefined}
      >{albums.map((a,index)=>{const body=<>
-       <div className="fg-album-cover">{a.cover&&!broken[a.slug]?<img src={coverSrc(a.cover)} srcSet={coverSrcSet(a.cover)} sizes={COVER_SIZES} alt="" loading={index<2?"eager":"lazy"} fetchPriority={index<2?"high":"auto"} decoding="async" ref={img=>{if(img?.complete&&!img.naturalWidth)markCoverBroken(a.slug)}} onError={()=>markCoverBroken(a.slug)}/>:<Icon name="image" size={34}/>}</div>
+       <div className="fg-album-cover">{a.cover&&!broken[a.slug]?<img src={coverSrc(a.cover)} srcSet={coverSrcSet(a.cover)} sizes={COVER_SIZES} alt="" loading={index<2?"eager":"lazy"} fetchPriority={index<2?"high":"auto"} decoding="async" onLoad={imageShown} ref={img=>{watchImage(img);if(img?.complete&&!img.naturalWidth)markCoverBroken(a.slug)}} onError={()=>markCoverBroken(a.slug)}/>:<Icon name="image" size={34}/>}</div>
        <div className="fg-home-cover-shade" aria-hidden="true"/>
        {a.locked&&<span className="fg-album-lock"><Icon name="lock" size={14}/><span className="fg-home-sr-only">ล็อก ต้องใช้รหัส</span></span>}
        <div className="fg-home-caption"><div><strong>{a.title}</strong>{a.date&&<time dateTime={filterDate.format(new Date(a.date))}>{thaiDate.format(new Date(a.date))}</time>}</div><span className="fg-home-arrow" aria-hidden="true"><Icon name="arrow" size={17}/></span></div>
