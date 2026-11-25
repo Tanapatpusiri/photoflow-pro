@@ -1,7 +1,9 @@
 'use client';
 import {useEffect,useMemo,useRef,useState} from 'react';
 import {formatBytes as fmtBytes} from '../../../lib/football-gallery-format';
+import {watchImage,imageShown,imageFailed} from '../../../lib/football-gallery-image-fade';
 import './event.css';
+import '../gallery-motion.css';
 const paths={
  back:<path d="m15 5-7 7 7 7"/>,next:<path d="m9 5 7 7-7 7"/>,
  download:<><path d="M12 4v11m-5-5 5 5 5-5"/><path d="M5 20h14"/></>,
@@ -187,7 +189,7 @@ export default function EventExperience({slug,initialData=null}){
      <div className={isVideo?'fge-video-column':'fge-photo-column'} key={columnIndex}>
       {column.map((item,index)=><article className={'fge-tile'+(selected.includes(item.id)?' is-selected':'')} key={item.id}>
        <button className="fge-tile-image" onClick={()=>openDetail(item)} aria-label={'เปิด '+(item.title||'ไฟล์')}>
-        {imageFor(item)?<img src={imageFor(item)} onError={e=>retryPreview(e,preview(item))} loading={columnIndex===0&&index<3||columnIndex===1&&index<3?"eager":"lazy"} fetchPriority={index<2?"high":"auto"} decoding="async" alt={item.title||'ภาพการแข่งขัน'}/>:<span className="fge-photo-fallback"><Icon name={item.kind==='video'?'video':'image'} size={34}/></span>}
+        {imageFor(item)?<img src={imageFor(item)} ref={watchImage} onLoad={imageShown} onError={e=>imageFailed(e,event=>retryPreview(event,preview(item)))} loading={columnIndex===0&&index<3||columnIndex===1&&index<3?"eager":"lazy"} fetchPriority={index<2?"high":"auto"} decoding="async" alt={item.title||'ภาพการแข่งขัน'}/>:<span className="fge-photo-fallback"><Icon name={item.kind==='video'?'video':'image'} size={34}/></span>}
        </button>
        <div className="fge-tile-actions">
         <button onClick={()=>toggleFav(item.id)} aria-label="รายการโปรด" aria-pressed={favorites.includes(item.id)}><Icon name="heart" size={17} filled={favorites.includes(item.id)}/></button>
