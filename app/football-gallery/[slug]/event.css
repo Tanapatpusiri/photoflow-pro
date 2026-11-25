@@ -35,8 +35,11 @@
 .fge-skeleton-grid{margin-top:10px}
 .fge-end{display:flex;align-items:center;justify-content:center;gap:6px;margin:22px 0 4px;color:#7a7a81;font-size:13px}
 .fge-sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
-/* Photo detail: vertical panning stays with the browser, horizontal drags change photo (event-client). */
-.fge-detail-image{touch-action:pan-y;user-select:none;-webkit-user-select:none}
+/* Photo detail: the page handles every move on the photo (event-client): sideways = change photo,
+   down = close, double tap / pinch = zoom and pan; other moves are passed on as page scrolling. */
+.fge-detail-image{touch-action:none;user-select:none;-webkit-user-select:none}
+/* While dragged down to close, the photo may leave its frame (which clips it otherwise, e.g. zoomed). */
+.fge-detail-image[data-gesture="down"]{overflow:visible;position:relative;z-index:5;background:transparent}
 /* Tab content slides in from the side (gallery-motion.css): never let that scroll the page sideways.
    clip (not hidden) keeps the sticky header and download button working. */
 .fge-shell{overflow-x:clip}
