@@ -10,7 +10,8 @@ body:has(> .fg-home-v2) { margin: 0; }
 .fg-home-v2 { -webkit-tap-highlight-color: transparent; }
 
 .fg-home-v2 .fg-shell {
-  padding: clamp(28px, 10vw, 48px) clamp(14px, 5vw, 24px) calc(36px + env(safe-area-inset-bottom));
+  --fg-gutter: clamp(14px, 5vw, 24px);
+  padding: clamp(28px, 10vw, 48px) var(--fg-gutter) calc(36px + env(safe-area-inset-bottom));
 }
 
 .fg-home-v2 .fg-header {
@@ -167,7 +168,98 @@ body:has(> .fg-home-v2) { margin: 0; }
 .fg-home-v2 .fg-albums { margin: clamp(22px, 7.8vw, 36px) 0 0; }
 .fg-home-v2 .fg-home-filters + .fg-albums { margin-top: 8px; }
 .fg-home-v2 .fg-album-grid { gap: clamp(10px, 2.7vw, 16px); }
-.fg-home-v2 .fg-album-grid[data-single="true"] { grid-template-columns: minmax(0, 1fr); }
+
+html:has(> body > .fg-home-v2[data-carousel="true"]),
+body:has(> .fg-home-v2[data-carousel="true"]),
+.fg-home-v2[data-carousel="true"] {
+  touch-action: pan-x pan-y;
+}
+
+.fg-home-v2[data-carousel="true"] .fg-shell,
+.fg-home-v2[data-carousel="true"] .fg-content,
+.fg-home-v2 .fg-albums:has(.fg-album-carousel) {
+  display: flex;
+  flex-direction: column;
+}
+
+.fg-home-v2[data-carousel="true"] .fg-content,
+.fg-home-v2 .fg-albums:has(.fg-album-carousel) {
+  flex: 1;
+  min-width: 0;
+}
+
+.fg-home-v2 .fg-albums:has(.fg-album-carousel) {
+  justify-content: center;
+}
+
+.fg-album-carousel {
+  --track-width: min(100vw, 540px);
+  --card-width: calc((var(--track-width) - 2 * var(--fg-gutter)) * .8);
+  --card-gap: clamp(14px, 5.8vw, 28px);
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--card-gap);
+  width: var(--track-width);
+  margin-inline: calc((100% - var(--track-width)) / 2);
+  padding: 5px calc((var(--track-width) - var(--card-width)) / 2) 20px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.fg-album-carousel::-webkit-scrollbar { display: none; }
+.fg-album-carousel[data-dragging="true"] { scroll-snap-type: none; }
+.fg-album-carousel[data-dragging="true"] .fg-album-card { cursor: grabbing; }
+.fg-album-carousel:focus-visible { outline: 2px solid #55555d; outline-offset: -2px; }
+
+.fg-home-v2 .fg-album-carousel .fg-album-card {
+  flex: 0 0 var(--card-width);
+  width: var(--card-width);
+  border-radius: clamp(23px, 7.4vw, 32px);
+  scroll-snap-align: center;
+}
+
+.fg-album-carousel .fg-home-caption {
+  inset-inline: clamp(15px, 5.5vw, 24px);
+  inset-block-end: clamp(15px, 5.2vw, 24px);
+}
+
+.fg-album-carousel .fg-home-caption strong { font-size: clamp(17px, 5.15vw, 24px); }
+.fg-album-carousel .fg-home-caption time { font-size: clamp(13px, 3.75vw, 17px); }
+.fg-home-v2 .fg-album-carousel .fg-home-arrow { width: clamp(29px, 8.4vw, 38px); }
+
+.fg-carousel-dots {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: -6px;
+}
+
+.fg-carousel-dots button {
+  display: grid;
+  width: 26px;
+  height: 32px;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.fg-carousel-dots button::before {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #dedede;
+  content: "";
+}
+
+.fg-carousel-dots button[aria-current="true"]::before { background: #4e920e; }
 
 .fg-home-v2 .fg-album-card {
   position: relative;
