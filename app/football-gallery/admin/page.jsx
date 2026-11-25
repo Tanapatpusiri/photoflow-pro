@@ -2,6 +2,7 @@
 import {useEffect,useState} from 'react';
 import '../gallery.css';
 import './admin.css';
+import './admin-motion.css';
 import Uploader from './upload-client';
 import ReviewClient from './review-client';
 import ChildrenManager from './children-client';
