@@ -3,7 +3,7 @@ import {useEffect,useMemo,useRef,useState} from 'react';
 import {flushSync} from 'react-dom';
 import {formatBytes as fmtBytes} from '../../../lib/football-gallery-format';
 import {watchImage,imageShown,imageFailed} from '../../../lib/football-gallery-image-fade';
-import {withViewTransition} from '../../../lib/football-gallery-motion';
+import {flyHeart,headerState,withViewTransition} from '../../../lib/football-gallery-motion';
 import './event.css';
 import '../gallery-motion.css';
 const paths={
@@ -17,16 +17,23 @@ const paths={
  done:<path d="m5 12.5 4.5 4.5L19 7.5"/>,
  box:<rect x="3.5" y="3.5" width="17" height="17" rx="5"/>,
  lock:<><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></>,
- shield:<><path d="M12 2 4 5v6c0 5 3 8 8 11 5-3 8-6 8-11V5z"/><path d="m9 12 2 2 4-4"/></>
+ shield:<><path d="M12 2 4 5v6c0 5 3 8 8 11 5-3 8-6 8-11V5z"/><path d="m9 12 2 2 4-4"/></>,
+ ball:<><circle cx="12" cy="12" r="9"/><path d="M12 8.8l3.04 2.21-1.16 3.58h-3.76l-1.16-3.58z"/><path d="M12 8.8V3m3.04 8.01 5.52-1.79m-6.68 5.37 3.41 4.69m-7.17-4.69-3.41 4.69m2.25-8.27-5.52-1.79"/></>
 };
 const Icon=({name,size=22,filled=false})=><svg className="fg-icon" width={size} height={size} viewBox="0 0 24 24" fill={filled?'currentColor':'none'} stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>;
 const fmt=n=>Number(n||0).toLocaleString('th-TH');
 const base=slug=>'/api/football-gallery/events/'+encodeURIComponent(slug);
 const ORIGINAL=['JPEG','RAW','VIDEO_ORIGINAL'];
-function Empty({message,children}){return <div className="fge-empty"><div className="fge-placeholder"><Icon name="image" size={40}/></div><p>{message}</p>{children}</div>}
+const matchesPlayer=(p,q)=>{const t=q.trim().toLowerCase();return !t||[p.name,p.jersey,p.team,p.jersey?'#'+p.jersey:''].some(x=>String(x||'').toLowerCase().includes(t))};
+// Empty lists get a football that drops in and bounces once; other empty states keep the photo icon.
+function Empty({message,children,ball=false}){return <div className="fge-empty"><div className="fge-placeholder">{ball?<span className="fge-ball"><Icon name="ball" size={40}/></span>:<Icon name="image" size={40}/>}</div><p>{message}</p>{children}</div>}
+// Placeholder photos (with a light sweep) in the same two columns while photos are on their way.
+function Skeleton({count,label}){return <div className="fge-photo-grid fge-skeleton-grid" role="status"><span className="fge-sr-only">{label}</span>{[0,1].map(c=><div className="fge-photo-column" key={c}>{Array.from({length:Math.ceil(count/2)},(_,i)=><div className="fge-skeleton" key={i}/>)}</div>)}</div>}
 export default function EventExperience({slug,initialData=null}){
  const [event,setEvent]=useState(initialData?.event||null),[players,setPlayers]=useState(initialData?.players||[]),[items,setItems]=useState([]),[error,setError]=useState(''),[loading,setLoading]=useState(!initialData),[needsAccess,setNeedsAccess]=useState(false);
  const [page,setPage]=useState('photos'),[tab,setTab]=useState('photo'),[player,setPlayer]=useState(null),[detail,setDetail]=useState(null),[filter,setFilter]=useState('all'),[favorites,setFavorites]=useState([]),[selected,setSelected]=useState([]),[pageNo,setPageNo]=useState(1),[hasMore,setHasMore]=useState(false),[query,setQuery]=useState('');
+ // Player search: the box shows what was typed at once, the list follows in a View Transition.
+ const [shownQuery,setShownQuery]=useState('');
  const [archive,setArchive]=useState(null),[preparing,setPreparing]=useState(false),[downloadProgress,setDownloadProgress]=useState('');
  const [removal,setRemoval]=useState({description:'',contact:'',sent:null,busy:false});
  const listingCache=useRef(new Map());
@@ -37,6 +44,17 @@ export default function EventExperience({slug,initialData=null}){
  const isMediaPage=['photos','videos','player'].includes(page);
  const isVideo=page==='videos'||page==='player'&&tab==='video';
  const canLoadMore=hasMore&&loadedPage===pageNo&&!loading&&!listFailed;
+ // Sticky header: hides while scrolling down, comes back on any scroll up (see headerState). Only its
+ // own data attributes change while scrolling, never React state.
+ const heading=useRef(null),headingState=useRef({hidden:false,scrolled:false,anchor:0});
+ const paintHeading=()=>{const el=heading.current,s=headingState.current;if(!el)return;const hidden=s.hidden?'true':'false',scrolled=s.scrolled?'true':'false';if(el.dataset.hidden!==hidden)el.dataset.hidden=hidden;if(el.dataset.scrolled!==scrolled)el.dataset.scrolled=scrolled};
+ const revealHeading=()=>{headingState.current={...headingState.current,hidden:false,anchor:window.scrollY};paintHeading()};
+ const hasEvent=Boolean(event);
+ useEffect(()=>{if(!hasEvent)return;let frame=0;
+  const update=()=>{frame=0;headingState.current=headerState({...headingState.current,y:window.scrollY});paintHeading()};
+  const onScroll=()=>{if(!frame)frame=requestAnimationFrame(update)};
+  update();window.addEventListener('scroll',onScroll,{passive:true});
+  return()=>{window.removeEventListener('scroll',onScroll);cancelAnimationFrame(frame)}},[hasEvent]);
  const cacheKey=(kind,personId,pageNumber)=>[slug,kind,personId||'',pageNumber].join(':');
  function listMedia(kind,personId,pageNumber){
   const key=cacheKey(kind,personId,pageNumber);
@@ -107,6 +125,17 @@ export default function EventExperience({slug,initialData=null}){
  const toggleFav=id=>{setFavorites(prev=>{const next=prev.includes(id)?prev.filter(x=>x!==id):[...prev,id];try{localStorage.setItem('fg_fav_'+slug,JSON.stringify(next))}catch{}return next})};
  const toggleSelected=id=>setSelected(prev=>prev.includes(id)?prev.filter(x=>x!==id):[...prev,id]);
  const viewed=useMemo(()=>items.filter(item=>filter==='favorites'?favorites.includes(item.id):filter==='JPEG'||filter==='RAW'?item.files.some(f=>f.variant===filter):true),[items,filter,favorites]);
+ // Favourites: the ♥ count in the header (among the photos/videos listed now, so it matches what the
+ // filter shows) switches to favourites only. Adding one sends a heart flying into it; the count
+ // bumps when it lands.
+ const favCount=useMemo(()=>items.reduce((n,item)=>n+(favorites.includes(item.id)?1:0),0),[items,favorites]);
+ const showFav=isMediaPage&&(favCount>0||filter==='favorites');
+ const favChip=useRef(null),flight=useRef(null),[bump,setBump]=useState(0);
+ const toggleFavFilter=()=>{setFilter(f=>f==='favorites'?'all':'favorites');window.scrollTo({top:0,behavior:'instant'})};
+ const launchHeart=button=>{flight.current={button,wasHidden:headingState.current.hidden};revealHeading()};
+ useEffect(()=>{const trip=flight.current,chip=favChip.current;flight.current=null;if(!trip||!chip)return;
+  const box=chip.getBoundingClientRect(),to=trip.wasHidden?{left:box.left,top:chip.offsetTop,width:box.width,height:box.height}:box;
+  flyHeart({from:trip.button.getBoundingClientRect(),to,source:trip.button.querySelector('svg'),onArrive:()=>setBump(n=>n+1)})},[favorites]);
  const fileUrl=file=>base(slug)+'/files/'+encodeURIComponent(file.id);
  const preview=item=>item.files.find(f=>f.variant==='THUMB')||item.files.find(f=>f.variant==='PREVIEW');
  const imageFor=item=>{if(item.thumbUrl)return item.thumbUrl;const file=preview(item);return file?fileUrl(file):''};
@@ -193,17 +222,17 @@ export default function EventExperience({slug,initialData=null}){
  if(loading&&!event)return <div className="fge-shell"><p className="fge-loading">กำลังโหลดอัลบั้ม…</p></div>;
  if(!event)return <div className="fge-shell"><div className="fge-nav"><a className="fge-back" href="/football-gallery" aria-label="กลับ"><Icon name="back"/></a></div><Empty message={error||'อัลบั้มนี้ยังไม่พร้อมให้เข้าชม'}>{needsAccess&&<a className="fge-primary fge-link-button" href="/football-gallery">กรอกรหัสอัลบั้ม</a>}</Empty></div>;
  return <main className="fge-shell">
-  <header className="fge-nav fge-album-heading"><button onClick={goBack} className="fge-back" aria-label="ย้อนกลับ"><Icon name="back"/></button><h1>{event.title}</h1><span className="fge-nav-spacer"/></header>
+  <header ref={heading} className="fge-nav fge-album-heading"><button onClick={goBack} className="fge-back" aria-label="ย้อนกลับ"><Icon name="back"/></button><h1>{event.title}</h1>{showFav?<button type="button" ref={favChip} className={'fge-fav-chip'+(filter==='favorites'?' active':'')} aria-pressed={filter==='favorites'} aria-label={'รายการโปรด '+fmt(favCount)+' รายการ'} onClick={toggleFavFilter}><Icon name="heart" size={16} filled/><span className="fge-fav-count" key={bump} data-bump={bump?'true':undefined}>{fmt(favCount)}</span></button>:<span className="fge-nav-spacer"/>}</header>
   {['photos','videos','players','player'].includes(page)&&<nav className="fge-album-tabs" aria-label="เนื้อหาอัลบั้ม">
    <button type="button" className={(page==='photos'?'active':'')} aria-current={page==='photos'?'page':undefined} onClick={()=>change('photos')}>รูปทั้งหมด</button>
    <button type="button" className={(page==='videos'?'active':'')} aria-current={page==='videos'?'page':undefined} onClick={()=>change('videos')}>วิดีโอทั้งหมด</button>
    <button type="button" className={(page==='players'||page==='player'?'active':'')} aria-current={page==='players'||page==='player'?'page':undefined} onClick={()=>change('players')}>นักเตะ</button>
   </nav>}
   {error&&<div className="fge-alert" role="alert">{error}</div>}
-  {page==='players'&&<><input className="fge-search" type="search" enterKeyHint="search" placeholder="ค้นหาชื่อหรือหมายเลขเสื้อ" aria-label="ค้นหาชื่อหรือหมายเลขเสื้อ" value={query} onChange={e=>setQuery(e.target.value)}/><div className="fge-playergrid">{players.filter(p=>!query.trim()||[p.name,p.jersey,p.team,p.jersey?'#'+p.jersey:''].some(x=>String(x||'').toLowerCase().includes(query.trim().toLowerCase()))).map((p,index)=><button className="fge-player" key={p.id} onClick={()=>change('player',p)}><div className="fge-player-cover">{p.coverUrl||p.cover?<img src={p.coverUrl||fileUrl({id:p.cover})} alt="" loading={index<4?"eager":"lazy"} fetchPriority={index<2?"high":"auto"} decoding="async"/>:<Icon name="players" size={44}/>}</div><strong>{p.name}{p.jersey?' #'+p.jersey:''}</strong><span>{fmt(p.photos)} รูป · {fmt(p.videos)} คลิป</span></button>)}</div>{players.length===0&&<Empty message="ยังไม่มีรายชื่อนักฟุตบอลที่เผยแพร่"/>}</>}
+  {page==='players'&&<><input className="fge-search" type="search" enterKeyHint="search" placeholder="ค้นหาชื่อหรือหมายเลขเสื้อ" aria-label="ค้นหาชื่อหรือหมายเลขเสื้อ" value={query} onChange={e=>{const value=e.target.value;setQuery(value);withViewTransition(()=>flushSync(()=>setShownQuery(value)))}}/><div className="fge-playergrid">{players.map((p,order)=>({p,order})).filter(({p})=>matchesPlayer(p,shownQuery)).map(({p,order},index)=><button className="fge-player" key={p.id} style={{viewTransitionName:'fg-player-'+order}} onClick={()=>change('player',p)}><div className="fge-player-cover">{p.coverUrl||p.cover?<img src={p.coverUrl||fileUrl({id:p.cover})} alt="" loading={index<4?"eager":"lazy"} fetchPriority={index<2?"high":"auto"} decoding="async"/>:<Icon name="players" size={44}/>}</div><strong>{p.name}{p.jersey?' #'+p.jersey:''}</strong><span>{fmt(p.photos)} รูป · {fmt(p.videos)} คลิป</span></button>)}</div>{players.length===0&&<Empty ball message="ยังไม่มีรายชื่อนักฟุตบอลที่เผยแพร่"/>}</>}
   {page==='player'&&<><div className="fge-player-banner"><h2>{player.name}{player.jersey?' #'+player.jersey:''}</h2><span>{fmt(player.photos)} รูป · {fmt(player.videos)} คลิป</span></div><div className="fge-segments" role="tablist"><button role="tab" aria-selected={tab==='photo'} className={tab==='photo'?'selected':''} onClick={()=>{if(tab==='photo')return;resetListing();setTab('photo')}}>Photos</button><button role="tab" aria-selected={tab==='video'} className={tab==='video'?'selected':''} onClick={()=>{if(tab==='video')return;resetListing();setTab('video')}}>Videos</button></div></>}
   {isMediaPage&&<>
-   {loading&&items.length===0?<p className="fge-loading">กำลังโหลด…</p>:viewed.length===0&&!listFailed?<Empty message="ยังไม่มีไฟล์ในหมวดนี้"/>:null}
+   {loading&&items.length===0?(isVideo?<p className="fge-loading">กำลังโหลด…</p>:<Skeleton count={6} label="กำลังโหลด…"/>):viewed.length===0&&!listFailed?<Empty ball message="ยังไม่มีไฟล์ในหมวดนี้"/>:null}
    <div className={isVideo?'fge-video-list':'fge-photo-grid'}>
     {(isVideo?[viewed]:[viewed.filter((_,index)=>index%2===0),viewed.filter((_,index)=>index%2===1)]).map((column,columnIndex)=>
      <div className={isVideo?'fge-video-column':'fge-photo-column'} key={columnIndex}>
@@ -212,7 +241,7 @@ export default function EventExperience({slug,initialData=null}){
         {imageFor(item)?<img src={imageFor(item)} data-media-id={item.id} ref={watchImage} onLoad={imageShown} onError={e=>imageFailed(e,event=>retryPreview(event,preview(item)))} loading={columnIndex===0&&index<3||columnIndex===1&&index<3?"eager":"lazy"} fetchPriority={index<2?"high":"auto"} decoding="async" alt={item.title||'ภาพการแข่งขัน'}/>:<span className="fge-photo-fallback"><Icon name={item.kind==='video'?'video':'image'} size={34}/></span>}
        </button>
        <div className="fge-tile-actions">
-        <button onClick={()=>{toggleFav(item.id);setPopFav(item.id)}} data-pop={popFav===item.id&&favorites.includes(item.id)?'true':undefined} aria-label="รายการโปรด" aria-pressed={favorites.includes(item.id)}><Icon name="heart" size={17} filled={favorites.includes(item.id)}/></button>
+        <button onClick={e=>{const adding=!favorites.includes(item.id);toggleFav(item.id);setPopFav(item.id);if(adding)launchHeart(e.currentTarget)}} data-pop={popFav===item.id&&favorites.includes(item.id)?'true':undefined} aria-label="รายการโปรด" aria-pressed={favorites.includes(item.id)}><Icon name="heart" size={17} filled={favorites.includes(item.id)}/></button>
         <button onClick={()=>toggleSelected(item.id)} aria-label="เลือกไฟล์" aria-pressed={selected.includes(item.id)}><Icon name={selected.includes(item.id)?'check':'box'} size={17}/></button>
        </div>
        {item.kind==='video'&&<span className="fge-video-title">{item.title||'วิดีโอการแข่งขัน'}<small>{fmtBytes(item.files.filter(f=>f.variant==='VIDEO_ORIGINAL').reduce((n,f)=>n+Number(f.bytes),0))}</small></span>}
@@ -221,9 +250,10 @@ export default function EventExperience({slug,initialData=null}){
     )}
    </div>
    {hasMore&&!isVideo&&<div ref={loadMoreTarget} aria-hidden="true" style={{height:1}}/>}
-   {loading&&pageNo>1&&<p className="fge-hint" role="status">กำลังโหลดชุดถัดไป…</p>}
+   {loading&&pageNo>1&&(isVideo?<p className="fge-hint" role="status">กำลังโหลดชุดถัดไป…</p>:<Skeleton count={2} label="กำลังโหลดชุดถัดไป…"/>)}
    {listFailed?<button type="button" className="fge-load" onClick={()=>{setListFailed(false);setListRetry(n=>n+1)}}>ลองโหลดอีกครั้ง</button>
     :hasMore&&(isVideo||typeof IntersectionObserver==='undefined')&&<button type="button" className="fge-load" onClick={()=>setPageNo(n=>n+1)} disabled={!canLoadMore}>โหลดเพิ่ม</button>}
+   {!hasMore&&!loading&&!listFailed&&viewed.length>0&&<p className="fge-end"><Icon name="done" size={16}/>ดูครบแล้ว</p>}
    {selected.length>0&&<button className="fge-primary fge-sticky" onClick={()=>{setArchive(null);setDownloadProgress('');setPage('downloads')}}>ดาวน์โหลดรูปที่เลือก {fmt(selected.length)} รายการ</button>}
   </>}
   {page==='detail'&&detail&&<><div className="fge-detail-image">{imageFor(detail)?<img src={imageFor(detail)} onError={e=>retryPreview(e,preview(detail))} loading="eager" fetchPriority="high" decoding="async" alt={detail.title||'ภาพการแข่งขัน'}/>:<Empty message="ไฟล์นี้ไม่มีภาพตัวอย่าง"/>}</div>

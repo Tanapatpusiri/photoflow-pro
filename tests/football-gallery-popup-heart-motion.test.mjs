@@ -44,7 +44,7 @@ for(const selector of ['.fg-access-overlay','.fg-access-modal','.fg-access-modal
  assert.ok(reduce.includes(selector),'reduced motion covers '+selector);
 
 const home=await readFile('app/football-gallery/home-client.jsx','utf8');
-assert.match(home,/import \{animatedClose,prefersReducedMotion\} from '\.\.\/\.\.\/lib\/football-gallery-motion';/);
+assert.match(home,/import \{animatedClose,prefersReducedMotion(?:,\w+)*\} from '\.\.\/\.\.\/lib\/football-gallery-motion';/);
 assert.match(home,/className="fg-access-overlay" data-closing=\{closingAccess\?'true':undefined\}/);
 assert.match(home,/const closeAccess=\(\)=>\{if\(busy\|\|closingAccess\)return;closeTimer\.current=animatedClose\(\{reduce:prefersReducedMotion\(\)/);
 // Re-opening right after a close cancels the pending close.
@@ -52,6 +52,7 @@ assert.match(home,/const askCode=title=>\{clearTimeout\(closeTimer\.current\);se
 assert.match(home,/\{busy\?<span className="fg-spinner" aria-hidden="true"\/>:<Icon name="arrow" size=\{20\}\/>\}/);
 
 const album=await readFile('app/football-gallery/[slug]/event-client.jsx','utf8');
-assert.match(album,/onClick=\{\(\)=>\{toggleFav\(item\.id\);setPopFav\(item\.id\)\}\} data-pop=\{popFav===item\.id&&favorites\.includes\(item\.id\)\?'true':undefined\}/);
+// (Adding a favourite also launches the flying heart, see football-gallery-favorite-flight.test.mjs.)
+assert.match(album,/onClick=\{e=>\{const adding=!favorites\.includes\(item\.id\);toggleFav\(item\.id\);setPopFav\(item\.id\);if\(adding\)launchHeart\(e\.currentTarget\)\}\} data-pop=\{popFav===item\.id&&favorites\.includes\(item\.id\)\?'true':undefined\}/);
 
 console.log('football gallery popup + heart motion ok');

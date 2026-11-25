@@ -1,9 +1,10 @@
 'use client';
-import {useEffect,useRef,useState} from 'react';
+import {useEffect,useMemo,useRef,useState} from 'react';
+import {flushSync} from 'react-dom';
 import Link from 'next/link';
 import {coverSrc,coverSrcSet,COVER_SIZES} from '../../lib/football-gallery-cover-srcset';
 import {watchImage,imageShown} from '../../lib/football-gallery-image-fade';
-import {animatedClose,prefersReducedMotion} from '../../lib/football-gallery-motion';
+import {animatedClose,prefersReducedMotion,withViewTransition} from '../../lib/football-gallery-motion';
 import './gallery.css';
 import './home-v2.css';
 import './gallery-motion.css';
@@ -24,6 +25,7 @@ const Icon=({name,size=22})=>{
   list:<><rect x="3" y="3" width="18" height="8" rx="2"/><rect x="3" y="13" width="18" height="8" rx="2"/></>,
   home:<path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v6H4a1 1 0 0 1-1-1z"/>,
   arrow:<><path d="M5 12h14m-6-6 6 6-6 6"/></>,
+  ball:<><circle cx="12" cy="12" r="9"/><path d="M12 8.8l3.04 2.21-1.16 3.58h-3.76l-1.16-3.58z"/><path d="M12 8.8V3m3.04 8.01 5.52-1.79m-6.68 5.37 3.41 4.69m-7.17-4.69-3.41 4.69m2.25-8.27-5.52-1.79"/></>,
  };
  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>
 };
@@ -36,6 +38,7 @@ export default function FootballGallery({initialAlbums=[]}) {
  const [singleColumn,setSingleColumn]=useState(false);
  const [activeAlbum,setActiveAlbum]=useState(0);
  const [query,setQuery]=useState('');
+ const [shownQuery,setShownQuery]=useState('');
  const [date,setDate]=useState('');
  const [draftDate,setDraftDate]=useState('');
  const hasPendingDate=draftDate!==date;
@@ -73,12 +76,17 @@ export default function FootballGallery({initialAlbums=[]}) {
  useEffect(()=>{
   try{setSingleColumn(localStorage.getItem(layoutKey)==='single')}catch{}
  },[]);
- const search=query.trim().normalize('NFC').toLocaleLowerCase('th');
- const filtering=Boolean(query||date);
+ const search=shownQuery.trim().normalize('NFC').toLocaleLowerCase('th');
+ const filtering=Boolean(shownQuery||date);
  const albums=initialAlbums.filter(album=>
   album.title.normalize('NFC').toLocaleLowerCase('th').includes(search)&&
   (!date||(album.date&&filterDate.format(new Date(album.date))===date)));
  const albumOrder=JSON.stringify(albums.map(album=>album.slug));
+ // Search and filters: the box shows what was typed at once; the list follows inside a View
+ // Transition (grid only), so cards that stay slide to their new place and the rest fade out/in.
+ // Each card is named by its place in the full list, so a card keeps its name across filters.
+ const albumIndex=useMemo(()=>new Map(initialAlbums.map((album,index)=>[album.slug,index])),[initialAlbums]);
+ const applyFilter=update=>{const run=()=>flushSync(update);if(singleColumn)run();else withViewTransition(run)};
  useEffect(()=>{
   setActiveAlbum(0);
   if(singleColumn)track.current?.scrollTo({left:0,behavior:'instant'});
@@ -166,7 +174,7 @@ export default function FootballGallery({initialAlbums=[]}) {
    <div className="fg-content">
     <div className="fg-home-search" role="search">
      <Icon name="search" size={20}/>
-     <input type="search" aria-label="ค้นหาอัลบั้ม / งานแข่งขัน" placeholder="ค้นหาอัลบั้ม / งานแข่งขัน" value={query} onChange={e=>setQuery(e.target.value)}/>
+     <input type="search" aria-label="ค้นหาอัลบั้ม / งานแข่งขัน" placeholder="ค้นหาอัลบั้ม / งานแข่งขัน" value={query} onChange={e=>{const value=e.target.value;setQuery(value);applyFilter(()=>setShownQuery(value))}}/>
      <label className="fg-home-calendar">
       <Icon name="calendar" size={21}/>
       <input type="date" aria-label="เลือกวันที่แข่งขัน" value={draftDate} onChange={e=>setDraftDate(e.target.value)}/>
@@ -174,11 +182,11 @@ export default function FootballGallery({initialAlbums=[]}) {
     </div>
     {(filtering||hasPendingDate)&&<div className="fg-home-filters">
      {(draftDate||date)&&<span>{draftDate?thaiDate.format(new Date(draftDate+'T12:00:00+07:00')):'ทุกวันที่'}</span>}
-     {hasPendingDate?<><button type="button" onClick={()=>setDraftDate(date)}>ยกเลิก</button><button type="button" onClick={()=>setDate(draftDate)}>ยืนยันวันที่ ✓</button></>
-      :<button type="button" onClick={()=>{setQuery('');setDate('');setDraftDate('')}}>ล้างตัวกรอง</button>}
+     {hasPendingDate?<><button type="button" onClick={()=>setDraftDate(date)}>ยกเลิก</button><button type="button" onClick={()=>applyFilter(()=>setDate(draftDate))}>ยืนยันวันที่ ✓</button></>
+      :<button type="button" onClick={()=>{setQuery('');setDraftDate('');applyFilter(()=>{setShownQuery('');setDate('')})}}>ล้างตัวกรอง</button>}
     </div>}
     <section className="fg-albums" aria-label="อัลบั้ม">
-     {albums.length===0?<div className="fg-albums-empty" role="status"><Icon name="image" size={28}/><span>{filtering?'ไม่พบอัลบั้มที่ตรงกับตัวกรอง':'ยังไม่มีอัลบั้มที่เปิดให้ชม'}</span></div>
+     {albums.length===0?<div className="fg-albums-empty" role="status"><span className="fg-ball"><Icon name="ball" size={28}/></span><span>{filtering?'ไม่พบอัลบั้มที่ตรงกับตัวกรอง':'ยังไม่มีอัลบั้มที่เปิดให้ชม'}</span></div>
      :<><div className={singleColumn?'fg-album-carousel':'fg-album-grid'} ref={track}
       tabIndex={singleColumn&&albums.length>1?0:undefined}
       role={singleColumn?'group':undefined} aria-label={singleColumn?'เลื่อนดูอัลบั้ม':undefined}
@@ -194,13 +202,13 @@ export default function FootballGallery({initialAlbums=[]}) {
       onClickCapture={singleColumn?event=>{
        if(suppressClick.current&&event.detail!==0){event.preventDefault();event.stopPropagation();}
       }:undefined}
-     >{albums.map((a,index)=>{const body=<>
+     >{albums.map((a,index)=>{const style=singleColumn?undefined:{viewTransitionName:'fg-album-'+albumIndex.get(a.slug)};const body=<>
        <div className="fg-album-cover">{a.cover&&!broken[a.slug]?<img src={coverSrc(a.cover)} srcSet={coverSrcSet(a.cover)} sizes={COVER_SIZES} alt="" loading={index<2?"eager":"lazy"} fetchPriority={index<2?"high":"auto"} decoding="async" onLoad={imageShown} ref={img=>{watchImage(img);if(img?.complete&&!img.naturalWidth)markCoverBroken(a.slug)}} onError={()=>markCoverBroken(a.slug)}/>:<Icon name="image" size={34}/>}</div>
        <div className="fg-home-cover-shade" aria-hidden="true"/>
        {a.locked&&<span className="fg-album-lock"><Icon name="lock" size={14}/><span className="fg-home-sr-only">ล็อก ต้องใช้รหัส</span></span>}
        <div className="fg-home-caption"><div><strong>{a.title}</strong>{a.date&&<time dateTime={filterDate.format(new Date(a.date))}>{thaiDate.format(new Date(a.date))}</time>}</div><span className="fg-home-arrow" aria-hidden="true"><Icon name="arrow" size={17}/></span></div>
       </>;
-      return a.locked?<button key={a.slug} type="button" className="fg-album-card" onClick={()=>askCode(a.title)}>{body}</button>:<Link key={a.slug} className="fg-album-card" href={"/football-gallery/"+encodeURIComponent(a.slug)} prefetch={false}>{body}</Link>})}</div>
+      return a.locked?<button key={a.slug} type="button" className="fg-album-card" style={style} onClick={()=>askCode(a.title)}>{body}</button>:<Link key={a.slug} className="fg-album-card" style={style} href={"/football-gallery/"+encodeURIComponent(a.slug)} prefetch={false}>{body}</Link>})}</div>
       {singleColumn&&albums.length>1&&<div className="fg-carousel-dots" role="group" aria-label="ตำแหน่งอัลบั้ม">
        {albums.map((album,index)=><button key={album.slug} type="button" aria-label={'แสดงอัลบั้ม '+album.title} aria-current={index===activeAlbum?'true':undefined} onClick={()=>selectAlbum(index)}/>)}
       </div>}
