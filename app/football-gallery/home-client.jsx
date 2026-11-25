@@ -34,6 +34,22 @@ export default function FootballGallery({initialAlbums=[]}) {
  const [date,setDate]=useState('');
  const [accessOpen,setAccessOpen]=useState(false),[selectedAlbum,setSelectedAlbum]=useState('');
  const codeInput=useRef(null);
+ const page=useRef(null);
+
+ useEffect(()=>{
+  const preventZoom=event=>event.preventDefault();
+  const keyboardFocus=event=>{
+   if(event.key==='Tab')delete page.current.dataset.pointerFocus;
+  };
+  document.addEventListener('gesturestart',preventZoom,{passive:false});
+  document.addEventListener('gesturechange',preventZoom,{passive:false});
+  document.addEventListener('keydown',keyboardFocus);
+  return ()=>{
+   document.removeEventListener('gesturestart',preventZoom);
+   document.removeEventListener('gesturechange',preventZoom);
+   document.removeEventListener('keydown',keyboardFocus);
+  };
+ },[]);
 
  // A locked album needs the code from the organiser: take the visitor to the code box.
  const askCode=title=>{setSelectedAlbum(title);setStatus('idle');setMessage('');setAccessOpen(true)};
@@ -67,7 +83,7 @@ export default function FootballGallery({initialAlbums=[]}) {
   catch{setStatus('error');setMessage('เชื่อมต่อระบบไม่สำเร็จ กรุณาลองใหม่')}
   finally{setBusy(false)}
  }
- return <main className="fg-page fg-home-v2">
+ return <main className="fg-page fg-home-v2" ref={page} onPointerDownCapture={()=>{page.current.dataset.pointerFocus='true'}}>
   <div className="fg-shell">
    <header className="fg-header">
     <div className="fg-brand-icon"><Icon name="camera" size={29}/></div>
