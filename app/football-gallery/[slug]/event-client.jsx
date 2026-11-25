@@ -14,6 +14,7 @@ const paths={
  players:<><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><circle cx="17" cy="9" r="2.4"/><path d="M15.5 14.2A4.5 4.5 0 0 1 21 18.5"/></>,
  heart:<path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/>,
  check:<><rect x="3.5" y="3.5" width="17" height="17" rx="5"/><path d="m8 12.5 2.7 2.7L16 9.8"/></>,
+ done:<path d="m5 12.5 4.5 4.5L19 7.5"/>,
  box:<rect x="3.5" y="3.5" width="17" height="17" rx="5"/>,
  lock:<><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></>,
  shield:<><path d="M12 2 4 5v6c0 5 3 8 8 11 5-3 8-6 8-11V5z"/><path d="m9 12 2 2 4-4"/></>
@@ -113,6 +114,10 @@ export default function EventExperience({slug,initialData=null}){
  // Opening a photo: the tapped preview grows into the detail photo (View Transitions where supported).
  // Going back returns to the same place in the grid and the photo shrinks into its own tile.
  const gridScroll=useRef(0);
+ // Saved: the save button shows "บันทึกแล้ว" with a check and a small burst for a moment.
+ const [savedAt,setSavedAt]=useState(0),savedTimer=useRef(null);
+ const celebrate=()=>{setSavedAt(Date.now());clearTimeout(savedTimer.current);savedTimer.current=setTimeout(()=>setSavedAt(0),1800)};
+ useEffect(()=>()=>clearTimeout(savedTimer.current),[]);
  const detailReady=()=>{const img=document.querySelector('.fge-detail-image img');return img?.decode?Promise.race([img.decode().catch(()=>{}),new Promise(r=>setTimeout(r,150))]):null};
  const openDetail=(item,img)=>{gridScroll.current=window.scrollY;if(img)img.style.viewTransitionName='fg-photo';
   const transition=withViewTransition(()=>{flushSync(()=>{setDetail(item);setPage('detail');setArchive(null)});window.scrollTo({top:0,behavior:'instant'});return detailReady()});
@@ -163,6 +168,7 @@ export default function EventExperience({slug,initialData=null}){
    if(navigator.share&&navigator.canShare?.({files})){
     setDownloadProgress('');
     await navigator.share({files});
+    celebrate();
    }else{
     for(const file of files){
      const url=URL.createObjectURL(file),a=document.createElement('a');
@@ -170,6 +176,7 @@ export default function EventExperience({slug,initialData=null}){
      setTimeout(()=>URL.revokeObjectURL(url),60000);
     }
     setDownloadProgress('ส่งไฟล์ภาพไปยังการดาวน์โหลดของเบราว์เซอร์แล้ว หากใช้ iPhone ให้เปิดภาพและเลือก “บันทึกรูปภาพ” เพื่อเพิ่มลง Photos');
+    celebrate();
    }
   }catch(e){
    if(e.name!=='AbortError')setError(e.message||'ไม่สามารถดาวน์โหลดภาพได้');
@@ -221,13 +228,13 @@ export default function EventExperience({slug,initialData=null}){
   </>}
   {page==='detail'&&detail&&<><div className="fge-detail-image">{imageFor(detail)?<img src={imageFor(detail)} onError={e=>retryPreview(e,preview(detail))} loading="eager" fetchPriority="high" decoding="async" alt={detail.title||'ภาพการแข่งขัน'}/>:<Empty message="ไฟล์นี้ไม่มีภาพตัวอย่าง"/>}</div>
    <div className="fge-card"><h2>{detail.title||'ภาพการแข่งขัน'}</h2><p>{event.title}{detail.captured_at?' · '+new Date(detail.captured_at).toLocaleString('th-TH',{dateStyle:'medium',timeStyle:'short',timeZone:'UTC'}):''}</p><p>ไฟล์ต้นฉบับที่มีอยู่จริง</p></div>
-   {detail.kind==='photo'&&<button className="fge-primary" disabled={preparing} onClick={()=>savePhotos({mediaIds:[detail.id]})}><Icon name="download"/><span style={{marginLeft:10}}>{preparing?'กำลังเตรียมรูปภาพ…':'ดาวน์โหลดรูปภาพ'}</span></button>}
+   {detail.kind==='photo'&&<button className="fge-primary" data-saved={savedAt?'true':undefined} disabled={preparing} onClick={()=>savePhotos({mediaIds:[detail.id]})}><Icon name={savedAt?'done':'download'}/><span style={{marginLeft:10}}>{preparing?'กำลังเตรียมรูปภาพ…':savedAt?'บันทึกแล้ว':'ดาวน์โหลดรูปภาพ'}</span>{savedAt?<span className="fge-celebrate" aria-hidden="true" key={savedAt}>{[0,1,2,3,4,5,6,7].map(i=><i key={i} style={{'--i':i}}/>)}</span>:null}</button>}
    {detail.kind==='video'&&<a className="fge-primary fge-link-button" href={fileUrl(detail.files.find(f=>f.variant==='VIDEO_ORIGINAL')||{id:''})}>ดาวน์โหลดวิดีโอต้นฉบับ</a>}
    {downloadProgress&&<p className="fge-hint" role="status">{downloadProgress}</p>}
    <p className="fge-hint">ไฟล์ที่ดาวน์โหลดเป็นต้นฉบับ ไม่ลดความละเอียดหรือแก้ไขข้อมูลสี</p>
    <button className="fge-text-link" onClick={()=>{setRemoval(s=>({...s,sent:null}));setPage('removal')}}>ขอถอดภาพนี้</button></>}
   {page==='downloads'&&<><div className="fge-card fge-event-summary"><h2>{selected.length?'รายการที่เลือก':player?.name||event.title}</h2><p>{selected.length?fmt(selected.length)+' รายการที่เลือก':player?fmt(player.photos)+' ภาพ':fmt(event.photos)+' ภาพ'}</p></div>
-   <button className="fge-primary" disabled={preparing} onClick={()=>savePhotos()}><Icon name="download"/><span style={{marginLeft:10}}>{preparing?'กำลังเตรียมรูปภาพ…':'ดาวน์โหลดรูปภาพ'}</span></button>
+   <button className="fge-primary" data-saved={savedAt?'true':undefined} disabled={preparing} onClick={()=>savePhotos()}><Icon name={savedAt?'done':'download'}/><span style={{marginLeft:10}}>{preparing?'กำลังเตรียมรูปภาพ…':savedAt?'บันทึกแล้ว':'ดาวน์โหลดรูปภาพ'}</span>{savedAt?<span className="fge-celebrate" aria-hidden="true" key={savedAt}>{[0,1,2,3,4,5,6,7].map(i=><i key={i} style={{'--i':i}}/>)}</span>:null}</button>
    {downloadProgress&&<p className="fge-hint" role="status">{downloadProgress}</p>}
    <p className="fge-hint">ดาวน์โหลดเฉพาะ JPEG ต้นฉบับ ไม่สร้าง ZIP บน iPhone ให้เลือก “บันทึกภาพ” ในเมนูแชร์เพื่อเก็บลงแอปรูปภาพโดยตรง</p>
   </>}
