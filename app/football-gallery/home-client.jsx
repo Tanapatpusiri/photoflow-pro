@@ -127,6 +127,9 @@ export default function FootballGallery({initialAlbums=[]}) {
   setSingleColumn(next);
   try{localStorage.setItem(layoutKey,next?'single':'grid')}catch{}
  }
+ function markCoverBroken(slug){
+  setBroken(previous=>previous[slug]?previous:{...previous,[slug]:true});
+ }
  useEffect(()=>{const invite=new URLSearchParams(window.location.search).get('invite');if(invite==='invalid'){setAccessOpen(true);setStatus('error');setMessage('ลิงก์เชิญหมดอายุหรือถูกยกเลิก กรุณาขอลิงก์ใหม่จากผู้จัดงาน หรือกรอกรหัสอัลบั้ม')}else if(invite==='suspended'){setAccessOpen(true);setStatus('error');setMessage('ผู้จัดงานปิดอัลบั้มนี้ไว้ชั่วคราว กรุณาติดต่อผู้จัดงาน')}},[]);
  async function enter(e){
   e.preventDefault();
@@ -184,7 +187,7 @@ export default function FootballGallery({initialAlbums=[]}) {
        if(suppressClick.current&&event.detail!==0){event.preventDefault();event.stopPropagation();}
       }:undefined}
      >{albums.map((a,index)=>{const body=<>
-       <div className="fg-album-cover">{a.cover&&!broken[a.slug]?<img src={a.cover} alt="" loading={index<2?"eager":"lazy"} fetchPriority={index<2?"high":"auto"} decoding="async" onError={()=>setBroken(b=>({...b,[a.slug]:true}))}/>:<Icon name="image" size={34}/>}</div>
+       <div className="fg-album-cover">{a.cover&&!broken[a.slug]?<img src={a.cover} alt="" loading={index<2?"eager":"lazy"} fetchPriority={index<2?"high":"auto"} decoding="async" ref={img=>{if(img?.complete&&!img.naturalWidth)markCoverBroken(a.slug)}} onError={()=>markCoverBroken(a.slug)}/>:<Icon name="image" size={34}/>}</div>
        <div className="fg-home-cover-shade" aria-hidden="true"/>
        {a.locked&&<span className="fg-album-lock"><Icon name="lock" size={14}/><span className="fg-home-sr-only">ล็อก ต้องใช้รหัส</span></span>}
        <div className="fg-home-caption"><div><strong>{a.title}</strong>{a.date&&<time dateTime={filterDate.format(new Date(a.date))}>{thaiDate.format(new Date(a.date))}</time>}</div><span className="fg-home-arrow" aria-hidden="true"><Icon name="arrow" size={17}/></span></div>
