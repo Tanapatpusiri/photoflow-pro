@@ -29,7 +29,9 @@ assert.match(css,/@media \(max-width:370px\)\{\.fge-album-tabs\{--tabs-pad:4px;-
 // the same 26px tap target, and the green/grey colours stay where they are (home-v2.css).
 assert.match(css,/\.fg-carousel-dots button::before\{width:22px;border-radius:5px;clip-path:inset\(0 6px round 5px\);transition:clip-path/);
 assert.match(css,/\.fg-carousel-dots button\[aria-current="true"\]::before\{clip-path:inset\(0 round 5px\)\}/);
-assert.doesNotMatch(css,/#4e920e|#dedede/,'dot colours are not redefined');
+const dotRules=css.match(/\.fg-carousel-dots[^{]*\{[^}]*\}/g)||[];
+assert.ok(dotRules.length>=2,'dot rules found');
+for(const rule of dotRules)assert.doesNotMatch(rule,/background(-color)?:|#[0-9a-f]{3,6}\b/i,'dot colours are not redefined: '+rule);
 
 // Off for "reduce motion".
 const reduce=css.slice(css.indexOf('@media (prefers-reduced-motion:reduce)'));

@@ -92,6 +92,53 @@
 ::view-transition-group(fg-photo){animation-duration:.34s;animation-timing-function:cubic-bezier(.2,.8,.2,1)}
 ::view-transition-old(root),::view-transition-new(root){animation-duration:.2s}
 
+/* Entrance (home): header, search and album cards settle in one after another, and covers settle
+   from a slight zoom once they are shown. Cards and covers only move (translate/scale, no fade)
+   because the first cover is the LCP image. translate/scale are separate properties so they
+   combine with the carousel depth and the press feedback (transform). */
+.fg-home-v2 .fg-header{animation:fg-enter-up .45s cubic-bezier(.2,.8,.2,1) both}
+.fg-home-v2 .fg-home-search{animation:fg-enter-up .45s .06s cubic-bezier(.2,.8,.2,1) both}
+@keyframes fg-enter-up{from{opacity:0;translate:0 10px}}
+.fg-home-v2 .fg-album-card{animation:fg-card-in .5s cubic-bezier(.2,.8,.2,1) both;animation-delay:var(--enter-delay,0s)}
+.fg-home-v2 .fg-album-card:nth-child(2){--enter-delay:.06s}
+.fg-home-v2 .fg-album-card:nth-child(3){--enter-delay:.12s}
+.fg-home-v2 .fg-album-card:nth-child(4){--enter-delay:.18s}
+.fg-home-v2 .fg-album-card:nth-child(5){--enter-delay:.24s}
+.fg-home-v2 .fg-album-card:nth-child(n+6){--enter-delay:.3s}
+@keyframes fg-card-in{from{translate:0 16px}}
+.fg-album-cover img:not([data-fade="pending"]):not([data-fade="loading"]){animation:fg-cover-settle .7s cubic-bezier(.2,.8,.2,1) both}
+@keyframes fg-cover-settle{from{scale:1.06}}
+
+/* Carousel depth: side cards a little smaller, full size in the centre. Scroll-driven (no JS), only
+   where supported; elsewhere the carousel looks as before. */
+@supports (animation-timeline:view()){
+ .fg-home-v2 .fg-album-carousel .fg-album-card{animation:fg-card-in .5s cubic-bezier(.2,.8,.2,1) both,fg-carousel-depth linear both;animation-timeline:auto,view(inline);animation-range:normal,cover 0% cover 100%;animation-delay:var(--enter-delay,0s),0s}
+}
+@keyframes fg-carousel-depth{0%,100%{scale:.94}50%{scale:1}}
+
+/* Album page: heading and tabs enter; photos rise in as they scroll into view (scroll-driven). */
+.fge-album-heading{animation:fg-enter-up .4s cubic-bezier(.2,.8,.2,1) both}
+.fge-album-tabs{animation:fg-enter-up .4s .06s cubic-bezier(.2,.8,.2,1) both}
+@supports (animation-timeline:view()){
+ .fge-photo-column .fge-tile{animation:fg-tile-rise linear both;animation-timeline:view();animation-range:entry 0% entry 70%}
+}
+@keyframes fg-tile-rise{from{opacity:.25;translate:0 18px}}
+
+/* Camera shutter: the home logo clicks once on arrival. */
+.fg-home-v2 .fg-brand-icon svg{animation:fg-shutter .5s .15s ease-out both}
+@keyframes fg-shutter{35%{scale:.8}70%{scale:1.08}}
+
+/* Saved: the save button shows a check that pops and a small burst of dots (existing green and
+   white only). position is set only while celebrating, so the sticky download button stays sticky. */
+@supports selector(:has(*)){
+ .fge-primary:has(.fge-celebrate){position:relative}
+ .fge-celebrate{position:absolute;left:50%;top:50%;width:0;height:0;pointer-events:none}
+ .fge-celebrate i{position:absolute;width:6px;height:6px;margin:-3px;border-radius:50%;background:#4e920e;animation:fg-burst .6s ease-out both}
+ .fge-celebrate i:nth-child(even){background:#fff}
+}
+@keyframes fg-burst{from{transform:rotate(calc(var(--i) * 45deg)) translateY(0);opacity:1}to{transform:rotate(calc(var(--i) * 45deg)) translateY(-38px);opacity:0}}
+.fge-primary[data-saved="true"] .fg-icon{animation:fg-heart-pop .45s cubic-bezier(.3,1.6,.5,1)}
+
 @media (prefers-reduced-motion:reduce){
  .fg-album-cover img,
  .fge-photo-column .fge-tile-image img,
@@ -119,4 +166,15 @@
  ::view-transition-group(*),
  ::view-transition-old(*),
  ::view-transition-new(*){animation:none}
+ .fg-home-v2 .fg-header,
+ .fg-home-v2 .fg-home-search,
+ .fg-home-v2 .fg-album-card,
+ .fg-home-v2 .fg-album-carousel .fg-album-card,
+ .fg-album-cover img,
+ .fge-album-heading,
+ .fge-album-tabs,
+ .fge-photo-column .fge-tile,
+ .fg-home-v2 .fg-brand-icon svg,
+ .fge-celebrate i,
+ .fge-primary[data-saved="true"] .fg-icon{animation:none}
 }
