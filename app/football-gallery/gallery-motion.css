@@ -62,6 +62,29 @@
 .fge-tile-actions button[data-pop="true"] .fg-icon{animation:fg-heart-pop .45s cubic-bezier(.3,1.6,.5,1)}
 @keyframes fg-heart-pop{35%{transform:scale(1.35)}}
 
+/* Album tabs and Photos/Videos: one white pill slides to the chosen tab instead of jumping.
+   Only where :has() works; elsewhere the active tab keeps its own white background (event.css).
+   Spacing matches event.css: 5px padding and gap, 4px/3px on screens up to 370px. */
+.fge-album-tabs,.fge-segments{--tabs-pad:5px;--tabs-gap:5px}
+@media (max-width:370px){.fge-album-tabs{--tabs-pad:4px;--tabs-gap:3px}}
+@supports selector(:has(*)){
+ .fge-album-tabs,.fge-segments{position:relative;isolation:isolate}
+ .fge-album-tabs::before{content:"";position:absolute;z-index:-1;top:var(--tabs-pad);bottom:var(--tabs-pad);left:var(--tabs-pad);width:calc((100% - 2 * var(--tabs-pad) - 2 * var(--tabs-gap)) / 3);border-radius:999px;background:#fff;box-shadow:0 2px 10px #00000012;transition:transform .28s cubic-bezier(.2,.8,.2,1)}
+ .fge-album-tabs:has(button:nth-child(2).active)::before{transform:translateX(calc(100% + var(--tabs-gap)))}
+ .fge-album-tabs:has(button:nth-child(3).active)::before{transform:translateX(calc(200% + 2 * var(--tabs-gap)))}
+ .fge-album-tabs button{position:relative;transition:transform .15s ease-out,color .2s}
+ .fge-album-tabs button.active{background:transparent;box-shadow:none}
+ .fge-segments::before{content:"";position:absolute;z-index:-1;top:var(--tabs-pad);bottom:var(--tabs-pad);left:var(--tabs-pad);width:calc((100% - 2 * var(--tabs-pad) - var(--tabs-gap)) / 2);border-radius:999px;background:#fff;box-shadow:0 2px 6px #00000012;transition:transform .28s cubic-bezier(.2,.8,.2,1)}
+ .fge-segments:has(button:nth-child(2).selected)::before{transform:translateX(calc(100% + var(--tabs-gap)))}
+ .fge-segments button{position:relative}
+ .fge-segments button.selected{background:transparent;box-shadow:none}
+}
+
+/* Carousel dots: the active dot opens into a short pill. clip-path only (no layout), inside the
+   same 26px tap target; the green/grey colours stay in home-v2.css. */
+.fg-carousel-dots button::before{width:22px;border-radius:5px;clip-path:inset(0 6px round 5px);transition:clip-path .28s cubic-bezier(.2,.8,.2,1),background-color .28s}
+.fg-carousel-dots button[aria-current="true"]::before{clip-path:inset(0 round 5px)}
+
 @media (prefers-reduced-motion:reduce){
  .fg-album-cover img,
  .fge-photo-column .fge-tile-image img,
@@ -83,4 +106,7 @@
  .fg-access-modal .fg-error,
  .fg-spinner,
  .fge-tile-actions button[data-pop="true"] .fg-icon{animation:none}
+ .fge-album-tabs::before,
+ .fge-segments::before,
+ .fg-carousel-dots button::before{transition:none}
 }
