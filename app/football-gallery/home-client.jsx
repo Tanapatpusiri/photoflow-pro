@@ -138,9 +138,10 @@ export default function FootballGallery({initialAlbums=[]}) {
   delete list.dataset.dragging;
   selectAlbum(index);
  }
+ // Layout switch: every card flies from its place in one layout to its place in the other.
  function toggleLayout(){
   const next=!singleColumn;
-  setSingleColumn(next);
+  withViewTransition(()=>flushSync(()=>setSingleColumn(next)));
   try{localStorage.setItem(layoutKey,next?'single':'grid')}catch{}
  }
  function markCoverBroken(slug){
@@ -202,7 +203,7 @@ export default function FootballGallery({initialAlbums=[]}) {
       onClickCapture={singleColumn?event=>{
        if(suppressClick.current&&event.detail!==0){event.preventDefault();event.stopPropagation();}
       }:undefined}
-     >{albums.map((a,index)=>{const style=singleColumn?undefined:{viewTransitionName:'fg-album-'+albumIndex.get(a.slug)};const body=<>
+     >{albums.map((a,index)=>{const style={viewTransitionName:'fg-album-'+albumIndex.get(a.slug)};const body=<>
        <div className="fg-album-cover">{a.cover&&!broken[a.slug]?<img src={coverSrc(a.cover)} srcSet={coverSrcSet(a.cover)} sizes={COVER_SIZES} alt="" loading={index<2?"eager":"lazy"} fetchPriority={index<2?"high":"auto"} decoding="async" onLoad={imageShown} ref={img=>{watchImage(img);if(img?.complete&&!img.naturalWidth)markCoverBroken(a.slug)}} onError={()=>markCoverBroken(a.slug)}/>:<Icon name="image" size={34}/>}</div>
        <div className="fg-home-cover-shade" aria-hidden="true"/>
        {a.locked&&<span className="fg-album-lock"><Icon name="lock" size={14}/><span className="fg-home-sr-only">ล็อก ต้องใช้รหัส</span></span>}

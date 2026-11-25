@@ -21,19 +21,20 @@ assert.doesNotMatch(home,/onChange=\{e=>setQuery\(e\.target\.value\)\}/,'the lis
 assert.match(home,/const applyFilter=update=>\{const run=\(\)=>flushSync\(update\);if\(singleColumn\)run\(\);else withViewTransition\(run\)\};/);
 // Each card is named by its place in the full list (not the filtered one), so a card keeps its name.
 assert.match(home,/const albumIndex=useMemo\(\(\)=>new Map\(initialAlbums\.map\(\(album,index\)=>\[album\.slug,index\]\)\),\[initialAlbums\]\);/);
-assert.match(home,/const style=singleColumn\?undefined:\{viewTransitionName:'fg-album-'\+albumIndex\.get\(a\.slug\)\};/);
+// (Named in both layouts since the layout switch morphs too, see football-gallery-layout-player-morph.test.mjs.)
+assert.match(home,/const style=\{viewTransitionName:'fg-album-'\+albumIndex\.get\(a\.slug\)\};/);
 assert.equal((home.match(/className="fg-album-card"[^>]*style=\{style\}/g)||[]).length,2,'locked and open cards both carry the name');
 
 // Album page player search: the same split, names from each player's place in the full list.
 assert.match(album,/const \[shownQuery,setShownQuery\]=useState\(''\);/);
 assert.match(album,/onChange=\{e=>\{const value=e\.target\.value;setQuery\(value\);withViewTransition\(\(\)=>flushSync\(\(\)=>setShownQuery\(value\)\)\)\}\}/);
 assert.match(album,/players\.map\(\(p,order\)=>\(\{p,order\}\)\)\.filter\(\(\{p\}\)=>matchesPlayer\(p,shownQuery\)\)/);
-assert.match(album,/<button className="fge-player" key=\{p\.id\} style=\{\{viewTransitionName:'fg-player-'\+order\}\}/);
+assert.match(album,/<button className="fge-player" key=\{p\.id\} data-player-id=\{p\.id\} style=\{\{viewTransitionName:'fg-player-'\+order\}\}/);
 assert.match(album,/const matchesPlayer=\(p,q\)=>\{const t=q\.trim\(\)\.toLowerCase\(\);return !t\|\|\[p\.name,p\.jersey,p\.team,p\.jersey\?'#'\+p\.jersey:''\]\.some\(x=>String\(x\|\|''\)\.toLowerCase\(\)\.includes\(t\)\)\};/);
 
 // Motion: cards that stay slide to their new place, the others fade/scale out and in.
 // Opacity and transform only; "reduce motion" already stops every view transition.
-assert.match(css,/\.fg-album-grid \.fg-album-card,\.fge-playergrid \.fge-player\{view-transition-class:fg-card\}/);
+assert.match(css,/\.fg-home-v2 \.fg-album-card,\.fge-playergrid \.fge-player\{view-transition-class:fg-card\}/);
 assert.match(css,/::view-transition-group\(\*\.fg-card\)\{animation-duration:\.3s;animation-timing-function:cubic-bezier\(\.2,\.8,\.2,1\)\}/);
 assert.match(css,/::view-transition-old\(\*\.fg-card\):only-child\{animation:fg-card-out \.2s ease-in both\}/);
 assert.match(css,/::view-transition-new\(\*\.fg-card\):only-child\{animation:fg-card-appear \.3s cubic-bezier\(\.2,\.8,\.2,1\) both\}/);

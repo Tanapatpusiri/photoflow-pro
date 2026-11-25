@@ -130,7 +130,7 @@
 
 /* Search and filters (View Transitions, home grid and player list): cards that stay slide to their
    new place, the others fade and shrink out or in. Names come from JavaScript, one per card. */
-.fg-album-grid .fg-album-card,.fge-playergrid .fge-player{view-transition-class:fg-card}
+.fg-home-v2 .fg-album-card,.fge-playergrid .fge-player{view-transition-class:fg-card}
 ::view-transition-group(*.fg-card){animation-duration:.3s;animation-timing-function:cubic-bezier(.2,.8,.2,1)}
 ::view-transition-old(*.fg-card):only-child{animation:fg-card-out .2s ease-in both}
 ::view-transition-new(*.fg-card):only-child{animation:fg-card-appear .3s cubic-bezier(.2,.8,.2,1) both}
@@ -180,6 +180,12 @@
 .fge-tab-panel[data-dir="prev"]{animation:fg-tab-prev .3s cubic-bezier(.2,.8,.2,1) backwards}
 @keyframes fg-tab-next{from{opacity:0;translate:28px 0}}
 @keyframes fg-tab-prev{from{opacity:0;translate:-28px 0}}
+
+/* Players: the tapped card grows into the player's banner and the name flies into its title (and
+   back). The banner always carries the names; a card only during that transition. */
+.fge-player-banner{view-transition-name:fg-player-hero}
+.fge-player-banner h2{view-transition-name:fg-player-name}
+::view-transition-group(fg-player-hero),::view-transition-group(fg-player-name){animation-duration:.38s;animation-timing-function:cubic-bezier(.2,.8,.2,1)}
 
 /* Saved: the save button shows a check that pops and a small burst of dots (existing green and
    white only). position is set only while celebrating, so the sticky download button stays sticky. */
