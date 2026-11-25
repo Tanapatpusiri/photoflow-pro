@@ -21,7 +21,7 @@ assert.equal(dragOffset(-90,{atStart:false,atEnd:true}),-30);
 assert.equal(dragOffset(-90,{atStart:true,atEnd:false}),-90,'the start only resists dragging right');
 
 const album=await readFile('app/football-gallery/[slug]/event-client.jsx','utf8');
-assert.match(album,/import \{dragOffset,swipeStep\} from '\.\.\/\.\.\/\.\.\/lib\/football-gallery-swipe';/);
+assert.match(album,/import \{(?:\w+,)*dragOffset,(?:\w+,)*swipeStep(?:,\w+)*\} from '\.\.\/\.\.\/\.\.\/lib\/football-gallery-swipe';/);
 assert.match(album,/import \{flyHeart,headerState,prefersReducedMotion,withViewTransition\} from '\.\.\/\.\.\/\.\.\/lib\/football-gallery-motion';/);
 // Neighbours come from the list the visitor was looking at (filters such as favourites included).
 assert.match(album,/const detailIndex=detail\?viewed\.findIndex\(item=>item\.id===detail\.id\):-1;/);
@@ -29,8 +29,9 @@ assert.match(album,/const detailIndex=detail\?viewed\.findIndex\(item=>item\.id=
 // dragged out as an image.
 assert.match(album,/<div className="fge-detail-image" ref=\{detailFrame\} onPointerDown=\{dragStart\} onPointerMove=\{dragMove\} onPointerUp=\{dragEnd\} onPointerCancel=\{dragEnd\}>/);
 assert.match(album,/<img src=\{imageFor\(detail\)\} draggable=\{false\}/);
-// A vertical move is left to the page (scrolling); only a clear horizontal move starts a drag.
-assert.match(album,/if\(Math\.abs\(dy\)>10&&Math\.abs\(dy\)>Math\.abs\(dx\)\)\{swipe\.current=null;return\}if\(Math\.abs\(dx\)<8\)return;/);
+// The direction is decided once the finger has moved 8px: sideways changes photo (vertical moves,
+// zoomed panning and swipe-down-to-close are covered in football-gallery-photo-gestures.test.mjs).
+assert.match(album,/if\(Math\.abs\(dx\)<8&&Math\.abs\(dy\)<8\)return;g\.mode=zoom\.current\.scale>1\?'pan':Math\.abs\(dx\)>Math\.abs\(dy\)\?'x':dy>0&&window\.scrollY<=0\?'down':'scroll'/);
 // Changing photo: the old one slides out, the page swaps the photo, the new one slides in. A timer
 // always finishes the swap; "reduce motion" or no Web Animations swaps at once. A save in progress
 // keeps its photo.
@@ -46,8 +47,8 @@ assert.match(album,/for\(const step of \[-1,1\]\)\{const near=viewed\[detailInde
 // its tile is scrolled into view, so the photo still shrinks into its own tile.
 assert.match(album,/if\(tile\)\{const r=tile\.getBoundingClientRect\(\);if\(r\.bottom<0\|\|r\.top>innerHeight\)window\.scrollTo\(\{top:window\.scrollY\+r\.top\+r\.height\/2-innerHeight\/2,behavior:'instant'\}\)/);
 
-// Styles: vertical panning stays with the browser, horizontal moves come to the page.
+// Styles: the page handles every move on the photo (swipe, close, zoom, pan; scrolling is passed on).
 const page=await readFile('app/football-gallery/[slug]/event.css','utf8');
-assert.match(page,/\.fge-detail-image\{touch-action:pan-y;user-select:none;-webkit-user-select:none\}/);
+assert.match(page,/\.fge-detail-image\{touch-action:none;user-select:none;-webkit-user-select:none\}/);
 
 console.log('football gallery photo swipe ok');

@@ -4,7 +4,7 @@ import {flushSync} from 'react-dom';
 import {formatBytes as fmtBytes} from '../../../lib/football-gallery-format';
 import {watchImage,imageShown,imageFailed} from '../../../lib/football-gallery-image-fade';
 import {flyHeart,headerState,prefersReducedMotion,withViewTransition} from '../../../lib/football-gallery-motion';
-import {dragOffset,swipeStep} from '../../../lib/football-gallery-swipe';
+import {clampZoom,dismissScale,dragOffset,panZoom,pinchZoom,shouldDismiss,swipeStep,zoomToggle} from '../../../lib/football-gallery-swipe';
 import './event.css';
 import '../gallery-motion.css';
 const paths={
@@ -168,7 +168,7 @@ export default function EventExperience({slug,initialData=null}){
  // Photo detail: swipe left/right (or the arrow keys) to the next/previous photo of the list the
  // visitor came from. The photo follows the finger (transform only), with resistance at the ends.
  const detailIndex=detail?viewed.findIndex(item=>item.id===detail.id):-1;
- const swipe=useRef(null),detailFrame=useRef(null);
+ const detailFrame=useRef(null);
  const stepDetail=(step,fromDx=0)=>{const next=viewed[detailIndex+step],img=detailFrame.current?.querySelector('img');if(!next||preparing)return false;
   const swap=()=>{flushSync(()=>{setDetail(next);setDownloadProgress('');setSavedAt(0)})};
   if(prefersReducedMotion()||typeof img?.animate!=='function'){if(img)img.style.transform='';swap();return true}
@@ -176,15 +176,40 @@ export default function EventExperience({slug,initialData=null}){
   let done=false;const enter=()=>{if(done)return;done=true;out.cancel();img.style.transform='';swap();
    detailFrame.current?.querySelector('img')?.animate?.([{transform:'translateX('+(step*40)+'%)',opacity:0},{transform:'none',opacity:1}],{duration:260,easing:'cubic-bezier(.2,.8,.2,1)'})};
   out.onfinish=enter;out.oncancel=enter;setTimeout(enter,300);return true};
- const dragStart=e=>{if(!e.isPrimary||detailIndex<0||e.pointerType==='mouse'&&e.button!==0)return;swipe.current={x:e.clientX,y:e.clientY,t:e.timeStamp,id:e.pointerId,dx:0,active:false}};
- const dragMove=e=>{const s=swipe.current;if(!s||e.pointerId!==s.id)return;const dx=e.clientX-s.x,dy=e.clientY-s.y;
-  if(!s.active){if(Math.abs(dy)>10&&Math.abs(dy)>Math.abs(dx)){swipe.current=null;return}if(Math.abs(dx)<8)return;s.active=true;e.currentTarget.setPointerCapture?.(e.pointerId)}
-  s.dx=dragOffset(dx,{atStart:detailIndex===0,atEnd:detailIndex===viewed.length-1});const img=e.currentTarget.querySelector('img');if(img)img.style.transform='translateX('+s.dx+'px)'};
- const dragEnd=e=>{const s=swipe.current;swipe.current=null;if(!s?.active)return;
-  const step=e.type==='pointerup'?swipeStep({dx:e.clientX-s.x,dy:e.clientY-s.y,ms:e.timeStamp-s.t,width:e.currentTarget.clientWidth,index:detailIndex,count:viewed.length}):0;
-  if(step&&stepDetail(step,s.dx))return;
-  const img=e.currentTarget.querySelector('img');if(!img)return;const from=img.style.transform;img.style.transform='';
-  if(from&&!prefersReducedMotion()&&typeof img.animate==='function')img.animate([{transform:from},{transform:'none'}],{duration:220,easing:'cubic-bezier(.2,.8,.2,1)'})};
+ // Gestures on the detail photo (its frame has touch-action:none, so every move comes here):
+ // sideways = change photo; down at the top of the page = close back into the grid; double tap or
+ // pinch = zoom, then one finger pans; any other move scrolls the page.
+ const pointers=useRef(new Map()),gesture=useRef(null),zoom=useRef({scale:1,x:0,y:0}),lastTap=useRef(null);
+ const frameBox=el=>{const r=el.getBoundingClientRect();return {cx:r.left+r.width/2,cy:r.top+r.height/2,width:r.width,height:r.height}};
+ const paintZoom=(img,animate)=>{const z=clampZoom(zoom.current,frameBox(img.parentElement));zoom.current=z;img.style.transition=animate&&!prefersReducedMotion()?'transform .25s cubic-bezier(.2,.8,.2,1)':'';img.style.transform=z.scale>1?'translate('+Math.round(z.x)+'px,'+Math.round(z.y)+'px) scale('+z.scale.toFixed(3)+')':''};
+ const settle=img=>{if(!img)return;const from=img.style.transform;img.style.transform='';if(from&&!prefersReducedMotion()&&typeof img.animate==='function')img.animate([{transform:from},{transform:'none'}],{duration:220,easing:'cubic-bezier(.2,.8,.2,1)'})};
+ useEffect(()=>{zoom.current={scale:1,x:0,y:0};gesture.current=null;pointers.current.clear();lastTap.current=null},[detail?.id]);
+ const dragStart=e=>{if(detailIndex<0||e.pointerType==='mouse'&&e.button!==0)return;const el=e.currentTarget;pointers.current.set(e.pointerId,{x:e.clientX,y:e.clientY});el.setPointerCapture?.(e.pointerId);
+  if(pointers.current.size===2){const [a,b]=[...pointers.current.values()],box=frameBox(el);gesture.current={mode:'pinch',d0:Math.hypot(a.x-b.x,a.y-b.y),m0:{x:(a.x+b.x)/2-box.cx,y:(a.y+b.y)/2-box.cy},z0:{...zoom.current},box};return}
+  if(pointers.current.size>1)return;
+  const img=el.querySelector('img');if(img)img.style.transition='';
+  gesture.current={mode:null,x:e.clientX,y:e.clientY,t:e.timeStamp,lastY:e.clientY,dx:0,dy:0,z0:{...zoom.current},box:frameBox(el)}};
+ const dragMove=e=>{if(!pointers.current.has(e.pointerId))return;pointers.current.set(e.pointerId,{x:e.clientX,y:e.clientY});const g=gesture.current;if(!g)return;const img=e.currentTarget.querySelector('img');
+  if(g.mode==='pinch'){const [a,b]=[...pointers.current.values()];if(!b)return;zoom.current=pinchZoom(g.z0,{d0:g.d0,d:Math.hypot(a.x-b.x,a.y-b.y),m0:g.m0,m:{x:(a.x+b.x)/2-g.box.cx,y:(a.y+b.y)/2-g.box.cy}},g.box);if(img)paintZoom(img,false);return}
+  const dx=e.clientX-g.x,dy=e.clientY-g.y;
+  if(!g.mode){if(Math.abs(dx)<8&&Math.abs(dy)<8)return;g.mode=zoom.current.scale>1?'pan':Math.abs(dx)>Math.abs(dy)?'x':dy>0&&window.scrollY<=0?'down':'scroll';if(g.mode==='down')e.currentTarget.dataset.gesture='down'}
+  if(g.mode==='pan'){zoom.current=panZoom(g.z0,{dx,dy},g.box);if(img)paintZoom(img,false);return}
+  if(g.mode==='scroll'){window.scrollBy(0,g.lastY-e.clientY);g.lastY=e.clientY;return}
+  if(g.mode==='down'){g.dy=Math.max(0,dy);if(img)img.style.transform='translate('+Math.round(dx*.5)+'px,'+Math.round(g.dy)+'px) scale('+dismissScale(g.dy)+')';return}
+  g.dx=dragOffset(dx,{atStart:detailIndex===0,atEnd:detailIndex===viewed.length-1});if(img)img.style.transform='translateX('+g.dx+'px)'};
+ const dragEnd=e=>{if(!pointers.current.delete(e.pointerId))return;const g=gesture.current,img=e.currentTarget.querySelector('img');
+  if(g?.mode==='pinch'){if(pointers.current.size<2){gesture.current=null;if(zoom.current.scale<1.05){zoom.current={scale:1,x:0,y:0};if(img)paintZoom(img,true)}}return}
+  if(pointers.current.size)return;
+  gesture.current=null;if(!g)return;
+  if(!g.mode){if(e.type!=='pointerup')return;const last=lastTap.current;
+   if(last&&e.timeStamp-last.t<300&&Math.hypot(e.clientX-last.x,e.clientY-last.y)<30){lastTap.current=null;const box=frameBox(e.currentTarget);zoom.current=zoomToggle(zoom.current,{x:e.clientX-box.cx,y:e.clientY-box.cy},box);if(img)paintZoom(img,true)}
+   else lastTap.current={t:e.timeStamp,x:e.clientX,y:e.clientY};
+   return}
+  if(g.mode==='pan'||g.mode==='scroll')return;
+  if(g.mode==='down'){if(e.type==='pointerup'&&shouldDismiss({dy:e.clientY-g.y,ms:e.timeStamp-g.t})){closeDetail();return}delete e.currentTarget.dataset.gesture;settle(img);return}
+  const step=e.type==='pointerup'?swipeStep({dx:e.clientX-g.x,dy:e.clientY-g.y,ms:e.timeStamp-g.t,width:e.currentTarget.clientWidth,index:detailIndex,count:viewed.length}):0;
+  if(step&&stepDetail(step,g.dx))return;
+  settle(img)};
  useEffect(()=>{if(page!=='detail')return;const onKey=e=>{if(e.defaultPrevented||e.altKey||e.metaKey||e.ctrlKey||/^(INPUT|TEXTAREA|SELECT)$/.test(e.target?.tagName||''))return;if(e.key==='ArrowRight'&&stepDetail(1))e.preventDefault();else if(e.key==='ArrowLeft'&&stepDetail(-1))e.preventDefault()};
   window.addEventListener('keydown',onKey);return()=>window.removeEventListener('keydown',onKey)});
  // The photos next to the one shown are fetched ahead, so a swipe lands on a ready photo.
