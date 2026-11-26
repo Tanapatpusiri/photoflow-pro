@@ -1,7 +1,7 @@
 // Football Gallery download Worker (Cloudflare Workers, Free plan compatible).
 // Streams private originals, ZIP parts and previews from Google Drive to parents so no file
 // bytes pass through Vercel. It holds no Google refresh token and no database access:
-//   /t/<ticket>  parent preview -> re-authorised by the app on every request
+//   /t/<ticket>  parent preview -> re-authorised by the app at least every 60 seconds (grant cache)
 //   /a/<ticket>  admin preview (short-lived bearer URL)
 //   /f/<ticket>  original file  -> re-authorised by the app on every request
 //   /z/<ticket>  ZIP part       -> re-authorised by the app on every request
@@ -38,11 +38,60 @@ async function driveToken(env,force=false){
  const d=await r.json();token={value:d.accessToken,exp:d.expiresAt};
  return token.value;
 }
-async function authorize(env,ticket,rangeStart){
- const r=await fetch(appUrl(env,'/api/football-gallery/internal/stream'),{method:'POST',headers:appHeaders(env),body:JSON.stringify({ticket,rangeStart})});
+async function authorize(env,ticket,rangeStart,withList=false){
+ const r=await fetch(appUrl(env,'/api/football-gallery/internal/stream'),{method:'POST',headers:appHeaders(env),body:JSON.stringify({ticket,rangeStart,...(withList?{allowed:true}:{})})});
  const body=await r.json().catch(()=>({}));
  if(r.ok&&body.accessToken)token={value:body.accessToken,exp:body.expiresAt};
  return {status:r.status,body};
+}
+
+// Parent previews: for a ticket that carries the Drive id (d), the app also answers with the album's
+// previews that are still published, and this isolate serves that grant's previews from the list for
+// GRANT_CACHE_MS. A page of 36 previews then costs one app request instead of 36, while revoking a
+// code or removing a photo still reaches previews within 60 seconds. A preview that is not on the list
+// (published later, or removed) is asked about directly. Old tickets without d, or an app that sends no
+// list, are asked about on every request as before. Originals and ZIP parts never use this cache.
+// The list is kept once per album (albums) and only an expiry per grant (grants), so an album opened
+// with many parents' codes does not hold one copy of its list per code.
+const GRANT_CACHE_MS=60000,GRANT_CACHE_MAX=1000,ALBUM_CACHE_MAX=50;
+const grants=new Map(),albums=new Map(),pendingGrants=new Map();
+function fresh(map,key){
+ const entry=map.get(key);
+ if(entry&&entry.until>Date.now())return entry;
+ if(entry)map.delete(key);
+ return null;
+}
+function remember(map,key,entry,max){
+ map.delete(key);
+ if(map.size>=max)map.delete(map.keys().next().value);
+ map.set(key,entry);
+}
+// The album list this grant may use right now, or null.
+const cachedList=(key,album)=>fresh(grants,key)&&fresh(albums,album);
+async function authorizePreview(env,ticket,t){
+ const cacheable=[t.d,t.f,t.g,t.e].every(v=>typeof v==='string'&&v);
+ const key=cacheable?t.g+':'+t.e:null;
+ if(cacheable){
+  // Concurrent previews of a cold grant wait for the first app request instead of each asking.
+  const list=cachedList(key,t.e)||await pendingGrants.get(key);
+  if(list?.files.has(t.f))return {status:200,driveId:t.d};
+ }
+ const ask=authorize(env,ticket,0,cacheable).then(auth=>{
+  if(!cacheable)return auth;
+  if(auth.status===200&&Array.isArray(auth.body.allowed)){
+   const until=Date.now()+GRANT_CACHE_MS;
+   remember(albums,t.e,{until,files:new Set(auth.body.allowed)},ALBUM_CACHE_MAX);
+   remember(grants,key,{until},GRANT_CACHE_MAX);
+  }else if(auth.status===403)grants.delete(key);
+  return auth;
+ });
+ if(cacheable&&!pendingGrants.has(key)){
+  const pending=ask.then(()=>cachedList(key,t.e),()=>null);
+  pendingGrants.set(key,pending);
+  pending.then(()=>{if(pendingGrants.get(key)===pending)pendingGrants.delete(key)});
+ }
+ const auth=await ask;
+ return auth.status===200?{status:200,driveId:auth.body.preview?.driveId}:{status:auth.status};
 }
 async function driveFetch(env,id,range,retry=true){
  const r=await fetch(`${API(env)}/drive/v3/files/${encodeURIComponent(id)}?alt=media`,{headers:{authorization:'Bearer '+await driveToken(env),...(range?{range}:{})}});
@@ -53,15 +102,16 @@ const requestedStart=request=>{const m=/^bytes=(\d+)-/.exec(request.headers.get(
 const deny=status=>text(status===410?'ลิงก์หมดอายุหรือรายการเปลี่ยนแปลง กรุณากลับไปที่อัลบั้มแล้วกดดาวน์โหลดใหม่':status===404?'ไม่พบไฟล์':'ไม่มีสิทธิ์ดาวน์โหลด กรุณาเปิดอัลบั้มอีกครั้ง',status===410||status===404?status:403);
 
 // Cache only byte-identical JPEG preview derivatives at the Cloudflare edge.
-// Every request still verifies its ticket and (for parent images) asks the app
-// to authorize the grant BEFORE reading the cache. A revoked grant therefore
-// cannot retrieve a cached image. Never cache RAW/video originals or ZIPs.
+// Every request still verifies its ticket and (for parent images) authorizes the
+// grant BEFORE reading the cache, through the app or the 60-second grant cache
+// above. A revoked grant therefore cannot retrieve a cached image for more than
+// 60 seconds. Never cache RAW/video originals or ZIPs.
 async function preview(env,ticket,t,ctx){
  let driveId=t.d;
  if(t.k==='t'){
-  const auth=await authorize(env,ticket,0);
+  const auth=await authorizePreview(env,ticket,t);
   if(auth.status!==200)return deny(auth.status);
-  driveId=auth.body.preview?.driveId;
+  driveId=auth.driveId;
  }
  if(typeof driveId!=='string'||!driveId)return deny(403);
  const store=typeof caches!=='undefined'?caches.default:null;

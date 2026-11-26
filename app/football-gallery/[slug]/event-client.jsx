@@ -5,6 +5,7 @@ import {formatBytes as fmtBytes} from '../../../lib/football-gallery-format';
 import {watchImage,imageShown,imageFailed} from '../../../lib/football-gallery-image-fade';
 import {flyHeart,headerState,prefersReducedMotion,withViewTransition} from '../../../lib/football-gallery-motion';
 import {clampZoom,dismissScale,dragOffset,panZoom,pinchZoom,shouldDismiss,swipeStep,zoomToggle} from '../../../lib/football-gallery-swipe';
+import {collectMedia} from '../../../lib/football-gallery-media-pages';
 import './event.css';
 import '../gallery-motion.css';
 const paths={
@@ -96,6 +97,8 @@ export default function EventExperience({slug,initialData=null,matchdayDate=null
  const isMediaPage=page==='photos'||page==='videos';
  const isVideo=mediaPage==='videos';
  const canLoadMore=hasMore&&loadedPage===pageNo&&!loading&&!listFailed;
+ // The photo pages the grid has already listed (same listing as listMedia('photo',player?.id,n)).
+ const listedPhotos=()=>mediaPage==='photos'&&!matchdays?{listed:items,listedPages:loadedPage,complete:loadedPage>0&&!hasMore}:{};
  // Sticky header: hides while scrolling down, comes back on any scroll up (see headerState). Only its
  // own data attributes change while scrolling, never React state.
  const heading=useRef(null),headingState=useRef({hidden:false,scrolled:false,anchor:0});
@@ -199,15 +202,12 @@ export default function EventExperience({slug,initialData=null,matchdayDate=null
   try{
    const ids=new Set();
    const favoriteIds=new Set(favorites);
-   for(let index=1;;index++){
-    const data=await listMedia('photo',player?.id,index);
-    if(current!==selectionRequest.current)return;
-    for(const item of data.items){
-     if(filter==='favorites'&&!favoriteIds.has(item.id))continue;
-     if(item.files.some(file=>file.variant==='JPEG'))ids.add(item.id);
-    }
-    if(!data.hasMore)break;
-   }
+   // One request for the whole listing: ids of the photos that have a JPEG original (no list pages).
+   const params=new URLSearchParams({kind:'photo',ids:'1'});if(player?.id)params.set('player',player.id);
+   const response=await fetch(base(slug)+'/media?'+params,{cache:'no-store'}),data=await response.json();
+   if(current!==selectionRequest.current)return;
+   if(!response.ok)throw Error(data.message||'เลือกรูปไม่สำเร็จ');
+   for(const id of data.ids||[]){if(filter==='favorites'&&!favoriteIds.has(id))continue;ids.add(id)}
    setSelected([...ids]);setWholePhotoSelection(filter==='all'&&ids.size>0);
    if(!ids.size)setError('ไม่มีไฟล์ JPEG ต้นฉบับสำหรับรายการนี้');
   }catch(err){if(current===selectionRequest.current)setError(err.message)}
@@ -310,19 +310,10 @@ export default function EventExperience({slug,initialData=null,matchdayDate=null
   if(preparing)return;
   setPreparing(true);setSaveProgress(0);setDownloadProgress('กำลังรวบรวมรูป JPEG ต้นฉบับ…');setError('');
   try{
+   // The wanted photo (the open one, or a single selected one) is usually listed already, so no list
+   // page is read. Without a selection this saves the whole listing (the chosen player's, or the album's).
    const wanted=scope?.mediaIds||selected;
-   const childId=scope?.playerId||(player&&!wanted.length?player.id:null);
-   const photos=[];let page=1;
-   while(true){
-    const query=new URLSearchParams({kind:'photo',page:String(page)});
-    if(childId)query.set('player',childId);
-    const response=await fetch(base(slug)+'/media?'+query,{cache:'no-store'});
-    const data=await response.json();
-    if(!response.ok)throw Error(data.message||'โหลดรายการภาพไม่สำเร็จ');
-    photos.push(...(data.items||[]).filter(item=>!wanted.length||wanted.includes(item.id)));
-    if(!data.hasMore)break;
-    if(++page>100000)throw Error('มีภาพจำนวนมากเกินกว่าจะโหลดในครั้งเดียว');
-   }
+   const photos=await collectMedia({wanted,...listedPhotos(),loadPage:n=>listMedia('photo',player?.id,n)});
    const originals=photos.map(item=>item.files.find(f=>f.variant==='JPEG')).filter(Boolean);
    if(!originals.length)throw Error('ไม่มีไฟล์ JPEG ต้นฉบับสำหรับรายการนี้');
    const files=[];
