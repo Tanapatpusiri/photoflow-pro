@@ -77,9 +77,15 @@ assert.match(open,/e\.locked=false AND e\.status='published'/);
 assert.match(open,/if\(!sameOrigin\(request\)\)/);
 const eventPage=await readFile('app/football-gallery/[slug]/event-client.jsx','utf8');
 assert.match(eventPage,/if\(!r\.ok&&d\.needsAccess\)\{const o=await fetch\('\/api\/football-gallery\/open'/);
-const home=await readFile('app/football-gallery/page.jsx','utf8');
-assert.doesNotMatch(home,/fg-title-section|ทุกโมเมนต์สำคัญ/);
-assert.match(home,/className="fg-album-grid"/);
+// The front page renders the albums on the server and hands them to the client home page, which draws the cards.
+const landing=await readFile('app/football-gallery/page.jsx','utf8');
+assert.match(landing,/import FootballGallery from '\.\/home-client';/);
+assert.match(landing,/return <FootballGallery initialAlbums=\{albums\}\/>;/);
+const home=await readFile('app/football-gallery/home-client.jsx','utf8');
+for(const file of [landing,home])assert.doesNotMatch(file,/fg-title-section|ทุกโมเมนต์สำคัญ/);
+// Album cards sit in the two-column grid by default; the swipe (carousel) layout is the viewer's opt-in.
+assert.match(home,/const \[singleColumn,setSingleColumn\]=useState\(false\);/);
+assert.match(home,/className=\{singleColumn\?'fg-album-carousel':'fg-album-grid'\}/);
 assert.match(await readFile('app/football-gallery/gallery.css','utf8'),/\.fg-album-grid\{display:grid;grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
 assert.match(await readFile('scripts/migrate-football-gallery.mjs','utf8'),/football_gallery_006_public_albums\.sql/);
 console.log('PASS: permanent delete, album lock/unlock, front page album cards and public album access');

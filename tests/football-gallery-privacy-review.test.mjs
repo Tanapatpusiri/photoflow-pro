@@ -5,7 +5,7 @@ let scenario={},calls=[],audits=[];
 const client={async query(sql,args){
  calls.push({sql,args});
  if(['BEGIN','COMMIT','ROLLBACK'].includes(sql))return {rowCount:0,rows:[]};
- if(sql.startsWith('SELECT id,status,privacy_approved_at'))return {rowCount:1,rows:[{id:'event',status:'draft'}]};
+ if(sql.startsWith('SELECT id,status,locked,public_grant_id,privacy_approved_at'))return {rowCount:1,rows:[{id:'event',status:'draft'}]};
  if(sql.startsWith('SELECT id,status FROM fg_media'))return {rowCount:1,rows:[{id:'media',status:'review'}]};
  if(sql.includes('AS originals'))return {rowCount:1,rows:[{originals:1,verified:scenario.verified===false?0:1}]};
  if(sql.includes('revoked_at IS NOT NULL'))return {rowCount:1,rows:[{n:scenario.revoked||0}]};
@@ -20,11 +20,15 @@ const client={async query(sql,args){
 globalThis.__privacyDb=()=>({connect:async()=>client});
 globalThis.__privacyAdmin={adminGuard:async()=>({admin:{id:'admin'}}),adminReply:(body,status=200)=>({body,status}),audit:async(_c,a)=>audits.push(a)};
 globalThis.__privacyRetention={validRetentionDate:()=>true,TODAY_SQL:"(NOW() AT TIME ZONE 'Asia/Bangkok')::date"};
+globalThis.__privacyServer={db:()=>globalThis.__privacyDb(),isUuid:(x)=>['event','media','request'].includes(x),sha256:x=>'hash:'+x.length,PUBLIC_GRANT_LABEL:'[public-album]'};
 async function load(path){let s=await readFile(path,'utf8');
- s=s.replace(/import \{db,isUuid\} from '[^']+';/,"const db=globalThis.__privacyDb; const isUuid=(x)=>['event','media','request'].includes(x);");
+ // Routes import different names from the server library (review also needs sha256 and PUBLIC_GRANT_LABEL for album grants).
+ s=s.replace(/import \{([^}]+)\} from '[^']*\/lib\/football-gallery-server';/,(_,names)=>`const {${names}}=globalThis.__privacyServer;`);
  s=s.replace(/import \{adminGuard,adminReply as reply,audit\} from '[^']+';/,'const {adminGuard,adminReply:reply,audit}=globalThis.__privacyAdmin;');
  s=s.replace(/import \{addRetentionMonths,validRetentionDate,TODAY_SQL\} from '[^']+';/,'const {addRetentionMonths,validRetentionDate,TODAY_SQL}=globalThis.__privacyRetention;');
  s=s.replace(/import \{RETENTION_SETTINGS_LOCK,readRetentionMonths\} from '[^']+';/,"const RETENTION_SETTINGS_LOCK='RETENTION_LOCK'; const readRetentionMonths=async()=>12;");
+ // A data: URL cannot resolve relative imports, so a new one must fail here with a readable message.
+ assert.doesNotMatch(s,/^import .* from '\.\.?\//m,path+' has a relative import this test does not stub');
  return import('data:text/javascript;base64,'+Buffer.from(s).toString('base64'));
 }
 const review=await load('app/api/football-gallery/admin/review/route.js');
