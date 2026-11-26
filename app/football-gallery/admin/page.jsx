@@ -111,7 +111,7 @@ export default function FootballAdmin(){
     <nav className="fga-tabs" aria-label="ขั้นตอนของอัลบั้ม">{ALBUM_TABS.map(([k,l])=><button key={k} className={albumTab===k?'active':''} aria-current={albumTab===k?'step':undefined} onClick={()=>setAlbumTab(k)}>{l}{counts[k]>0&&<span className={'fga-count'+(k==='requests'||k==='review'?' alert':'')}>{counts[k]}</span>}</button>)}</nav>
 
     {albumTab==='players'&&<PlayerRegistry key={active.id} eventId={active.id} eventPlayers={players} onChanged={async()=>{await loadPlayers(active.id);await load()}}/>}
-    {albumTab==='players'&&<ChildrenManager key={active.id} events={[active]} initialEvent={active.id} onChanged={async()=>{await loadPlayers(active.id);await load()}}/>}
+    {albumTab==='players'&&<ChildrenManager key={active.id} events={[active]} initialEvent={active.id} refreshKey={players.map(p=>p.id).join(',')} onChanged={async()=>{await loadPlayers(active.id);await load()}}/>}
     {albumTab==='upload'&&<section className="fga-card"><h2>อัปโหลด JPEG / RAW / วิดีโอ</h2>{canUpload?<Uploader eventId={active.id} album={{media:active.media||0,pending:pending(active),live:active.status==='published'}} onUploaded={()=>{setUploadKey(n=>n+1);return load()}} onReview={()=>setAlbumTab('review')} onPublish={()=>setAlbumTab('publish')}/>:<p>อัลบั้มที่ระงับหรือเก็บถาวรไม่เปิดรับอัปโหลด</p>}
     </section>}
     {albumTab==='review'&&<details className="fga-card"><summary>เพิ่มนักฟุตบอลจากทะเบียน</summary><PlayerRegistry key={active.id} eventId={active.id} eventPlayers={players} onChanged={async()=>{await loadPlayers(active.id);await load()}}/></details>}
