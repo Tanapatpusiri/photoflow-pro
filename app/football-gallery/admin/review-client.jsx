@@ -217,7 +217,7 @@ export default function ReviewClient({event,players,retentionMonths,uploadKey=0,
      <p className="fga-hint">แตะชื่อเด็กเพื่อแท็ก รูปจะบันทึกทันทีโดยไม่ต้องกดอนุมัติซ้ำ หากต้องแท็กหลายรูปพร้อมกันให้กดค้างรูปจากหน้ารวม</p>
      <div className="fga-pick">{players.map(p=><label key={p.id} className={tags.includes(p.id)?'on':''}><input type="checkbox" checked={tags.includes(p.id)} disabled={busy} onChange={e=>savePhotoTags(e.target.checked?[...tags,p.id]:tags.filter(x=>x!==p.id))}/>{p.registry_has_profile&&<img alt="" loading="lazy" decoding="async" src={api+'/player-registry?photo='+encodeURIComponent(p.registry_id)+'&v='+encodeURIComponent(p.registry_updated_at||'')} style={{width:28,height:28,borderRadius:'50%',objectFit:'cover',flexShrink:0}} onError={e=>{e.currentTarget.style.display='none'}}/>}{p.name}{p.age_group?' · '+p.age_group:''}{p.jersey?' #'+p.jersey:''}</label>)}
      </div>
-     <form className="fga-add-name" onSubmit={addName}><input value={newName} onChange={e=>setNewName(e.target.value)} placeholder="พิมพ์ชื่อเด็ก เช่น น้องบอล #10" maxLength={100} aria-label="เพิ่มชื่อเด็กที่ไม่มีในรายการ"/><button className="fga-quiet" disabled={busy||!newName.trim()}>เพิ่ม</button></form>
+     <p className="fga-meta">หากยังไม่มีรายชื่อ ให้ลงทะเบียนในเมนูจัดการเด็ก แล้วเลือกจากทะเบียนนักฟุตบอลด้านบน</p>
      {busy&&<p className="fga-hint" role="status">กำลังบันทึกแท็ก…</p>}
      {active.has_gps&&<p className="fga-gps-note" role="note">ไฟล์นี้มีตำแหน่งที่ถ่าย (GPS) ผู้ปกครองที่ดาวน์โหลดไฟล์ต้นฉบับจะเห็นตำแหน่งนี้ ถ้าไม่ควรเปิดเผย ให้กด "ซ่อนภาพนี้"</p>}
     </section>
