@@ -55,10 +55,9 @@
 .fge-profile-strip{display:flex;gap:10px;min-width:0;max-width:100%;overflow-x:auto;scrollbar-width:none;padding:5px 2px 8px;margin:0 0 18px}
 .fge-profile-strip::-webkit-scrollbar{display:none}
 .fge-profile{flex:0 0 clamp(66px,19vw,78px);display:flex;flex-direction:column;align-items:center;gap:7px;min-width:0;background:none;border:0;padding:0;color:var(--black);text-align:center;cursor:pointer;user-select:none}
-.fge-profile-ring{display:grid;place-items:center;position:relative;width:clamp(59.8px,calc(22.1vw - 18.2px),70.2px);aspect-ratio:1;border-radius:50%;color:#76767b;background:#f4f4f5;box-shadow:0 3px 8px -2px #0004}
+.fge-profile-ring{display:grid;place-items:center;position:relative;width:clamp(59.8px,calc(22.1vw - 18.2px),70.2px);aspect-ratio:1;border-radius:50%;color:#76767b;background:#f4f4f5}
 .fge-profile-ring::before{content:"";position:absolute;inset:-5px;border:2px solid #dedee1;border-radius:inherit;pointer-events:none}
 .fge-profile-ring img{position:absolute;inset:0;width:100%;height:100%;border-radius:inherit;object-fit:cover}
-.fge-profile[aria-pressed=true] .fge-profile-ring{box-shadow:0 5px 10px -2px #0007}
 .fge-profile[aria-pressed=true] .fge-profile-ring::before{border-color:#242426}
 .fge-profile[aria-pressed=true] .fge-profile-name{font-weight:750}
 .fge-profile-name{width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;font-weight:600;line-height:1.4}
