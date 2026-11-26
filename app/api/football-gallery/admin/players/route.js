@@ -7,12 +7,12 @@ export async function GET(request){
  const event=request.nextUrl.searchParams.get('event');
  if(!isUuid(event))return send({message:'กรุณาเลือกงาน'},400);
  try{
-  const q=await db().query(`SELECT p.id,p.name,p.jersey,p.team,p.visible,p.registry_id,p.age_group,
+  const q=await db().query(`SELECT p.id,p.name,p.jersey,p.team,p.visible,p.registry_id,p.age_group,(r.profile_jpeg IS NOT NULL) AS registry_has_profile,r.updated_at AS registry_updated_at,
    (SELECT COUNT(*)::int FROM fg_media_players mp WHERE mp.player_id=p.id) AS photos,
    (SELECT COUNT(*)::int FROM fg_media_players mp JOIN fg_media m ON m.id=mp.media_id WHERE mp.player_id=p.id AND m.status='published') AS published_photos,
    EXISTS(SELECT 1 FROM fg_privacy_records r WHERE r.event_id=p.event_id AND r.player_id=p.id AND r.revoked_at IS NOT NULL) AND NOT EXISTS(SELECT 1 FROM fg_privacy_records r WHERE r.event_id=p.event_id AND r.player_id=p.id AND r.scope='private_gallery' AND r.reviewed_at IS NOT NULL AND r.revoked_at IS NULL) AS consent_withdrawn,
    EXISTS(SELECT 1 FROM fg_privacy_records r WHERE r.event_id=p.event_id AND r.player_id=p.id AND r.scope='private_gallery' AND r.reviewed_at IS NOT NULL AND r.revoked_at IS NULL) AS privacy_recorded
-   FROM fg_players p WHERE p.event_id=$1 ORDER BY p.team NULLS LAST,(CASE WHEN p.jersey ~ '^[0-9]{1,6}$' THEN p.jersey::int END) NULLS LAST,p.jersey NULLS LAST,p.name`,[event]);
+   FROM fg_players p LEFT JOIN fg_player_registry r ON r.id=p.registry_id WHERE p.event_id=$1 ORDER BY p.team NULLS LAST,(CASE WHEN p.jersey ~ '^[0-9]{1,6}$' THEN p.jersey::int END) NULLS LAST,p.jersey NULLS LAST,p.name`,[event]);
   return send({players:q.rows});
  }catch(e){console.error('fg admin players',e?.code||'unknown');return send({message:'อ่านข้อมูลไม่สำเร็จ'},503)}
 }
