@@ -184,3 +184,48 @@
 .fga-upload-failures summary{font-weight:600;cursor:pointer}
 .fga-upload-failures ul{padding-left:20px;max-height:250px;overflow-y:auto;margin:12px 0}
 .fga-upload-failures li{font-size:12px;line-height:1.5;margin:3px 0}
+
+/* Registry: reuse Studio's rounded cards and neutral controls; no native unstyled field frames. */
+.fga-registry{display:grid;gap:14px;min-width:0;max-width:100%}
+.fga-registry-head h2{margin:0;min-width:0}
+.fga-registry>p{margin:0}
+.fga-registry-filters{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,144px);gap:8px;min-width:0}
+.fga-registry-filters>label{min-width:0;max-width:100%;position:relative}
+.fga-registry-sr{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+.fga-registry-search>svg{position:absolute;left:15px;top:50%;transform:translateY(-50%);color:#75757d;pointer-events:none}
+.fga-registry .fga-registry-search input{padding-inline:43px 12px;border-radius:999px}
+.fga-registry select{font-family:inherit;font-size:16px;font-weight:400;color:#222;background:#f9f9fa;border:1px solid #e4e4e7;border-radius:15px;min-width:0;max-width:100%;width:100%;height:52px;padding:10px 12px}
+.fga-registry .fga-registry-filter select{border-radius:999px}
+.fga-registry input:focus-visible,.fga-registry select:focus-visible{outline:2px solid #a3a3a9;outline-offset:2px}
+.fga-card form.fga-registry-form,.fga-card form.fga-registry-link{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;margin:0;padding:15px;border-radius:19px;background:#f7f7f8;min-width:0}
+.fga-registry-form>label,.fga-registry-link>label{min-width:0}
+.fga-registry-form input:not([type=checkbox]):not([type=file]),.fga-registry-link select{background:#fff}
+.fga-registry-photo{display:flex;align-items:center;gap:14px;flex-wrap:wrap;min-width:0;padding:12px;background:#fff;border-radius:17px}
+.fga-registry-photo>span{width:64px!important;height:64px!important;flex:0 0 64px!important}
+.fga-registry-photo-info{display:grid;gap:6px;flex:1 1 132px;min-width:0}
+.fga-registry-photo-info strong{font-size:14px}
+.fga-registry .fga-registry-upload{min-height:40px;align-items:center;gap:7px;justify-content:center;cursor:pointer;padding:9px 13px}
+.fga-registry-upload:focus-within{outline:2px solid #a3a3a9;outline-offset:2px}
+.fga-registry-upload:has(input:disabled){opacity:.5;cursor:not-allowed}
+.fga-registry-photo .fga-chip,.fga-registry-list .fga-chip{min-height:40px}
+.fga-registry-form .fga-actions>button{flex:1 1 100px;min-height:44px}
+.fga-registry-form .fga-check{align-items:center}
+.fga-registry-list li{min-width:0;display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:center;padding:12px 14px;border-radius:17px}
+.fga-registry-player-info{min-width:0;overflow-wrap:anywhere;display:grid;gap:4px}
+.fga-registry-player-info strong{font-size:15px;font-weight:650;line-height:1.35}
+.fga-registry-player-info .fga-meta{font-size:12px;line-height:1.5}
+.fga-registry-list li>.fga-chip{background:#ececef;white-space:nowrap;padding-inline:13px}
+.fga-registry-list li>.fga-chip.active{background:#303033;color:#fff}
+@media(max-width:560px){
+ .fga-registry-filters{grid-template-columns:minmax(0,1fr)}
+ .fga-registry-list li{gap:8px;padding:10px}
+ .fga-registry-list li>span{width:42px!important;height:42px!important;flex-basis:42px!important}
+ .fga-registry-list li>.fga-chip{padding-inline:11px}
+ .fga-registry-head .fga-primary{min-height:44px}
+ .fga-card form.fga-registry-form,.fga-card form.fga-registry-link{padding:12px}
+}
+@media(min-width:700px){
+ .fga-card form.fga-registry-form{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .fga-registry-photo,.fga-registry-form>.fga-check,.fga-registry-form>.fga-actions{grid-column:1/-1}
+ .fga-registry-form>.fga-actions>button{flex:0 1 140px}
+}
