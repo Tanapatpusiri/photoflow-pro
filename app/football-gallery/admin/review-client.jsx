@@ -43,7 +43,7 @@ export default function ReviewClient({event,players,retentionMonths,uploadKey=0,
  const endHold=()=>{clearTimeout(holdTimer.current);holdStart.current=null};
  useEffect(()=>()=>clearTimeout(holdTimer.current),[]);
 
- const [tags,setTags]=useState([]),[approval,setApproval]=useState({noChildren:false}),[newName,setNewName]=useState('');
+ const [tags,setTags]=useState([]),[approval,setApproval]=useState({noChildren:false});
  const [privacy,setPrivacy]=useState({player:'',basis:'',evidence:'',attest:false});
  const [publish,setPublish]=useState({notice:'',edited:false,retention:addRetentionMonths(event.event_date,retentionMonths),attest:false});
  const [grants,setGrants]=useState([]),[grantLabel,setGrantLabel]=useState(''),[grantDays,setGrantDays]=useState(14),[issued,setIssued]=useState(null);
@@ -94,7 +94,7 @@ export default function ReviewClient({event,players,retentionMonths,uploadKey=0,
  useEffect(()=>{if(uploadKey)load(1)},[uploadKey]);
  useEffect(()=>{if(retentionMonths)setPublish(p=>p.retention?p:{...p,retention:addRetentionMonths(event.event_date,retentionMonths)})},[retentionMonths,event.event_date]);
  // Basis and evidence usually apply to the whole match, so they are kept between photos; the confirmations are per photo.
- const select=item=>{setActive(item);setTags(item.players||[]);setApproval({noChildren:false});setNewName('');setError('');setInfo('')};
+ const select=item=>{setActive(item);setTags(item.players||[]);setApproval({noChildren:false});setError('');setInfo('')};
  const run=async(task,ok)=>{if(busy)return;setBusy(true);setError('');setInfo('');try{await task();if(ok)setInfo(ok)}catch(e){setError(e.message)}finally{setBusy(false)}};
  const savePhotoTags=next=>{
   if(!active||busy)return;
@@ -109,9 +109,7 @@ export default function ReviewClient({event,players,retentionMonths,uploadKey=0,
  const review=(action,data={},ok)=>run(async()=>{await post('/review',{action,eventId:event.id,mediaId:active?.id,...data});await load(1);setActive(null);await onUpdated?.();await loadSide()},ok);
  const savedTags=active?.players||[];
  const tagsDirty=!!active&&(tags.length!==savedTags.length||tags.some(t=>!savedTags.includes(t)));
- // Typing a name that is not in the list adds the child to the album and selects them. "Name #10" also stores the shirt number.
- const addName=e=>{e.preventDefault();const raw=newName.trim();if(!raw||busy)return;const m=/^(.*?)\s*#\s*([0-9A-Za-z-]{1,12})$/.exec(raw);const name=(m?m[1]:raw).trim().slice(0,100);if(!name)return;
-  run(async()=>{const r=await fetch(api+'/players',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({event:event.id,name,jersey:m?m[2]:''})});const d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d.message||'เพิ่มชื่อไม่สำเร็จ');await onPlayersChanged?.();const next=[...new Set([...tags,d.player.id])];await post('/review',{action:'tag',eventId:event.id,mediaId:active.id,players:next});setTags(next);setActive(a=>a?{...a,players:next}:a);setItems(xs=>xs.map(x=>x.id===active.id?{...x,players:next}:x));setNewName('')},'เพิ่มชื่อแล้ว')};
+
  // Permanent delete: rows first on the server, then the files in Google Drive. "all" repeats in batches.
  const removeForever=({ids,all,label})=>{
   if(!confirm(`ลบถาวร ${label}?\n\nไฟล์ต้นฉบับใน Google Drive จะถูกลบด้วย และกู้คืนไม่ได้`))return;
