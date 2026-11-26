@@ -1,5 +1,6 @@
 'use client';
 import {useEffect,useRef,useState} from 'react';
+import FaceGroups from './face-groups';
 import {addRetentionMonths,oneYearAfterEvent} from '../../../lib/football-gallery-retention';
 import {formatBytes,formatCaptureTime} from '../../../lib/football-gallery-format';
 const api='/api/football-gallery/admin';
@@ -16,7 +17,7 @@ const fmtDate=v=>v?new Date(v).toLocaleString('th-TH',{dateStyle:'medium',timeSt
 const inDays=n=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Bangkok'}).format(new Date(Date.now()+n*86400000));
 
 // view picks the part of the album workflow to show; state is kept while switching between them.
-export default function ReviewClient({matchdayTargets=[],event,players,retentionMonths,uploadKey=0,onUpdated,onPlayersChanged,view='all',onNavigate}){
+export default function ReviewClient({faceGroupingRequest=0,onFaceGroupingStart,matchdayTargets=[],event,players,retentionMonths,uploadKey=0,onUpdated,onPlayersChanged,view='all',onNavigate}){
  const show=part=>view==='all'||view===part;
  const [items,setItems]=useState([]),[active,setActive]=useState(null),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false),[error,setError]=useState(''),[info,setInfo]=useState(''),[page,setPage]=useState(1),[hasMore,setHasMore]=useState(false),[filter,setFilter]=useState('');
  const [counts,setCounts]=useState({total:0,ready:0,published:0,uploading:0,hidden:0,filtered:0});
@@ -197,6 +198,7 @@ export default function ReviewClient({matchdayTargets=[],event,players,retention
   {info&&<div className="fga-message fga-ok" role="status">{info}</div>}
   {show('review')&&<>
   <h2>จัดการรูปและแท็กนักฟุตบอล</h2><p>รูปที่อัปโหลดครบพร้อมให้แท็กได้เลย เลือกหลายรูปแล้วแท็กเด็กคนเดียวพร้อมกันได้ ส่วนการเปิดรูปให้ผู้ชมเห็นยังควบคุมแยกจากหน้าเผยแพร่</p>
+   {['draft','published'].includes(event.status)&&<FaceGroups key={event.id} eventId={event.id} players={players} autoStart={faceGroupingRequest} onStarted={onFaceGroupingStart} onTagged={async()=>{await load(1);await loadSide()}}/>}
    {active?<div className="fga-review-detail">
     {event.status==='draft'&&matchdayTargets.length>0&&active.files.length>0&&active.files.every(f=>f.storage==='s3'&&f.verifiedBytes&&!f.pending)&&['review','published'].includes(active.status)&&<MatchdayMove targets={matchdayTargets} from={event.id} mediaId={active.id} onMoved={()=>{setActive(null);load();onUpdated?.()}}/>}
     <div className="fga-detail-nav"><button className="fga-link" onClick={()=>setActive(null)}>‹ กลับรายการ</button><span>{activeIndex+1} / {items.length}</span><button type="button" className="fga-chip" onClick={()=>navigatePhoto(-1)} disabled={busy||activeIndex<=0} aria-label="รูปก่อนหน้า">‹ ก่อนหน้า</button><button type="button" className="fga-chip" onClick={()=>navigatePhoto(1)} disabled={busy||loading||(activeIndex>=items.length-1&&!hasMore)} aria-label="รูปถัดไป">ถัดไป ›</button></div>
