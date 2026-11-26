@@ -20,7 +20,9 @@ export async function GET(request,{params}){
   if(player&&!isUuid(player))return reply({message:'ข้อมูลนักฟุตบอลไม่ถูกต้อง'},400);
   const inputs=[id];let where="m.event_id=$1 AND m.status='published' AND m.publish_allowed=true AND m.metadata_reviewed=true";
   if(kind){inputs.push(kind);where+=` AND m.kind=$${inputs.length}`}
-  if(player){inputs.push(player);where+=` AND EXISTS(SELECT 1 FROM fg_media_players mp JOIN fg_players p ON p.id=mp.player_id WHERE mp.media_id=m.id AND p.event_id=$1 AND p.visible=true AND p.id=$${inputs.length})`}
+  if(player){inputs.push(player);where+=` AND EXISTS(SELECT 1 FROM fg_media_players mp JOIN fg_players p ON p.id=mp.player_id WHERE mp.media_id=m.id AND p.event_id=$1 AND p.visible=true AND p.id=$${inputs.length}
+   AND (NOT EXISTS(SELECT 1 FROM fg_privacy_records pr WHERE pr.event_id=p.event_id AND pr.player_id=p.id AND pr.revoked_at IS NOT NULL)
+    OR EXISTS(SELECT 1 FROM fg_privacy_records pr WHERE pr.event_id=p.event_id AND pr.player_id=p.id AND pr.scope='private_gallery' AND pr.reviewed_at IS NOT NULL AND pr.revoked_at IS NULL)))`}
   inputs.push((page-1)*PAGE);
   // Only files that are safe to hand out: verified originals and verified previews.
   const rows=await db().query(`SELECT m.id,m.kind,m.title,m.captured_at,

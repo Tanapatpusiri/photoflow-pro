@@ -67,7 +67,7 @@ assert.match(album,/import \{flyHeart,headerState,(?:\w+,)*withViewTransition\} 
 assert.match(album,/const favCount=useMemo\(\(\)=>items\.reduce\(\(n,item\)=>n\+\(favorites\.includes\(item\.id\)\?1:0\),0\),\[items,favorites\]\);/);
 assert.match(album,/const showFav=isMediaPage&&\(favCount>0\|\|filter==='favorites'\);/);
 // The ♥ button sits in the header where the empty spacer was (no layout jump when it appears).
-assert.match(album,/\{showFav\?<button type="button" ref=\{favChip\} className=\{'fge-fav-chip'\+\(filter==='favorites'\?' active':''\)\} aria-pressed=\{filter==='favorites'\} aria-label=\{'รายการโปรด '\+fmt\(favCount\)\+' รายการ'\} onClick=\{toggleFavFilter\}><Icon name="heart" size=\{16\} filled\/><span className="fge-fav-count" key=\{bump\} data-bump=\{bump\?'true':undefined\}>\{fmt\(favCount\)\}<\/span><\/button>:<span className="fge-nav-spacer"\/>\}/);
+assert.match(album,/\{showFav\?<button type="button" ref=\{favChip\} className=\{'fge-fav-chip'\+\(filter==='favorites'\?' active':''\)\} aria-pressed=\{filter==='favorites'\} aria-label=\{'รายการโปรด '\+fmt\(favCount\)\+' รายการ'\} onClick=\{toggleFavFilter\}><Icon name="heart" size=\{16\} filled\/><span className="fge-fav-count" key=\{bump\} data-bump=\{bump\?'true':undefined\}>\{fmt\(favCount\)\}<\/span><\/button>:null\}/);
 assert.match(album,/const toggleFavFilter=\(\)=>\{setFilter\(f=>f==='favorites'\?'all':'favorites'\);window\.scrollTo\(\{top:0,behavior:'instant'\}\)\};/);
 // Only adding a favourite launches the heart (removing one does not), and the header comes back.
 assert.match(album,/onClick=\{e=>\{const adding=!favorites\.includes\(item\.id\);toggleFav\(item\.id\);setPopFav\(item\.id\);if\(adding\)launchHeart\(e\.currentTarget\)\}\}/);

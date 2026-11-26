@@ -25,12 +25,11 @@ assert.match(home,/const albumIndex=useMemo\(\(\)=>new Map\(initialAlbums\.map\(
 assert.match(home,/const style=\{viewTransitionName:'fg-album-'\+albumIndex\.get\(a\.slug\)\};/);
 assert.equal((home.match(/className="fg-album-card"[^>]*style=\{style\}/g)||[]).length,2,'locked and open cards both carry the name');
 
-// Album page player search: the same split, names from each player's place in the full list.
-assert.match(album,/const \[shownQuery,setShownQuery\]=useState\(''\);/);
-assert.match(album,/onChange=\{e=>\{const value=e\.target\.value;setQuery\(value\);withViewTransition\(\(\)=>flushSync\(\(\)=>setShownQuery\(value\)\)\)\}\}/);
-assert.match(album,/players\.map\(\(p,order\)=>\(\{p,order\}\)\)\.filter\(\(\{p\}\)=>matchesPlayer\(p,shownQuery\)\)/);
-assert.match(album,/<button className="fge-player" key=\{p\.id\} data-player-id=\{p\.id\} style=\{\{viewTransitionName:'fg-player-'\+order\}\}/);
-assert.match(album,/const matchesPlayer=\(p,q\)=>\{const t=q\.trim\(\)\.toLowerCase\(\);return !t\|\|\[p\.name,p\.jersey,p\.team,p\.jersey\?'#'\+p\.jersey:''\]\.some\(x=>String\(x\|\|''\)\.toLowerCase\(\)\.includes\(t\)\)\};/);
+// Album search only filters the already-authorized event players.
+assert.match(album,/searchOpen&&<div className="fge-profile-search" role="search"/);
+assert.match(album,/players\.filter\(p=>matchesPlayer\(p,query\)\)/);
+assert.match(album,/\[player\.name,player\.nickname,player\.jersey\]/);
+assert.match(album,/resetSelection\(\);closeSearch\(\);/);
 
 // Motion: cards that stay slide to their new place, the others fade/scale out and in.
 // Opacity and transform only; "reduce motion" already stops every view transition.

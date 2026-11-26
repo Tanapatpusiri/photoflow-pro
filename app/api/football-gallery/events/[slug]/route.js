@@ -33,9 +33,20 @@ export async function GET(request,{params}){
   }
   const [count,players,cover]=await Promise.all([
    db().query(`SELECT m.kind,COUNT(*)::int AS total,COALESCE(SUM((SELECT SUM(f.size_bytes) FROM fg_media_files f WHERE f.media_id=m.id AND f.variant IN('JPEG','RAW','VIDEO_ORIGINAL'))),0)::bigint AS bytes FROM fg_media m WHERE m.event_id=$1 AND ${PUBLISHED} GROUP BY m.kind`,[e.id]),
-   db().query(`SELECT p.id,p.name,p.jersey,p.team,COUNT(m.id) FILTER(WHERE m.kind='photo')::int AS photos,COUNT(m.id) FILTER(WHERE m.kind='video')::int AS videos,
-     (SELECT CASE WHEN f.storage='drive' THEN 'd:'||f.id::text ELSE f.id::text END FROM fg_media_players mp2 JOIN fg_media m2 ON m2.id=mp2.media_id JOIN fg_media_files f ON f.media_id=m2.id AND f.variant='THUMB' AND f.verified_bytes=true WHERE mp2.player_id=p.id AND m2.status='published' AND m2.publish_allowed=true AND m2.metadata_reviewed=true ORDER BY m2.captured_at NULLS LAST,m2.id LIMIT 1) AS cover
-     FROM fg_players p LEFT JOIN fg_media_players mp ON mp.player_id=p.id LEFT JOIN fg_media m ON m.id=mp.media_id AND ${PUBLISHED} WHERE p.event_id=$1 AND p.visible=true GROUP BY p.id ORDER BY p.team NULLS LAST,(CASE WHEN p.jersey ~ '^[0-9]{1,6}$' THEN p.jersey::int END) NULLS LAST,p.jersey NULLS LAST,p.name`,[e.id]),
+   db().query(`SELECT p.id,p.name,p.jersey,
+     CASE WHEN consent.approved THEN r.nickname END AS nickname,COUNT(m.id) FILTER(WHERE m.kind='photo')::int AS photos,COUNT(m.id) FILTER(WHERE m.kind='video')::int AS videos,
+     (SELECT CASE WHEN f.storage='drive' THEN 'd:'||f.id::text ELSE f.id::text END FROM fg_media_players mp2 JOIN fg_media m2 ON m2.id=mp2.media_id JOIN fg_media_files f ON f.media_id=m2.id AND f.variant='THUMB' AND f.verified_bytes=true WHERE mp2.player_id=p.id AND m2.event_id=p.event_id AND m2.status='published' AND m2.publish_allowed=true AND m2.metadata_reviewed=true ORDER BY m2.captured_at NULLS LAST,m2.id LIMIT 1) AS cover
+     FROM fg_players p
+     LEFT JOIN fg_player_registry r ON r.id=p.registry_id AND r.active=true
+     CROSS JOIN LATERAL (
+      SELECT COALESCE(bool_or(pr.revoked_at IS NULL AND pr.scope='private_gallery' AND pr.reviewed_at IS NOT NULL),false) AS approved,
+       COALESCE(bool_or(pr.revoked_at IS NOT NULL),false) AS withdrawn
+      FROM fg_privacy_records pr WHERE pr.player_id=p.id AND pr.event_id=p.event_id
+     ) consent
+     LEFT JOIN fg_media_players mp ON mp.player_id=p.id
+     LEFT JOIN fg_media m ON m.id=mp.media_id AND m.event_id=p.event_id AND ${PUBLISHED}
+     WHERE p.event_id=$1 AND p.visible=true AND (NOT consent.withdrawn OR consent.approved)
+     GROUP BY p.id,r.nickname,consent.approved ORDER BY p.team NULLS LAST,(CASE WHEN p.jersey ~ '^[0-9]{1,6}$' THEN p.jersey::int END) NULLS LAST,p.jersey NULLS LAST,p.name`,[e.id]),
    db().query(`SELECT f.id,f.storage,f.r2_key FROM fg_media m JOIN fg_media_files f ON f.media_id=m.id AND f.variant='THUMB' AND f.verified_bytes=true WHERE m.event_id=$1 AND m.kind='photo' AND ${PUBLISHED} ORDER BY m.captured_at NULLS LAST,m.id LIMIT 1`,[e.id])
   ]);
   const by=k=>count.rows.find(x=>x.kind===k);
