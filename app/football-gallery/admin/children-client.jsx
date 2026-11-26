@@ -2,19 +2,18 @@
 import {useEffect,useState} from 'react';
 const api='/api/football-gallery/admin';
 async function call(path,method,body){const r=await fetch(api+path,{method,headers:body?{'content-type':'application/json'}:undefined,body:body?JSON.stringify(body):undefined,cache:'no-store'});let d={};try{d=await r.json()}catch{}if(!r.ok)throw Error(d.message||'ดำเนินการไม่สำเร็จ');return d}
-const blank={name:'',jersey:'',team:''};
 const n=v=>(v||0).toLocaleString('th-TH');
 
 // Children of one album in a single list: add, edit, remove a mistaken entry, withdraw or restore consent.
-export default function ChildrenManager({events,initialEvent,onChanged}){
+export default function ChildrenManager({events,initialEvent,onChanged,refreshKey}){
  const [eventId,setEventId]=useState(initialEvent||events[0]?.id||''),[players,setPlayers]=useState([]),[loading,setLoading]=useState(false),[busy,setBusy]=useState(false);
- const [error,setError]=useState(''),[info,setInfo]=useState(''),[add,setAdd]=useState(blank),[editing,setEditing]=useState(null),[search,setSearch]=useState('');
+ const [error,setError]=useState(''),[info,setInfo]=useState(''),[editing,setEditing]=useState(null),[search,setSearch]=useState('');
  const event=events.find(e=>e.id===eventId);
  const load=async(id=eventId)=>{if(!id)return;setLoading(true);try{const d=await call('/players?event='+encodeURIComponent(id),'GET');setPlayers(d.players||[]);setError('')}catch(e){setError(e.message)}finally{setLoading(false)}};
  useEffect(()=>{if(!eventId&&events[0])setEventId(events[0].id)},[events]);
  useEffect(()=>{setEditing(null);setSearch('');setInfo('');load(eventId)},[eventId]);
+ useEffect(()=>{load(eventId)},[refreshKey]);
  const run=async(task,ok)=>{if(busy)return;setBusy(true);setError('');setInfo('');try{await task();await load();await onChanged?.(eventId);if(ok)setInfo(ok)}catch(e){setError(e.message)}finally{setBusy(false)}};
- const create=e=>{e.preventDefault();if(!add.name.trim())return;run(async()=>{await call('/players','POST',{event:eventId,...add});setAdd(blank)},'เพิ่ม '+add.name.trim()+' แล้ว')};
  const save=e=>{e.preventDefault();if(!editing.name.trim())return;run(async()=>{await call('/players','PATCH',{player:editing.id,name:editing.name,jersey:editing.jersey||'',team:editing.team||''});setEditing(null)},'บันทึกแล้ว')};
  const remove=p=>{if(!confirm(`ลบ ${p.name} ออกจากอัลบั้มนี้? ใช้สำหรับชื่อที่เพิ่มผิด แท็กในภาพที่ยังไม่เผยแพร่จะถูกเอาออกด้วย`))return;run(()=>call('/players?player='+encodeURIComponent(p.id),'DELETE'),'ลบ '+p.name+' แล้ว')};
  const withdraw=p=>{if(!confirm(`ถอนความยินยอมของ ${p.name}?\n\nภาพที่มี ${p.name} จะถูกนำออกจากอัลบั้มทันที ชื่อจะไม่แสดงให้ผู้ปกครองเห็น และจะอนุมัติภาพของเด็กคนนี้ไม่ได้จนกว่าจะให้ความยินยอมอีกครั้ง`))return;run(()=>call('/review','POST',{action:'revoke-player-privacy',eventId,playerId:p.id}),'ถอนความยินยอมของ '+p.name+' แล้ว')};
@@ -23,20 +22,12 @@ export default function ChildrenManager({events,initialEvent,onChanged}){
  const shown=q?players.filter(p=>[p.name,p.jersey,p.team].some(v=>v&&String(v).toLowerCase().includes(q))):players;
  if(!events.length)return <section className="fga-card fga-empty"><h2>ยังไม่มีอัลบั้ม</h2><p>สร้างอัลบั้มในแท็บ "อัลบั้ม" ก่อน แล้วค่อยเพิ่มรายชื่อเด็ก</p></section>;
  return <section className="fga-card fga-children">
-  <div className="fga-children-head"><h2>จัดการเด็ก</h2>
-   <label className="fga-children-album">อัลบั้ม<select value={eventId} onChange={e=>setEventId(e.target.value)}>{events.map(e=><option key={e.id} value={e.id}>{e.title}</option>)}</select></label>
-  </div>
+  <div className="fga-children-head"><h2>นักฟุตบอลในอัลบั้มนี้</h2></div>
   <p>รายชื่อเด็กของอัลบั้ม {event?.title} ใช้สำหรับเลือกตอนตรวจภาพ และให้ผู้ปกครองค้นหาภาพของบุตรหลาน</p>
   {error&&<div className="fga-message" role="alert">{error}</div>}
   {info&&<div className="fga-message fga-ok" role="status">{info}</div>}
-  <form className="fga-children-add" onSubmit={create}>
-   <input value={add.name} onChange={e=>setAdd(a=>({...a,name:e.target.value}))} placeholder="ชื่อเด็ก" maxLength={100} aria-label="ชื่อเด็ก" required/>
-   <input value={add.jersey} onChange={e=>setAdd(a=>({...a,jersey:e.target.value}))} placeholder="เบอร์เสื้อ" maxLength={12} aria-label="เบอร์เสื้อ"/>
-   <input value={add.team} onChange={e=>setAdd(a=>({...a,team:e.target.value}))} placeholder="ทีม (ไม่บังคับ)" maxLength={100} aria-label="ทีม"/>
-   <button className="fga-primary" disabled={busy||!add.name.trim()}>เพิ่มเด็ก</button>
-  </form>
   {players.length>8&&<input className="fga-children-search" type="search" value={search} onChange={e=>setSearch(e.target.value)} placeholder="ค้นหาชื่อ เบอร์ หรือทีม" aria-label="ค้นหาเด็ก"/>}
-  {loading?<p>กำลังโหลด…</p>:players.length===0?<p>ยังไม่มีรายชื่อเด็กในอัลบั้มนี้ เพิ่มด้านบน หรือพิมพ์ชื่อตอนตรวจภาพก็ได้</p>:
+  {loading?<p>กำลังโหลด…</p>:players.length===0?<p>ยังไม่มีนักฟุตบอลในอัลบั้มนี้ เลือกจากทะเบียนกลางด้านบน</p>:
   <ul className="fga-children-list">{shown.map(p=><li key={p.id} className={p.consent_withdrawn?'withdrawn':''}>
    {editing?.id===p.id?<form className="fga-children-edit" onSubmit={save}>
     <input value={editing.name} onChange={e=>setEditing(x=>({...x,name:e.target.value}))} maxLength={100} aria-label="ชื่อเด็ก" required autoFocus/>
@@ -45,7 +36,7 @@ export default function ChildrenManager({events,initialEvent,onChanged}){
     <div className="fga-actions"><button className="fga-primary" disabled={busy}>บันทึก</button><button type="button" className="fga-chip" onClick={()=>setEditing(null)}>ยกเลิก</button></div>
    </form>:<>
     <div className="fga-children-info"><strong>{p.name}{p.jersey?' #'+p.jersey:''}</strong>
-     <span>{p.team?p.team+' · ':''}อยู่ในภาพ {n(p.photos)} · เผยแพร่แล้ว {n(p.published_photos)}</span>
+     <span>{p.age_group?p.age_group+' · ':''}{p.team?p.team+' · ':''}อยู่ในภาพ {n(p.photos)} · เผยแพร่แล้ว {n(p.published_photos)}</span>
      {p.consent_withdrawn&&<em>ถอนความยินยอมแล้ว · ภาพของเด็กคนนี้ไม่แสดงให้ผู้ปกครอง</em>}
     </div>
     <div className="fga-actions">

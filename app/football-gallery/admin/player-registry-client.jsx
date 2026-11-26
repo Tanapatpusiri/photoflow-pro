@@ -30,7 +30,7 @@ export default function PlayerRegistry({eventId=null,eventPlayers=[],onChanged})
  async function load(){setLoading(true);try{const d=await call();setPlayers(d.players||[]);setError('')}catch(e){setError(e.message)}finally{setLoading(false)}}
  useEffect(()=>{load()},[]);
  useEffect(()=>{setSelected('');setExisting('');setInfo('');setError('')},[eventId]);
- function start(p){fileGeneration.current++;setConverting(false);setEdit(p||{});setForm(p?{...empty,...p,nickname:p.nickname||'',team:p.team||''}:empty);setPhoto(undefined);setError('');setInfo('');if(input.current)input.current.value=''}
+ function start(p){fileGeneration.current++;setConverting(false);setEdit(p||{});setForm(p?{...empty,...p,nickname:p.nickname||'',team:p.team||'',age_group:p.age_group||'',jersey:p.jersey||''}:empty);setPhoto(undefined);setError('');setInfo('');if(input.current)input.current.value=''}
  function close(){fileGeneration.current++;setConverting(false);setEdit(null);setPhoto(undefined)}
  async function choose(e){const file=e.target.files?.[0];e.target.value='';if(!file)return;const generation=++fileGeneration.current;setConverting(true);setError('');try{const data=await jpeg(file);if(generation===fileGeneration.current)setPhoto(data)}catch(err){if(generation===fileGeneration.current)setError(err.message)}finally{if(generation===fileGeneration.current)setConverting(false)}}
  async function save(e){e.preventDefault();if(lock.current||converting)return;lock.current=true;setBusy(true);setError('');setInfo('');try{
@@ -42,11 +42,11 @@ export default function PlayerRegistry({eventId=null,eventPlayers=[],onChanged})
   setSelected('');setExisting('');setInfo('เชื่อมรายชื่อนักฟุตบอลกับอัลบั้มแล้ว');await onChanged?.();
  }catch(err){setError(err.message)}finally{lock.current=false;setBusy(false)}}
  const linked=new Set(eventPlayers.map(p=>p.registry_id).filter(Boolean));
- const groups=[...new Set(players.map(p=>p.age_group))].sort((a,b)=>Number(a.slice(1))-Number(b.slice(1)));
+ const groups=[...new Set(players.map(p=>p.age_group).filter(Boolean))].sort((a,b)=>Number(a.slice(1))-Number(b.slice(1)));
  const q=query.trim().toLowerCase(),shown=players.filter(p=>(!eventId||p.active&&!linked.has(p.id))&&(!group||p.age_group===group)&&(!q||[p.name,p.nickname,p.jersey,p.team].some(v=>String(v||'').toLowerCase().includes(q))));
  const preview=photo===undefined?profile(edit):photo;
  return <section className="fga-card" style={{minWidth:0,maxWidth:'100%'}}>
-  <div className="fga-row" style={{flexWrap:'wrap'}}><h2>{eventId?'เลือกจากทะเบียนนักฟุตบอล':'ทะเบียนนักฟุตบอล'}</h2>{!eventId&&<button type="button" className="fga-primary" disabled={busy} onClick={()=>start(null)}>+ ลงทะเบียน</button>}</div>
+  <div className="fga-row" style={{flexWrap:'wrap'}}><h2>{eventId?'เลือกจากทะเบียนนักฟุตบอล':'จัดการเด็ก · ทะเบียนกลาง'}</h2>{!eventId&&<button type="button" className="fga-primary" disabled={busy} onClick={()=>start(null)}>+ ลงทะเบียน</button>}</div>
   <p>{eventId?'เลือกนักเตะที่ลงทะเบียนไว้แล้วเพื่อเพิ่มเข้าอัลบั้มและแท็กรูป โดยยังต้องตรวจสิทธิ์การเผยแพร่ตามเดิม':'ลงทะเบียนครั้งเดียว ใช้กับหลายอัลบั้มได้ รูปโปรไฟล์นี้ใช้เฉพาะผู้ดูแลระบบ'}</p>
   {error&&<div role="alert" className="fga-message">{error}<button type="button" className="fga-chip" onClick={load} disabled={loading}>ลองโหลดใหม่</button></div>}{info&&<div role="status" className="fga-message fga-ok">{info}</div>}
   {edit&&<form onSubmit={save} style={{minWidth:0}}>
@@ -57,7 +57,7 @@ export default function PlayerRegistry({eventId=null,eventPlayers=[],onChanged})
   </form>}
   <label>ค้นหานักฟุตบอล<input type="search" placeholder="ชื่อ / เบอร์เสื้อ / ทีม" value={query} onChange={e=>setQuery(e.target.value)} style={{fontSize:16,width:'100%',minWidth:0,maxWidth:'100%'}}/></label>
   <label>รุ่นอายุ<select value={group} onChange={e=>setGroup(e.target.value)} style={{fontSize:16,width:'100%',minWidth:0,maxWidth:'100%'}}><option value="">ทุกรุ่น</option>{groups.map(g=><option key={g}>{g}</option>)}</select></label>
-  {loading?<p>กำลังโหลดทะเบียน…</p>:shown.length===0?<p>ไม่พบรายชื่อนักฟุตบอล</p>:<ul className="fga-children-list">{shown.map(p=><li key={p.id} style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}><Avatar src={profile(p)}/><div style={{flex:'1 1 100px',minWidth:0,overflowWrap:'anywhere'}}><strong>{p.nickname?p.nickname+' · ':''}{p.name}</strong><div className="fga-meta">{p.age_group} · #{p.jersey}{p.team?' · '+p.team:''}{p.active?'':' · ไม่ได้ใช้งาน'}</div></div>{eventId?<button type="button" className="fga-chip" aria-pressed={selected===p.id} disabled={busy} onClick={()=>{setSelected(p.id);setExisting('')}}>{selected===p.id?'เลือกแล้ว':'เลือก'}</button>:<button type="button" className="fga-chip" disabled={busy} onClick={()=>start(p)}>แก้ไข</button>}</li>)}</ul>}
+  {loading?<p>กำลังโหลดทะเบียน…</p>:shown.length===0?<p>ไม่พบรายชื่อนักฟุตบอล</p>:<ul className="fga-children-list">{shown.map(p=><li key={p.id} style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}><Avatar src={profile(p)}/><div style={{flex:'1 1 100px',minWidth:0,overflowWrap:'anywhere'}}><strong>{p.nickname?p.nickname+' · ':''}{p.name}</strong><div className="fga-meta">{p.age_group||'ยังไม่ระบุรุ่น U'} · {p.jersey?'#'+p.jersey:'ยังไม่ระบุเบอร์'}{p.team?' · '+p.team:''}{p.active?'':' · ไม่ได้ใช้งาน'}</div></div>{eventId?<button type="button" className="fga-chip" aria-pressed={selected===p.id} disabled={busy} onClick={()=>{setSelected(p.id);setExisting('')}}>{selected===p.id?'เลือกแล้ว':'เลือก'}</button>:<button type="button" className="fga-chip" disabled={busy} onClick={()=>start(p)}>แก้ไข</button>}</li>)}</ul>}
   {eventId&&selected&&<form onSubmit={link}><label>เชื่อมกับรายชื่อเดิม (ถ้าเป็นเด็กคนเดียวกัน)<select style={{fontSize:16,width:'100%',maxWidth:'100%',minWidth:0}} value={existing} onChange={e=>setExisting(e.target.value)}><option value="">เพิ่มรายชื่อใหม่ในอัลบั้ม</option>{eventPlayers.filter(p=>!p.registry_id).map(p=><option key={p.id} value={p.id}>{p.name}{p.jersey?' #'+p.jersey:''}</option>)}</select></label><button className="fga-primary" disabled={busy}>{busy?'กำลังเชื่อม…':'ยืนยันเพิ่มเข้าอัลบั้ม'}</button></form>}
  </section>
 }
