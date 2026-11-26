@@ -34,6 +34,8 @@ assert.match(album,/setTabDir\(\{key:next,dir:next==='videos'\?'next':'prev'\}\)
 assert.match(album,/const panelKey=mediaPage;/);
 assert.match(album,/\{isMediaPage&&<div className="fge-tab-panel" key=\{panelKey\}/);
 assert.doesNotMatch(album,/switchTab\('players'\)/);
+assert.match(css,/\.fge-album-tabs::before\{[^}]*width:calc\(\(100% - 2 \* var\(--tabs-pad\) - var\(--tabs-gap\)\) \/ 2\)/);
+assert.doesNotMatch(css,/\.fge-album-tabs:has\(button:nth-child\(3\)/);
 
 assert.match(album,/const openDetail=\(item,img\)=>\{gridScroll\.current=window\.scrollY;setTabDir\(null\);/);
 assert.match(css,/\.fge-tab-panel\[data-dir="next"\]\{animation:fg-tab-next \.3s cubic-bezier\(\.2,\.8,\.2,1\) backwards\}/);
