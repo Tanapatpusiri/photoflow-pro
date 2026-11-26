@@ -202,12 +202,12 @@ export default function EventExperience({slug,initialData=null,matchdayDate=null
   try{
    const ids=new Set();
    const favoriteIds=new Set(favorites);
-   const all=await collectMedia({...listedPhotos(),loadPage:n=>listMedia('photo',player?.id,n),isCurrent:()=>current===selectionRequest.current});
-   if(!all)return;
-   for(const item of all){
-    if(filter==='favorites'&&!favoriteIds.has(item.id))continue;
-    if(item.files.some(file=>file.variant==='JPEG'))ids.add(item.id);
-   }
+   // One request for the whole listing: ids of the photos that have a JPEG original (no list pages).
+   const params=new URLSearchParams({kind:'photo',ids:'1'});if(player?.id)params.set('player',player.id);
+   const response=await fetch(base(slug)+'/media?'+params,{cache:'no-store'}),data=await response.json();
+   if(current!==selectionRequest.current)return;
+   if(!response.ok)throw Error(data.message||'เลือกรูปไม่สำเร็จ');
+   for(const id of data.ids||[]){if(filter==='favorites'&&!favoriteIds.has(id))continue;ids.add(id)}
    setSelected([...ids]);setWholePhotoSelection(filter==='all'&&ids.size>0);
    if(!ids.size)setError('ไม่มีไฟล์ JPEG ต้นฉบับสำหรับรายการนี้');
   }catch(err){if(current===selectionRequest.current)setError(err.message)}
