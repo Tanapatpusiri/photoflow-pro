@@ -90,12 +90,12 @@ const listedUpTo=pages=>album.slice(0,pages*PAGE);
 // A listing that never ends is cut off instead of looping forever.
 await assert.rejects(collectMedia({loadPage:async()=>({items:[],hasMore:true}),maxPages:5}),/มีภาพจำนวนมากเกินกว่าจะโหลดในครั้งเดียว/);
 
-// The album page uses the helper for "เลือกทั้งหมด" and for saving, with the pages it already listed,
-// and saving no longer reads /media by itself.
+// The album page uses the helper for saving, with the pages it already listed, and saving no longer
+// reads /media by itself. ("เลือกทั้งหมด" uses one ids request, see football-gallery-public-headroom.)
 const client=await readFile('app/football-gallery/[slug]/event-client.jsx','utf8');
 assert.match(client,/import \{collectMedia\} from '\.\.\/\.\.\/\.\.\/lib\/football-gallery-media-pages';/);
 assert.match(client,/const listedPhotos=\(\)=>mediaPage==='photos'&&!matchdays\?\{listed:items,listedPages:loadedPage,complete:loadedPage>0&&!hasMore\}:\{\};/);
-assert.match(client,/const all=await collectMedia\(\{\.\.\.listedPhotos\(\),loadPage:n=>listMedia\('photo',player\?\.id,n\),isCurrent:\(\)=>current===selectionRequest\.current\}\);/);
 assert.match(client,/const photos=await collectMedia\(\{wanted,\.\.\.listedPhotos\(\),loadPage:n=>listMedia\('photo',player\?\.id,n\)\}\);/);
-assert.doesNotMatch(client,/await fetch\(base\(slug\)\+'\/media\?'/,'saving reads list pages through listMedia, which shares the short cache');
+const save=client.slice(client.indexOf('async function savePhotos(scope){'),client.indexOf('async function sendRemoval('));
+assert.doesNotMatch(save,/fetch\(base\(slug\)\+'\/media\?'/,'saving reads list pages through listMedia, which shares the short cache');
 console.log('football-gallery-media-pages: ok');
