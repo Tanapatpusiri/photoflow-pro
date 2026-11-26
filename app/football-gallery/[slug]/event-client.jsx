@@ -306,6 +306,18 @@ export default function EventExperience({slug,initialData=null,matchdayDate=null
    if(!r.ok)throw Error(d.message||'เตรียมไฟล์ไม่สำเร็จ');setArchive(d);
   }catch(e){setError(e.message)}finally{setPreparing(false)}
  }
+ // The original JPEG for saving comes straight from the download Worker, so no file bytes pass through
+ // Vercel (Hobby: 10 GB Fast Origin Transfer a month, then the project is paused). If the Worker's
+ // answer cannot be read here (another origin, or an older Worker without CORS), the same-origin
+ // stream is used as before.
+ async function originalBlob(f){
+  const link=await fetch(fileUrl(f)+'?link=1',{cache:'no-store'}),data=await link.json().catch(()=>({}));
+  if(!link.ok)throw Error(data.message||'ดาวน์โหลดภาพไม่สำเร็จ ('+link.status+')');
+  if(data.url){try{const direct=await fetch(data.url,{cache:'no-store',mode:'cors',credentials:'omit'});if(direct.ok)return await direct.blob()}catch{}}
+  const response=await fetch(fileUrl(f)+'?share=1',{cache:'no-store'});
+  if(!response.ok)throw Error('ดาวน์โหลดภาพไม่สำเร็จ ('+response.status+')');
+  return response.blob();
+ }
  async function savePhotos(scope){
   if(preparing)return;
   setPreparing(true);setSaveProgress(0);setDownloadProgress('กำลังรวบรวมรูป JPEG ต้นฉบับ…');setError('');
@@ -319,9 +331,7 @@ export default function EventExperience({slug,initialData=null,matchdayDate=null
    const files=[];
    for(let i=0;i<originals.length;i++){
     setDownloadProgress('กำลังเตรียมภาพ '+fmt(i+1)+' / '+fmt(originals.length));setSaveProgress((i+1)/originals.length);
-    const f=originals[i],response=await fetch(fileUrl(f)+'?share=1',{cache:'no-store'});
-    if(!response.ok)throw Error('ดาวน์โหลดภาพไม่สำเร็จ ('+response.status+')');
-    const blob=await response.blob();
+    const f=originals[i],blob=await originalBlob(f);
     if(blob.type&&!blob.type.includes('image/')&&!blob.type.includes('octet-stream'))throw Error('ไฟล์ที่ได้รับไม่ใช่รูปภาพ');
     const filename=String(f.filename||'photo-'+(i+1)+'.jpg').replace(/[^a-zA-Z0-9_.-]/g,'_');
     files.push(new File([blob],/\\.(jpe?g)$/i.test(filename)?filename:filename+'.jpg',{type:'image/jpeg'}));

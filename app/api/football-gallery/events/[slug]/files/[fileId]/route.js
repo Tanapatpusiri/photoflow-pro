@@ -21,8 +21,11 @@ export async function GET(request,{params}){
   // Google Drive files are streamed by the download Worker (no file bytes pass through this app).
   const signed=file.storage==='drive'?(preview?thumbUrl(fileId,grant.codeId,file.event_id):originalUrl(fileId,grant.codeId,file.event_id))
    :preview?await presignInline(file.r2_key):await presignOriginal(file.r2_key,file.original_filename);
-  // A same-origin, authenticated stream for saving JPEGs to iOS Photos via Web Share.
-  // The standard original download redirect remains unchanged for every other caller.
+  // Saving a JPEG (iOS Photos via Web Share): the album page fetches the Worker link itself, so no
+  // file bytes pass through Vercel (Hobby: 10 GB Fast Origin Transfer a month, then paused).
+  if(request.nextUrl.searchParams.get('link')==='1'&&file.variant==='JPEG')return NextResponse.json({url:signed},{headers:privateHeaders});
+  // Fallback when the Worker link cannot be read by the page (another origin, or an older Worker):
+  // a same-origin, authenticated stream. The standard redirect remains for every other caller.
   if(request.nextUrl.searchParams.get('share')==='1'&&file.variant==='JPEG'){
    const upstream=await fetch(signed,{cache:'no-store'});
    if(!upstream.ok||!upstream.body){upstream.body?.cancel();return deny('ไม่สามารถโหลดรูปต้นฉบับ',502)}
