@@ -146,6 +146,10 @@ async function original(env,request,ticket){
  const headers={'content-type':f.mime||'application/octet-stream','content-disposition':disposition('attachment',f.name),'accept-ranges':'bytes','cache-control':'private, no-store','x-content-type-options':'nosniff','referrer-policy':'no-referrer','etag':`"${f.driveId}-${f.size}"`};
  if(range&&r.status===206){headers['content-range']=`bytes ${range.start}-${range.end-1}/${f.size}`;headers['content-length']=String(range.end-range.start)}
  else headers['content-length']=String(f.size);
+ // The album page saves JPEGs with fetch() straight from here, so no file bytes pass through Vercel:
+ // only the app's own origin may read the response. A normal download (no Origin) is unchanged.
+ const origin=request.headers.get('origin');
+ if(origin&&origin===String(env.FG_APP_ORIGIN).replace(/\/$/,'')){headers['access-control-allow-origin']=origin;headers['vary']='Origin'}
  return new Response(r.body,{status:range&&r.status===206?206:200,headers});
 }
 
