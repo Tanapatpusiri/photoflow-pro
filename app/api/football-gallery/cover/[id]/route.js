@@ -1,5 +1,5 @@
 import {NextResponse} from 'next/server';
-import {db,configured,isUuid,presignInline,privateHeaders,streamPrivateObject} from '../../../../../lib/football-gallery-server';
+import {db,configured,grantFor,isUuid,presignInline,privateHeaders,streamPrivateObject} from '../../../../../lib/football-gallery-server';
 import {ACTIVE_RETENTION_SQL} from '../../../../../lib/football-gallery-retention';
 import {coverUrl} from '../../../../../lib/football-gallery-tickets';
 import {readDriveMedia} from '../../../../../lib/football-gallery-drive';
@@ -28,13 +28,20 @@ export async function GET(request,{params}){
  const width=coverWidth(new URL(request.url).searchParams.get('w'));
  if(width===false)return new NextResponse(null,{status:400,headers:privateHeaders});
  try{
-  const q=await db().query(`SELECT e.cover_drive_id,
-   (SELECT json_build_object('storage',f.storage,'key',f.r2_key) FROM fg_media_files f JOIN fg_media m ON m.id=f.media_id WHERE m.id=e.cover_media_id AND m.status<>'hidden' AND f.variant='THUMB' AND f.verified_bytes=true) AS chosen,
+  const q=await db().query(`SELECT e.cover_drive_id,e.parent_event_id,
+   (SELECT json_build_object('storage',f.storage,'key',f.r2_key) FROM fg_media_files f JOIN fg_media m ON m.id=f.media_id WHERE m.id=e.cover_media_id AND m.status<>'hidden' AND (e.parent_event_id IS NULL OR (m.event_id=e.id AND ${PUBLISHED})) AND f.variant='THUMB' AND f.verified_bytes=true) AS chosen,
    CASE WHEN NOT e.locked THEN (SELECT json_build_object('storage',f.storage,'key',f.r2_key) FROM fg_media m JOIN fg_media_files f ON f.media_id=m.id AND f.variant='THUMB' AND f.verified_bytes=true WHERE m.event_id=e.id AND m.kind='photo' AND ${PUBLISHED} ORDER BY m.captured_at NULLS LAST,m.id LIMIT 1) END AS first
    FROM fg_events e WHERE e.id=$1 AND e.status='published' AND e.privacy_approved_at IS NOT NULL AND ${ACTIVE_RETENTION_SQL}`,[id]);
   if(!q.rowCount)return new NextResponse(null,{status:404,headers:privateHeaders});
-  const r=q.rows[0],pick=r.cover_drive_id?{storage:'drive',key:r.cover_drive_id}:r.chosen||r.first;
+  const r=q.rows[0];
+  if(r.parent_event_id&&!await grantFor(request,id))return new NextResponse(null,{status:404,headers:privateHeaders});
+  const pick=r.cover_drive_id?{storage:'drive',key:r.cover_drive_id}:r.chosen||r.first;
   if(!pick)return new NextResponse(null,{status:404,headers:privateHeaders});
+  if(r.parent_event_id){
+   const original=await readCoverSource(pick);
+   const body=width?await coverVariant(original,width):original;
+   return new NextResponse(body,{headers:{...privateHeaders,'Content-Type':'image/jpeg','Content-Disposition':'inline'}});
+  }
   if(width){
    try{
     const body=await coverVariant(await readCoverSource(pick),width);

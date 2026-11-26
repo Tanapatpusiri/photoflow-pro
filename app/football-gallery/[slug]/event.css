@@ -43,3 +43,5 @@
 /* Tab content slides in from the side (gallery-motion.css): never let that scroll the page sideways.
    clip (not hidden) keeps the sticky header and download button working. */
 .fge-shell{overflow-x:clip}
+
+.fge-matchday{color:inherit;text-decoration:none;overflow-wrap:anywhere}.fge-matchday time{font-size:14px}

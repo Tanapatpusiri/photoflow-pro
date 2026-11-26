@@ -36,7 +36,7 @@ export async function POST(request){
   }
   if(!['code','invite'].includes(body.type))return reply({message:'ข้อมูลไม่ถูกต้อง'},400);
   const label=typeof body.label==='string'&&body.label.trim()&&body.label.trim()!==PUBLIC_GRANT_LABEL?body.label.trim().slice(0,80):null;
-  const e=await db().query("SELECT id FROM fg_events WHERE id=$1 AND status='published' AND privacy_approved_at IS NOT NULL",[body.event]);
+  const e=await db().query("SELECT id FROM fg_events WHERE id=$1 AND parent_event_id IS NULL AND status='published' AND privacy_approved_at IS NOT NULL",[body.event]);
   if(!e.rowCount)return reply({message:'ต้องตรวจ PDPA และเผยแพร่งานก่อนสร้างลิงก์'},409);
   const days=Number.isFinite(Number(body.days))?Math.max(1,Math.min(90,Math.round(Number(body.days)))):14;
   const token=body.type==='invite'?randomBytes(32).toString('base64url'):eventCode();
