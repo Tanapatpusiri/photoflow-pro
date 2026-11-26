@@ -5,13 +5,14 @@ async function call(path,method,body){const r=await fetch(api+path,{method,heade
 const n=v=>(v||0).toLocaleString('th-TH');
 
 // Children of one album in a single list: add, edit, remove a mistaken entry, withdraw or restore consent.
-export default function ChildrenManager({events,initialEvent,onChanged}){
+export default function ChildrenManager({events,initialEvent,onChanged,refreshKey}){
  const [eventId,setEventId]=useState(initialEvent||events[0]?.id||''),[players,setPlayers]=useState([]),[loading,setLoading]=useState(false),[busy,setBusy]=useState(false);
  const [error,setError]=useState(''),[info,setInfo]=useState(''),[editing,setEditing]=useState(null),[search,setSearch]=useState('');
  const event=events.find(e=>e.id===eventId);
  const load=async(id=eventId)=>{if(!id)return;setLoading(true);try{const d=await call('/players?event='+encodeURIComponent(id),'GET');setPlayers(d.players||[]);setError('')}catch(e){setError(e.message)}finally{setLoading(false)}};
  useEffect(()=>{if(!eventId&&events[0])setEventId(events[0].id)},[events]);
  useEffect(()=>{setEditing(null);setSearch('');setInfo('');load(eventId)},[eventId]);
+ useEffect(()=>{load(eventId)},[refreshKey]);
  const run=async(task,ok)=>{if(busy)return;setBusy(true);setError('');setInfo('');try{await task();await load();await onChanged?.(eventId);if(ok)setInfo(ok)}catch(e){setError(e.message)}finally{setBusy(false)}};
  const save=e=>{e.preventDefault();if(!editing.name.trim())return;run(async()=>{await call('/players','PATCH',{player:editing.id,name:editing.name,jersey:editing.jersey||'',team:editing.team||''});setEditing(null)},'บันทึกแล้ว')};
  const remove=p=>{if(!confirm(`ลบ ${p.name} ออกจากอัลบั้มนี้? ใช้สำหรับชื่อที่เพิ่มผิด แท็กในภาพที่ยังไม่เผยแพร่จะถูกเอาออกด้วย`))return;run(()=>call('/players?player='+encodeURIComponent(p.id),'DELETE'),'ลบ '+p.name+' แล้ว')};
