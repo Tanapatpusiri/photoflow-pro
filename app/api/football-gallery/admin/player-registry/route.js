@@ -7,14 +7,14 @@ const fields='id,name,nickname,age_group,jersey,team,active,(profile_jpeg IS NOT
 const clean=(v)=>typeof v==='string'?v.trim():'';
 function validate(d){
  const name=clean(d.name),nickname=clean(d.nickname),age=clean(d.age_group).toUpperCase(),jersey=clean(d.jersey),team=clean(d.team);
- if(!name||name.length>100||nickname.length>100||team.length>100||!/^U[0-9]{1,2}$/.test(age)||! /^[0-9]{1,3}$/.test(jersey))return null;
+ if(!name||name.length>100||nickname.length>100||team.length>100||(age&&!/^U[0-9]{1,2}$/.test(age))||(jersey&&!/^[0-9]{1,3}$/.test(jersey)))return null;
  let photo=null;
  if(d.photo!==undefined&&d.photo!==null){
   if(typeof d.photo!=='string'||d.photo.length>409600||!/^data:image\/jpeg;base64,[A-Za-z0-9+/]+={0,2}$/.test(d.photo))return null;
   photo=Buffer.from(d.photo.split(',')[1],'base64');
   if(photo.length<4||photo.length>307200||photo[0]!==255||photo[1]!==216||photo[2]!==255||photo[photo.length-2]!==255||photo[photo.length-1]!==217)return null;
  }
- return {name,nickname:nickname||null,age,jersey,team:team||null,photo,replace:d.photo!==undefined,active:d.active!==false};
+ return {name,nickname:nickname||null,age:age||null,jersey:jersey||null,team:team||null,photo,replace:d.photo!==undefined,active:d.active!==false};
 }
 export async function GET(request){
  const {error}=await adminGuard(request);if(error)return error;
@@ -38,7 +38,7 @@ export async function POST(request){
  const link=d.action==='link';
  if(link&&(!isUuid(d.event)||!isUuid(d.registry_id)||(d.existing_player&&!isUuid(d.existing_player))))return send({message:'ข้อมูลไม่ถูกต้อง'},400);
  const v=link?null:validate(d);
- if(!link&&!v)return send({message:'กรอกชื่อ รุ่น U และเบอร์เสื้อให้ถูกต้อง รูปต้องเป็น JPEG ไม่เกิน 300 KB'},400);
+ if(!link&&!v)return send({message:'กรอกชื่อ และตรวจสอบรุ่น U หรือเบอร์เสื้อหากระบุ รูปต้องเป็น JPEG ไม่เกิน 300 KB'},400);
  const c=await db().connect();
  try{
   await c.query('BEGIN');

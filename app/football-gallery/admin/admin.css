@@ -231,3 +231,11 @@
 }
 
 .fga-album-mode{width:100%;max-width:100%;min-width:0;min-height:52px;border:1px solid #e4e4e7;border-radius:999px;background:#f9f9fa;color:#222;padding:10px 14px;font:inherit;font-size:16px}
+
+.fga-profile-crop{min-width:0;display:grid;gap:12px;margin:0;padding:14px;border:1px solid #e4e4e7;border-radius:18px}
+.fga-profile-crop legend{font-weight:650;padding:0 5px}
+.fga-profile-crop-frame{position:relative;justify-self:center;width:min(100%,240px);aspect-ratio:1;overflow:hidden;border-radius:50%;background:#f4f4f5;touch-action:none;cursor:grab}
+.fga-profile-crop-frame:active{cursor:grabbing}
+.fga-profile-crop-frame img{position:absolute;display:block;max-width:none;pointer-events:none}
+.fga-profile-crop input[type=range]{height:32px;padding:0;border:0;accent-color:#303033}
+.fga-profile-crop button{justify-self:start}
