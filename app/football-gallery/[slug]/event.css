@@ -69,5 +69,7 @@
 .fge-detail-image video{display:block;width:100%;height:100%;background:#1f2022}
 @media(max-width:360px){.fge-nav:has(.fge-search-toggle){gap:8px}.fge-album-tabs button{gap:5px}}
 
-.fge-selection-tools{display:flex;justify-content:flex-end;gap:8px;margin:0 0 12px}
+.fge-selection-bar{display:grid;gap:8px;margin:24px 0;background:#fff;border-radius:22px}
+.fge-selection-bar .fge-primary{margin:0}
+.fge-selection-tools{display:flex;justify-content:flex-end;gap:8px}
 .fge-selection-tools .fge-load{width:auto;margin:0;min-height:44px;padding:8px 14px}

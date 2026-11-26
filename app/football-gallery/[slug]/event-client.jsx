@@ -390,10 +390,6 @@ export default function EventExperience({slug,initialData=null,matchdayDate=null
   {error&&<div className="fge-alert" role="alert">{error}</div>}
   {isMediaPage&&<div className="fge-tab-panel" key={panelKey} data-dir={tabDir?.key===panelKey?tabDir.dir:undefined} onAnimationEnd={e=>{if(e.target===e.currentTarget)setTabDir(null)}}>
    {loading&&items.length===0?(isVideo?<p className="fge-loading">กำลังโหลด…</p>:<Skeleton count={6} label="กำลังโหลด…"/>):viewed.length===0&&!listFailed?<Empty ball message={player?(isVideo?'ยังไม่มีวิดีโอของนักเตะคนนี้':'ยังไม่มีรูปของนักเตะคนนี้'):'ยังไม่มีไฟล์ในหมวดนี้'}/>:null}
-   {!isVideo&&viewed.length>0&&<div className="fge-selection-tools">
-    <button type="button" className="fge-load" disabled={selectingAll} onClick={selectAllPhotos}>{selectingAll?'กำลังเลือกรูป…':'เลือกทั้งหมด'}</button>
-    {selected.length>0&&<button type="button" className="fge-load" onClick={()=>{cancelSelectAll();setSelected([]);setWholePhotoSelection(false)}}>ยกเลิกการเลือก</button>}
-   </div>}
    <div className={isVideo?'fge-video-list':'fge-photo-grid'}>
     {(isVideo?[viewed]:[viewed.filter((_,index)=>index%2===0),viewed.filter((_,index)=>index%2===1)]).map((column,columnIndex)=>
      <div className={isVideo?'fge-video-column':'fge-photo-column'} key={columnIndex}>
@@ -416,7 +412,13 @@ export default function EventExperience({slug,initialData=null,matchdayDate=null
    {listFailed?<button type="button" className="fge-load" onClick={()=>{setListFailed(false);setListRetry(n=>n+1)}}>ลองโหลดอีกครั้ง</button>
     :hasMore&&(isVideo||typeof IntersectionObserver==='undefined')&&<button type="button" className="fge-load" onClick={()=>setPageNo(n=>n+1)} disabled={!canLoadMore}>โหลดเพิ่ม</button>}
    {!hasMore&&!loading&&!listFailed&&viewed.length>0&&<p className="fge-end"><Icon name="done" size={16}/>ดูครบแล้ว</p>}
-   {selected.length>0&&<button disabled={selectingAll} className="fge-primary fge-sticky" onClick={()=>{setArchive(null);setDownloadProgress('');setPage('downloads')}}>ดาวน์โหลดรูปที่เลือก <span className="fge-select-count" key={selected.length}>{fmt(selected.length)}</span> รายการ</button>}
+   {selected.length>0&&<div className="fge-sticky fge-selection-bar">
+    {!isVideo&&<div className="fge-selection-tools">
+     <button type="button" className="fge-load" disabled={selectingAll} onClick={selectAllPhotos}>{selectingAll?'กำลังเลือกรูป…':'เลือกทั้งหมด'}</button>
+     <button type="button" className="fge-load" onClick={()=>{cancelSelectAll();setSelected([]);setWholePhotoSelection(false)}}>ยกเลิกการเลือก</button>
+    </div>}
+    <button disabled={selectingAll} className="fge-primary" onClick={()=>{setArchive(null);setDownloadProgress('');setPage('downloads')}}>ดาวน์โหลดรูปที่เลือก <span className="fge-select-count" key={selected.length}>{fmt(selected.length)}</span> รายการ</button>
+   </div>}
   </div>}
   {page==='detail'&&detail&&<><div className="fge-detail-image" ref={detailFrame} onPointerDown={dragStart} onPointerMove={dragMove} onPointerUp={dragEnd} onPointerCancel={dragEnd}>{detail.kind==='video'&&detail.files.some(f=>f.variant==='VIDEO_PREVIEW')
     ?<video controls preload="none" playsInline poster={imageFor(detail)||undefined} src={fileUrl(detail.files.find(f=>f.variant==='VIDEO_PREVIEW'))}/>

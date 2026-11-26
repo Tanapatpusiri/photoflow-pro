@@ -8,13 +8,15 @@ const reduce=css.slice(css.indexOf('@media (prefers-reduced-motion:reduce)'));
 
 // J. Selecting photos: the selected photo sinks a little inside its frame and the check pops; the
 // "download selected" button rises in and its count bumps on every change.
-assert.match(album,/ดาวน์โหลดรูปที่เลือก <span className="fge-select-count" key=\{selected\.length\}>\{fmt\(selected\.length\)\}<\/span> รายการ<\/button>\}/);
+assert.match(album,/ดาวน์โหลดรูปที่เลือก <span className="fge-select-count" key=\{selected\.length\}>\{fmt\(selected\.length\)\}<\/span> รายการ<\/button>/);
 assert.match(css,/\.fge-sticky\{animation:fg-rise-in \.32s cubic-bezier\(\.2,\.8,\.2,1\) backwards\}/);
 assert.match(css,/@keyframes fg-rise-in\{from\{opacity:0;translate:0 24px\}\}/);
 assert.match(css,/\.fge-select-count\{display:inline-block;animation:fg-count-bump \.4s cubic-bezier\(\.3,1\.6,\.5,1\)\}/);
 assert.match(css,/\.fge-photo-column \.fge-tile-image\{transition:transform \.15s ease-out,scale \.22s cubic-bezier\(\.2,\.8,\.2,1\)\}/,'keeps the press feedback transition');
 assert.match(css,/\.fge-tile\.is-selected \.fge-tile-image\{scale:\.94\}/);
 assert.match(css,/\.fge-tile-actions button\[aria-label="เลือกไฟล์"\]\[aria-pressed="true"\] \.fg-icon\{animation:fg-heart-pop \.4s cubic-bezier\(\.3,1\.6,\.5,1\)\}/);
+
+assert.match(album,/\{selected\.length>0&&<div className="fge-sticky fge-selection-bar">[\s\S]*?เลือกทั้งหมด/);
 
 // K. Saving several photos: a thin bar on the save button fills with the photos prepared so far
 // (the same count as the "กำลังเตรียมภาพ i / n" text); it resets when the save ends.
