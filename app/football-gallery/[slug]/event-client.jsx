@@ -8,6 +8,10 @@ import {clampZoom,dismissScale,dragOffset,panZoom,pinchZoom,shouldDismiss,swipeS
 import './event.css';
 import '../gallery-motion.css';
 const paths={
+ search:<><circle cx="10.8" cy="10.8" r="6.1"/><path d="m15.4 15.4 4.3 4.3"/></>,
+ close:<path d="m6 6 12 12M18 6 6 18"/>,
+ profile:<><circle cx="12" cy="8" r="3.3"/><path d="M5 20a7 7 0 0 1 14 0"/></>,
+ play:<><circle cx="12" cy="12" r="9"/><path d="m10 8 6 4-6 4z"/></>,
  back:<path d="m15 5-7 7 7 7"/>,next:<path d="m9 5 7 7-7 7"/>,
  download:<><path d="M12 4v11m-5-5 5 5 5-5"/><path d="M5 20h14"/></>,
  image:<><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m3 17 5-5 4 4 3-3 6 6"/></>,
@@ -25,7 +29,44 @@ const Icon=({name,size=22,filled=false})=><svg className="fg-icon" width={size} 
 const fmt=n=>Number(n||0).toLocaleString('th-TH');
 const base=slug=>'/api/football-gallery/events/'+encodeURIComponent(slug);
 const ORIGINAL=['JPEG','RAW','VIDEO_ORIGINAL'];
-const matchesPlayer=(p,q)=>{const t=q.trim().toLowerCase();return !t||[p.name,p.jersey,p.team,p.jersey?'#'+p.jersey:''].some(x=>String(x||'').toLowerCase().includes(t))};
+const normalizePlayerText=value=>String(value||'').trim().normalize('NFC').toLocaleLowerCase('th');
+const matchesPlayer=(player,query)=>{
+ const term=normalizePlayerText(query).replace(/^#\s*/,'');
+ return !term||[player.name,player.nickname,player.jersey].some(value=>normalizePlayerText(value).includes(term));
+};
+function PlayerAvatar({src,first}){
+ const [failed,setFailed]=useState(false);
+ return <span className="fge-profile-ring">
+  <Icon name="profile" size={29}/>
+  {src&&!failed&&<img src={src} alt="" width={64} height={64} loading={first?'eager':'lazy'} fetchPriority="low" decoding="async" draggable={false} onError={()=>setFailed(true)}/>}
+ </span>;
+}
+function PlayerStrip({players,selected,onSelect,fileUrl}){
+ const gesture=useRef(null),ignoreClick=useRef(false);
+ const start=e=>{
+  ignoreClick.current=false;
+  if(e.pointerType==='mouse'&&e.button===0)gesture.current={x:e.clientX,left:e.currentTarget.scrollLeft};
+ };
+ const move=e=>{
+  const drag=gesture.current;
+  if(!drag)return;
+  if(!e.buttons){gesture.current=null;return}
+  const dx=e.clientX-drag.x;
+  if(!ignoreClick.current&&Math.abs(dx)<6)return;
+  ignoreClick.current=true;
+  e.currentTarget.setPointerCapture(e.pointerId);
+  e.currentTarget.scrollLeft=drag.left-dx;
+ };
+ return <div className="fge-profile-strip" role="group" aria-label="กรองตามนักเตะ"
+  onPointerDown={start} onPointerMove={move} onPointerUp={()=>{gesture.current=null}}
+  onPointerCancel={()=>{gesture.current=null}} onClickCapture={e=>{if(ignoreClick.current&&e.detail){e.preventDefault();e.stopPropagation()}}}>
+  {players.map((p,index)=><button key={p.id} type="button" className="fge-profile" aria-pressed={selected===p.id}
+   aria-label={p.jersey?(p.nickname||p.name)+' #'+p.jersey:p.nickname||p.name} onClick={()=>onSelect(p)}>
+    <PlayerAvatar src={p.coverUrl||(p.cover?fileUrl({id:p.cover}):'')} first={index<4}/>
+    <span className="fge-profile-name">{p.nickname||p.name}</span>
+   </button>)}
+ </div>;
+}
 // Empty lists get a football that drops in and bounces once; other empty states keep the photo icon.
 function Empty({message,children,ball=false}){return <div className="fge-empty"><div className="fge-placeholder">{ball?<span className="fge-ball"><Icon name="ball" size={40}/></span>:<Icon name="image" size={40}/>}</div><p>{message}</p>{children}</div>}
 // Placeholder photos (with a light sweep) in the same two columns while photos are on their way.
@@ -33,9 +74,11 @@ function Skeleton({count,label}){return <div className="fge-photo-grid fge-skele
 export default function EventExperience({slug,initialData=null,matchdayDate=null}){
  const [matchdays,setMatchdays]=useState(initialData?.matchdays??null);
  const [event,setEvent]=useState(initialData?.event||null),[players,setPlayers]=useState(initialData?.players||[]),[items,setItems]=useState([]),[error,setError]=useState(''),[loading,setLoading]=useState(!initialData),[needsAccess,setNeedsAccess]=useState(false);
- const [page,setPage]=useState('photos'),[tab,setTab]=useState('photo'),[player,setPlayer]=useState(null),[detail,setDetail]=useState(null),[filter,setFilter]=useState('all'),[favorites,setFavorites]=useState([]),[selected,setSelected]=useState([]),[pageNo,setPageNo]=useState(1),[hasMore,setHasMore]=useState(false),[query,setQuery]=useState('');
- // Player search: the box shows what was typed at once, the list follows in a View Transition.
- const [shownQuery,setShownQuery]=useState('');
+ const [page,setPage]=useState('photos'),[mediaPage,setMediaPage]=useState('photos'),[player,setPlayer]=useState(null),[detail,setDetail]=useState(null),[filter,setFilter]=useState('all'),[favorites,setFavorites]=useState([]),[selected,setSelected]=useState([]),[pageNo,setPageNo]=useState(1),[hasMore,setHasMore]=useState(false),[query,setQuery]=useState('');
+ const [searchOpen,setSearchOpen]=useState(false);
+ const searchButton=useRef(null),searchInput=useRef(null);
+ const closeSearch=(focus=false)=>{setSearchOpen(false);setQuery('');if(focus)searchButton.current?.focus()};
+ const visiblePlayers=useMemo(()=>players.filter(p=>matchesPlayer(p,query)),[players,query]);
  const [archive,setArchive]=useState(null),[preparing,setPreparing]=useState(false),[downloadProgress,setDownloadProgress]=useState('');
  // Saving several photos: share of the photos prepared so far (bar on the save button).
  const [saveProgress,setSaveProgress]=useState(0);
@@ -45,8 +88,8 @@ export default function EventExperience({slug,initialData=null,matchdayDate=null
  const [loadedPage,setLoadedPage]=useState(0);
  const [listFailed,setListFailed]=useState(false);
  const [listRetry,setListRetry]=useState(0);
- const isMediaPage=['photos','videos','player'].includes(page);
- const isVideo=page==='videos'||page==='player'&&tab==='video';
+ const isMediaPage=page==='photos'||page==='videos';
+ const isVideo=mediaPage==='videos';
  const canLoadMore=hasMore&&loadedPage===pageNo&&!loading&&!listFailed;
  // Sticky header: hides while scrolling down, comes back on any scroll up (see headerState). Only its
  // own data attributes change while scrolling, never React state.
@@ -86,7 +129,7 @@ export default function EventExperience({slug,initialData=null,matchdayDate=null
   setListFailed(false);
   (async()=>{
    try{
-    const d=await listMedia(isVideo?'video':'photo',page==='player'?player?.id:null,pageNo);
+    const d=await listMedia(isVideo?'video':'photo',player?.id,pageNo);
     if(!live)return;
     setItems(old=>{
      const seen=new Set();
@@ -106,7 +149,7 @@ export default function EventExperience({slug,initialData=null,matchdayDate=null
    }
   })();
   return()=>{live=false};
- },[matchdays,slug,event,page,player,tab,pageNo,listRetry]);
+ },[matchdays,slug,event,isMediaPage,isVideo,player?.id,pageNo,listRetry]);
  useEffect(()=>{
   const target=loadMoreTarget.current;
   if(!target||!canLoadMore||typeof IntersectionObserver==='undefined')return;
@@ -119,19 +162,26 @@ export default function EventExperience({slug,initialData=null,matchdayDate=null
   },{rootMargin:'0px 0px 360px 0px'});
   observer.observe(target);
   return()=>{active=false;observer.disconnect()};
- },[page,pageNo,tab,canLoadMore]);
+ },[page,pageNo,player?.id,canLoadMore]);
  function resetListing(){
-  setItems([]);setPageNo(1);setLoadedPage(0);setHasMore(false);setListFailed(false);
+  setLoading(true);setItems([]);setPageNo(1);setLoadedPage(0);setHasMore(false);setListFailed(false);
  }
  // Album tabs: the new tab's content slides in from the side of the tab that was tapped (only after
  // a tab tap; opening or leaving a photo never slides, so the #45 photo morph finds the grid in place).
  const [tabDir,setTabDir]=useState(null);
- const tabOrder={photos:0,videos:1,players:2,player:2};
- const panelKey=page==='player'?'player-'+(player?.id||'')+'-'+tab:page;
- const change=(next,who=null,newTab='photo')=>{if(next===page&&who?.id===player?.id&&newTab===tab)return;setPage(next);setPlayer(who);setTab(newTab);resetListing();setSelected([]);setDetail(null);setFilter('all');setArchive(null);window.scrollTo({top:0,behavior:'instant'})};
+ const panelKey=mediaPage;
+ const resetSelection=()=>{resetListing();setSelected([]);setDetail(null);setFilter('all');setArchive(null);setError('')};
+ const selectPlayer=p=>{
+  setPlayer(player?.id===p.id?null:p);
+  resetSelection();closeSearch();
+ };
  // The heart pops only right after it is added (not for favourites restored on page load).
  const [popFav,setPopFav]=useState(null);
- const switchTab=next=>{if(next===page)return;const from=tabOrder[page]??0,to=tabOrder[next];change(next);setTabDir({key:next,dir:to>from?'next':'prev'})};
+ const switchTab=next=>{
+  if(next===mediaPage)return;
+  setMediaPage(next);setPage(next);resetSelection();
+  setTabDir({key:next,dir:next==='videos'?'next':'prev'});
+ };
  const toggleFav=id=>{setFavorites(prev=>{const next=prev.includes(id)?prev.filter(x=>x!==id):[...prev,id];try{localStorage.setItem('fg_fav_'+slug,JSON.stringify(next))}catch{}return next})};
  const toggleSelected=id=>setSelected(prev=>prev.includes(id)?prev.filter(x=>x!==id):[...prev,id]);
  const viewed=useMemo(()=>items.filter(item=>filter==='favorites'?favorites.includes(item.id):filter==='JPEG'||filter==='RAW'?item.files.some(f=>f.variant===filter):true),[items,filter,favorites]);
@@ -161,18 +211,15 @@ export default function EventExperience({slug,initialData=null,matchdayDate=null
  const openDetail=(item,img)=>{gridScroll.current=window.scrollY;setTabDir(null);if(img)img.style.viewTransitionName='fg-photo';
   const transition=withViewTransition(()=>{flushSync(()=>{setDetail(item);setPage('detail');setArchive(null)});window.scrollTo({top:0,behavior:'instant'});return detailReady()});
   const clear=()=>{if(img)img.style.viewTransitionName=''};if(transition)transition.finished.then(clear,clear);else clear()};
- const closeDetail=()=>{const id=detail?.id,target=player?'player':detail?.kind==='video'?'videos':'photos';let tile=null;
+ const closeDetail=()=>{const id=detail?.id,target=mediaPage;let tile=null;
   const transition=withViewTransition(()=>{flushSync(()=>setPage(target));window.scrollTo({top:gridScroll.current,behavior:'instant'});tile=id?document.querySelector('.fge-tile-image img[data-media-id="'+CSS.escape(id)+'"]'):null;if(tile){const r=tile.getBoundingClientRect();if(r.bottom<0||r.top>innerHeight)window.scrollTo({top:window.scrollY+r.top+r.height/2-innerHeight/2,behavior:'instant'});tile.style.viewTransitionName='fg-photo'}});
   const clear=()=>{if(tile)tile.style.viewTransitionName=''};if(transition)transition.finished.then(clear,clear);else clear()};
- const title={overview:event?.title,photos:'All Photos',videos:'Videos',players:'Players',player:player?.name,detail:detail?.kind==='video'?'Video Detail':'Photo Detail',downloads:'Download All',removal:'ขอถอดภาพ',privacy:'ความเป็นส่วนตัว'}[page]||'Football Gallery';
- // Players: the tapped card grows into the player's banner and the name flies into its title, and
- // back again. The card carries the shared names only for that transition.
- const openPlayer=(p,card)=>{if(card){card.style.viewTransitionName='fg-player-hero';const n=card.querySelector('strong');if(n)n.style.viewTransitionName='fg-player-name'}withViewTransition(()=>flushSync(()=>change('player',p)))};
- const backToPlayers=()=>{const id=player?.id;let card=null,prev='';
-  const t=withViewTransition(()=>{flushSync(()=>change('players'));card=id?document.querySelector('.fge-player[data-player-id="'+CSS.escape(id)+'"]'):null;
-   if(card){const r=card.getBoundingClientRect();if(r.bottom<0||r.top>innerHeight)window.scrollTo({top:window.scrollY+r.top+r.height/2-innerHeight/2,behavior:'instant'});prev=card.style.viewTransitionName;card.style.viewTransitionName='fg-player-hero';const n=card.querySelector('strong');if(n)n.style.viewTransitionName='fg-player-name'}});
-  const restore=()=>{if(card){card.style.viewTransitionName=prev;const n=card.querySelector('strong');if(n)n.style.viewTransitionName=''}};if(t)t.finished.then(restore,restore);else restore()};
- const goBack=()=>{if(page==='detail')closeDetail();else if(page==='removal'&&detail)setPage('detail');else if(page==='player')backToPlayers();else if(page==='downloads'&&(selected.length||player))setPage(player?'player':'photos');else if(page==='players'||page==='videos')change('photos');else if(page==='photos')window.location.assign(event.parentSlug?'/football-gallery/'+encodeURIComponent(event.parentSlug):'/football-gallery');else change('photos')};
+ const goBack=()=>{
+  if(page==='detail')closeDetail();
+  else if(page==='removal'&&detail)setPage('detail');
+  else if(!isMediaPage)setPage(mediaPage);
+  else window.location.assign(event.parentSlug?'/football-gallery/'+encodeURIComponent(event.parentSlug):'/football-gallery');
+ };
  // Photo detail: swipe left/right (or the arrow keys) to the next/previous photo of the list the
  // visitor came from. The photo follows the finger (transform only), with resistance at the ends.
  const detailIndex=detail?viewed.findIndex(item=>item.id===detail.id):-1;
@@ -192,7 +239,7 @@ export default function EventExperience({slug,initialData=null,matchdayDate=null
  const paintZoom=(img,animate)=>{const z=clampZoom(zoom.current,frameBox(img.parentElement));zoom.current=z;img.style.transition=animate&&!prefersReducedMotion()?'transform .25s cubic-bezier(.2,.8,.2,1)':'';img.style.transform=z.scale>1?'translate('+Math.round(z.x)+'px,'+Math.round(z.y)+'px) scale('+z.scale.toFixed(3)+')':''};
  const settle=img=>{if(!img)return;const from=img.style.transform;img.style.transform='';if(from&&!prefersReducedMotion()&&typeof img.animate==='function')img.animate([{transform:from},{transform:'none'}],{duration:220,easing:'cubic-bezier(.2,.8,.2,1)'})};
  useEffect(()=>{zoom.current={scale:1,x:0,y:0};gesture.current=null;pointers.current.clear();lastTap.current=null},[detail?.id]);
- const dragStart=e=>{if(detailIndex<0||e.pointerType==='mouse'&&e.button!==0)return;const el=e.currentTarget;pointers.current.set(e.pointerId,{x:e.clientX,y:e.clientY});el.setPointerCapture?.(e.pointerId);
+ const dragStart=e=>{if(e.target.closest?.('video')||detailIndex<0||e.pointerType==='mouse'&&e.button!==0)return;const el=e.currentTarget;pointers.current.set(e.pointerId,{x:e.clientX,y:e.clientY});el.setPointerCapture?.(e.pointerId);
   if(pointers.current.size===2){const [a,b]=[...pointers.current.values()],box=frameBox(el);gesture.current={mode:'pinch',d0:Math.hypot(a.x-b.x,a.y-b.y),m0:{x:(a.x+b.x)/2-box.cx,y:(a.y+b.y)/2-box.cy},z0:{...zoom.current},box};return}
   if(pointers.current.size>1)return;
   const img=el.querySelector('img');if(img)img.style.transition='';
@@ -301,24 +348,28 @@ export default function EventExperience({slug,initialData=null,matchdayDate=null
   {!matchdays.some(day=>!matchdayDate||day.date===matchdayDate)&&<Empty message="ยังไม่มีวันแข่งขันที่เปิดให้เข้าชม"/>}
  </main>;
  return <main className="fge-shell">
-  <header ref={heading} className="fge-nav fge-album-heading"><button onClick={goBack} className="fge-back" aria-label="ย้อนกลับ"><Icon name="back"/></button><h1>{event.title}</h1>{showFav?<button type="button" ref={favChip} className={'fge-fav-chip'+(filter==='favorites'?' active':'')} aria-pressed={filter==='favorites'} aria-label={'รายการโปรด '+fmt(favCount)+' รายการ'} onClick={toggleFavFilter}><Icon name="heart" size={16} filled/><span className="fge-fav-count" key={bump} data-bump={bump?'true':undefined}>{fmt(favCount)}</span></button>:<span className="fge-nav-spacer"/>}</header>
-  {['photos','videos','players','player'].includes(page)&&<nav className="fge-album-tabs" aria-label="เนื้อหาอัลบั้ม">
-   <button type="button" className={(page==='photos'?'active':'')} aria-current={page==='photos'?'page':undefined} onClick={()=>switchTab('photos')}>รูปทั้งหมด</button>
-   <button type="button" className={(page==='videos'?'active':'')} aria-current={page==='videos'?'page':undefined} onClick={()=>switchTab('videos')}>วิดีโอทั้งหมด</button>
-   <button type="button" className={(page==='players'||page==='player'?'active':'')} aria-current={page==='players'||page==='player'?'page':undefined} onClick={()=>switchTab('players')}>นักเตะ</button>
-  </nav>}
-  {error&&<div className="fge-alert" role="alert">{error}</div>}
-  {['photos','videos','players','player'].includes(page)&&<div className="fge-tab-panel" key={panelKey} data-dir={tabDir?.key===panelKey?tabDir.dir:undefined} onAnimationEnd={e=>{if(e.target===e.currentTarget)setTabDir(null)}}>
-  {page==='players'&&<><input className="fge-search" type="search" enterKeyHint="search" placeholder="ค้นหาชื่อหรือหมายเลขเสื้อ" aria-label="ค้นหาชื่อหรือหมายเลขเสื้อ" value={query} onChange={e=>{const value=e.target.value;setQuery(value);withViewTransition(()=>flushSync(()=>setShownQuery(value)))}}/><div className="fge-playergrid">{players.map((p,order)=>({p,order})).filter(({p})=>matchesPlayer(p,shownQuery)).map(({p,order},index)=><button className="fge-player" key={p.id} data-player-id={p.id} style={{viewTransitionName:'fg-player-'+order}} onClick={e=>openPlayer(p,e.currentTarget)}><div className="fge-player-cover">{p.coverUrl||p.cover?<img src={p.coverUrl||fileUrl({id:p.cover})} alt="" loading={index<4?"eager":"lazy"} fetchPriority={index<2?"high":"auto"} decoding="async"/>:<Icon name="players" size={44}/>}</div><strong>{p.name}{p.jersey?' #'+p.jersey:''}</strong><span>{fmt(p.photos)} รูป · {fmt(p.videos)} คลิป</span></button>)}</div>{players.length===0&&<Empty ball message="ยังไม่มีรายชื่อนักฟุตบอลที่เผยแพร่"/>}</>}
-  {page==='player'&&<><div className="fge-player-banner"><h2>{player.name}{player.jersey?' #'+player.jersey:''}</h2><span>{fmt(player.photos)} รูป · {fmt(player.videos)} คลิป</span></div><div className="fge-segments" role="tablist"><button role="tab" aria-selected={tab==='photo'} className={tab==='photo'?'selected':''} onClick={()=>{if(tab==='photo')return;resetListing();setTab('photo');setTabDir({key:'player-'+(player?.id||'')+'-photo',dir:'prev'})}}>Photos</button><button role="tab" aria-selected={tab==='video'} className={tab==='video'?'selected':''} onClick={()=>{if(tab==='video')return;resetListing();setTab('video');setTabDir({key:'player-'+(player?.id||'')+'-video',dir:'next'})}}>Videos</button></div></>}
+  <header ref={heading} className="fge-nav fge-album-heading"><button onClick={goBack} className="fge-back" aria-label="ย้อนกลับ"><Icon name="back"/></button><h1>{event.title}</h1>{showFav?<button type="button" ref={favChip} className={'fge-fav-chip'+(filter==='favorites'?' active':'')} aria-pressed={filter==='favorites'} aria-label={'รายการโปรด '+fmt(favCount)+' รายการ'} onClick={toggleFavFilter}><Icon name="heart" size={16} filled/><span className="fge-fav-count" key={bump} data-bump={bump?'true':undefined}>{fmt(favCount)}</span></button>:null}{isMediaPage?<button ref={searchButton} type="button" className="fge-back fge-search-toggle" aria-label={searchOpen?'ปิดการค้นหา':'ค้นหานักเตะ'} aria-expanded={searchOpen} onClick={()=>{if(searchOpen)closeSearch();else setSearchOpen(true)}}><Icon name={searchOpen?'close':'search'}/></button>:<span className="fge-nav-spacer"/>}</header>
   {isMediaPage&&<>
-   {loading&&items.length===0?(isVideo?<p className="fge-loading">กำลังโหลด…</p>:<Skeleton count={6} label="กำลังโหลด…"/>):viewed.length===0&&!listFailed?<Empty ball message="ยังไม่มีไฟล์ในหมวดนี้"/>:null}
+   <nav className="fge-album-tabs" aria-label="เนื้อหาอัลบั้ม">
+    <button type="button" className={page==='photos'?'active':''} aria-current={page==='photos'?'page':undefined} onClick={()=>switchTab('photos')}><Icon name="image" size={19}/>รูปทั้งหมด</button>
+    <button type="button" className={page==='videos'?'active':''} aria-current={page==='videos'?'page':undefined} onClick={()=>switchTab('videos')}><Icon name="play" size={19}/>วิดีโอทั้งหมด</button>
+   </nav>
+   {searchOpen&&<div className="fge-profile-search" role="search">
+    <input ref={searchInput} className="fge-search" type="search" autoFocus enterKeyHint="search" placeholder="ค้นหาชื่อหรือหมายเลขเสื้อ" aria-label="ค้นหาชื่อหรือหมายเลขเสื้อ" value={query} onChange={e=>setQuery(e.target.value)} onKeyDown={e=>{if(e.key==='Escape')closeSearch(true)}}/>
+    {query&&<button className="fge-search-clear" type="button" aria-label="ล้างคำค้นหา" onClick={()=>{setQuery('');searchInput.current?.focus()}}><Icon name="close" size={16}/></button>}
+   </div>}
+   {visiblePlayers.length>0?<PlayerStrip players={visiblePlayers} selected={player?.id} onSelect={selectPlayer} fileUrl={fileUrl}/>:searchOpen?<p className="fge-profile-empty" role="status">ไม่พบนักเตะที่ค้นหา</p>:null}
+  </>}
+  {error&&<div className="fge-alert" role="alert">{error}</div>}
+  {isMediaPage&&<div className="fge-tab-panel" key={panelKey} data-dir={tabDir?.key===panelKey?tabDir.dir:undefined} onAnimationEnd={e=>{if(e.target===e.currentTarget)setTabDir(null)}}>
+   {loading&&items.length===0?(isVideo?<p className="fge-loading">กำลังโหลด…</p>:<Skeleton count={6} label="กำลังโหลด…"/>):viewed.length===0&&!listFailed?<Empty ball message={player?(isVideo?'ยังไม่มีวิดีโอของนักเตะคนนี้':'ยังไม่มีรูปของนักเตะคนนี้'):'ยังไม่มีไฟล์ในหมวดนี้'}/>:null}
    <div className={isVideo?'fge-video-list':'fge-photo-grid'}>
     {(isVideo?[viewed]:[viewed.filter((_,index)=>index%2===0),viewed.filter((_,index)=>index%2===1)]).map((column,columnIndex)=>
      <div className={isVideo?'fge-video-column':'fge-photo-column'} key={columnIndex}>
       {column.map((item,index)=><article className={'fge-tile'+(selected.includes(item.id)?' is-selected':'')} key={item.id}>
        <button className="fge-tile-image" onClick={e=>openDetail(item,e.currentTarget.querySelector('img'))} aria-label={'เปิด '+(item.title||'ไฟล์')}>
         {imageFor(item)?<img src={imageFor(item)} data-media-id={item.id} ref={watchImage} onLoad={imageShown} onError={e=>imageFailed(e,event=>retryPreview(event,preview(item)))} loading={columnIndex===0&&index<3||columnIndex===1&&index<3?"eager":"lazy"} fetchPriority={index<2?"high":"auto"} decoding="async" alt={item.title||'ภาพการแข่งขัน'}/>:<span className="fge-photo-fallback"><Icon name={item.kind==='video'?'video':'image'} size={34}/></span>}
+        {item.kind==='video'&&<span className="fge-video-play"><Icon name="play" size={26}/></span>}
        </button>
        <div className="fge-tile-actions">
         <button onClick={e=>{const adding=!favorites.includes(item.id);toggleFav(item.id);setPopFav(item.id);if(adding)launchHeart(e.currentTarget)}} data-pop={popFav===item.id&&favorites.includes(item.id)?'true':undefined} aria-label="รายการโปรด" aria-pressed={favorites.includes(item.id)}><Icon name="heart" size={17} filled={favorites.includes(item.id)}/></button>
@@ -335,12 +386,13 @@ export default function EventExperience({slug,initialData=null,matchdayDate=null
     :hasMore&&(isVideo||typeof IntersectionObserver==='undefined')&&<button type="button" className="fge-load" onClick={()=>setPageNo(n=>n+1)} disabled={!canLoadMore}>โหลดเพิ่ม</button>}
    {!hasMore&&!loading&&!listFailed&&viewed.length>0&&<p className="fge-end"><Icon name="done" size={16}/>ดูครบแล้ว</p>}
    {selected.length>0&&<button className="fge-primary fge-sticky" onClick={()=>{setArchive(null);setDownloadProgress('');setPage('downloads')}}>ดาวน์โหลดรูปที่เลือก <span className="fge-select-count" key={selected.length}>{fmt(selected.length)}</span> รายการ</button>}
-  </>}
   </div>}
-  {page==='detail'&&detail&&<><div className="fge-detail-image" ref={detailFrame} onPointerDown={dragStart} onPointerMove={dragMove} onPointerUp={dragEnd} onPointerCancel={dragEnd}>{imageFor(detail)?<img src={imageFor(detail)} draggable={false} key={detail.id} onError={e=>retryPreview(e,preview(detail))} loading="eager" fetchPriority="high" decoding="async" alt={detail.title||'ภาพการแข่งขัน'}/>:<Empty message="ไฟล์นี้ไม่มีภาพตัวอย่าง"/>}</div>
+  {page==='detail'&&detail&&<><div className="fge-detail-image" ref={detailFrame} onPointerDown={dragStart} onPointerMove={dragMove} onPointerUp={dragEnd} onPointerCancel={dragEnd}>{detail.kind==='video'&&detail.files.some(f=>f.variant==='VIDEO_PREVIEW')
+    ?<video controls preload="none" playsInline poster={imageFor(detail)||undefined} src={fileUrl(detail.files.find(f=>f.variant==='VIDEO_PREVIEW'))}/>
+    :imageFor(detail)?<img src={imageFor(detail)} draggable={false} key={detail.id} onError={e=>retryPreview(e,preview(detail))} loading="eager" fetchPriority="high" decoding="async" alt={detail.title||'ภาพการแข่งขัน'}/>:<Empty message="ไฟล์นี้ไม่มีภาพตัวอย่าง"/>}</div>
    <div className="fge-card"><h2>{detail.title||'ภาพการแข่งขัน'}</h2><p>{event.title}{detail.captured_at?' · '+new Date(detail.captured_at).toLocaleString('th-TH',{dateStyle:'medium',timeStyle:'short',timeZone:'UTC'}):''}</p><p>ไฟล์ต้นฉบับที่มีอยู่จริง</p></div>
    {detail.kind==='photo'&&<button className="fge-primary" data-saved={savedAt?'true':undefined} disabled={preparing} onClick={()=>savePhotos({mediaIds:[detail.id]})}><Icon name={savedAt?'done':'download'}/><span style={{marginLeft:10}}>{preparing?'กำลังเตรียมรูปภาพ…':savedAt?'บันทึกแล้ว':'ดาวน์โหลดรูปภาพ'}</span>{preparing&&saveProgress>0?<span className="fge-save-progress" aria-hidden="true" style={{'--p':saveProgress}}/>:null}{savedAt?<span className="fge-celebrate" aria-hidden="true" key={savedAt}>{[0,1,2,3,4,5,6,7].map(i=><i key={i} style={{'--i':i}}/>)}</span>:null}</button>}
-   {detail.kind==='video'&&<a className="fge-primary fge-link-button" href={fileUrl(detail.files.find(f=>f.variant==='VIDEO_ORIGINAL')||{id:''})}>ดาวน์โหลดวิดีโอต้นฉบับ</a>}
+   {detail.kind==='video'&&detail.files.filter(f=>f.variant==='VIDEO_ORIGINAL').map(f=><a key={f.id} className="fge-primary fge-link-button" href={fileUrl(f)}>ดาวน์โหลดวิดีโอต้นฉบับ</a>)}
    {downloadProgress&&<p className="fge-hint" role="status">{downloadProgress}</p>}
    <p className="fge-hint">ไฟล์ที่ดาวน์โหลดเป็นต้นฉบับ ไม่ลดความละเอียดหรือแก้ไขข้อมูลสี</p>
    <button className="fge-text-link" onClick={()=>{setRemoval(s=>({...s,sent:null}));setPage('removal')}}>ขอถอดภาพนี้</button></>}

@@ -27,17 +27,14 @@ assert.match(css,/\.fge-save-progress\{display:none\}/,'hidden where :has() is m
 assert.match(css,/\.fge-primary:has\(\.fge-save-progress\)\{position:relative\}/);
 assert.match(css,/\.fge-save-progress::after\{[^}]*transform-origin:left;transform:scaleX\(var\(--p\)\);transition:transform \.25s ease-out\}/);
 
-// M. Album tabs: the new tab's content slides in from the side of the tab that was tapped
-// (photos → videos → players, and Photos/Videos on a player page). Only after a tab tap: opening
-// or leaving a photo never slides (the photo morph from #45 needs the grid in place).
+// Media tabs slide while retaining the selected player.
 assert.match(album,/const \[tabDir,setTabDir\]=useState\(null\);/);
-assert.match(album,/const tabOrder=\{photos:0,videos:1,players:2,player:2\};/);
-assert.match(album,/const switchTab=next=>\{if\(next===page\)return;const from=tabOrder\[page\]\?\?0,to=tabOrder\[next\];change\(next\);setTabDir\(\{key:next,dir:to>from\?'next':'prev'\}\)\};/);
-for(const tab of ['photos','videos','players'])assert.match(album,new RegExp("onClick=\\{\\(\\)=>switchTab\\('"+tab+"'\\)\\}"));
-assert.match(album,/const panelKey=page==='player'\?'player-'\+\(player\?\.id\|\|''\)\+'-'\+tab:page;/);
-assert.match(album,/\{\['photos','videos','players','player'\]\.includes\(page\)&&<div className="fge-tab-panel" key=\{panelKey\} data-dir=\{tabDir\?\.key===panelKey\?tabDir\.dir:undefined\} onAnimationEnd=\{e=>\{if\(e\.target===e\.currentTarget\)setTabDir\(null\)\}\}>/);
-assert.match(album,/onClick=\{\(\)=>\{if\(tab==='photo'\)return;resetListing\(\);setTab\('photo'\);setTabDir\(\{key:'player-'\+\(player\?\.id\|\|''\)\+'-photo',dir:'prev'\}\)\}\}/);
-assert.match(album,/onClick=\{\(\)=>\{if\(tab==='video'\)return;resetListing\(\);setTab\('video'\);setTabDir\(\{key:'player-'\+\(player\?\.id\|\|''\)\+'-video',dir:'next'\}\)\}\}/);
+assert.match(album,/setMediaPage\(next\);setPage\(next\);resetSelection\(\);/);
+assert.match(album,/setTabDir\(\{key:next,dir:next==='videos'\?'next':'prev'\}\);/);
+assert.match(album,/const panelKey=mediaPage;/);
+assert.match(album,/\{isMediaPage&&<div className="fge-tab-panel" key=\{panelKey\}/);
+assert.doesNotMatch(album,/switchTab\('players'\)/);
+
 assert.match(album,/const openDetail=\(item,img\)=>\{gridScroll\.current=window\.scrollY;setTabDir\(null\);/);
 assert.match(css,/\.fge-tab-panel\[data-dir="next"\]\{animation:fg-tab-next \.3s cubic-bezier\(\.2,\.8,\.2,1\) backwards\}/);
 assert.match(css,/\.fge-tab-panel\[data-dir="prev"\]\{animation:fg-tab-prev \.3s cubic-bezier\(\.2,\.8,\.2,1\) backwards\}/);

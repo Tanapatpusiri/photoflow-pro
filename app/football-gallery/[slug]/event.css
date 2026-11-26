@@ -16,7 +16,7 @@
 
 /* Album landing opens into the image gallery, with only three navigation tabs. */
 .fge-album-heading{margin-bottom:12px}
-.fge-album-tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;padding:5px;margin:0 0 16px;background:#f3f3f5;border-radius:999px;min-width:0}
+.fge-album-tabs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px;padding:5px;margin:0 0 16px;background:#f3f3f5;border-radius:999px;min-width:0}
 .fge-album-tabs button{min-width:0;min-height:44px;padding:9px 5px;border:0;border-radius:999px;background:transparent;color:#696970;font:inherit;font-size:clamp(12px,3.45vw,15px);font-weight:550;white-space:nowrap;cursor:pointer;touch-action:manipulation}
 .fge-album-tabs button.active{background:#fff;color:#18181b;font-weight:700;box-shadow:0 2px 10px #00000012}
 .fge-album-tabs button:focus-visible{outline:2px solid #18181b;outline-offset:2px}
@@ -45,3 +45,27 @@
 .fge-shell{overflow-x:clip}
 
 .fge-matchday{color:inherit;text-decoration:none;overflow-wrap:anywhere}.fge-matchday time{font-size:14px}
+
+.fge-album-tabs button{display:flex;align-items:center;justify-content:center;gap:7px}
+.fge-search-toggle{font-size:inherit}
+.fge-profile-search{display:flex;position:relative;align-items:center;margin:0 0 12px;min-width:0}
+.fge-profile-search .fge-search{padding-inline-end:48px}
+.fge-profile-search .fge-search::-webkit-search-cancel-button{display:none}
+.fge-search-clear{position:absolute;inset-inline-end:5px;display:grid;place-items:center;width:44px;height:44px;background:none;border:0;border-radius:50%;color:#555;cursor:pointer}
+.fge-profile-strip{display:flex;gap:10px;min-width:0;max-width:100%;overflow-x:auto;scrollbar-width:none;padding:4px 2px 8px;margin:0 0 18px}
+.fge-profile-strip::-webkit-scrollbar{display:none}
+.fge-profile{flex:0 0 clamp(66px,19vw,78px);display:flex;flex-direction:column;align-items:center;gap:7px;min-width:0;background:none;border:0;padding:0;color:var(--black);text-align:center;cursor:pointer;user-select:none}
+.fge-profile-ring{display:grid;place-items:center;position:relative;width:clamp(60px,17vw,68px);aspect-ratio:1;border:2px solid #dedee1;border-radius:50%;padding:3px;color:#76767b}
+.fge-profile-ring::before{content:'';position:absolute;inset:5px;background:#f4f4f5;border-radius:50%}
+.fge-profile-ring svg{position:relative}
+.fge-profile-ring img{position:absolute;inset:5px;width:calc(100% - 10px);height:calc(100% - 10px);border-radius:50%;object-fit:cover}
+.fge-profile[aria-pressed=true] .fge-profile-ring{border-color:#242426}
+.fge-profile[aria-pressed=true] .fge-profile-name{font-weight:750}
+.fge-profile-name{width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;font-weight:600;line-height:1.4}
+.fge-profile:focus-visible .fge-profile-ring{outline:2px solid #242426;outline-offset:1px}
+.fge-profile-empty{margin:8px 0 18px;color:var(--muted);font-size:14px}
+.fge-video-list .fge-tile-image{position:relative}
+.fge-video-play{position:absolute;inset:0;display:grid;place-items:center;color:#fff;pointer-events:none}
+.fge-video-play svg{background:#1f2022b3;border-radius:50%;padding:2px}
+.fge-detail-image video{display:block;width:100%;height:100%;background:#1f2022}
+@media(max-width:360px){.fge-nav:has(.fge-search-toggle){gap:8px}.fge-album-tabs button{gap:5px}}
