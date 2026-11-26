@@ -1,6 +1,6 @@
 import {NextResponse} from 'next/server';
 import {db,configured,grantFor,isUuid,streamPrivateObject,contentDisposition,privateHeaders,publicLimitOk,PUBLIC_LIMIT_MESSAGE} from '../../../../../../../../lib/football-gallery-server';
-import {grantFingerprint,partLayout,archiveName} from '../../../../../../../../lib/football-gallery-archive';
+import {grantFingerprint,archiveEventIds,partLayout,archiveName} from '../../../../../../../../lib/football-gallery-archive';
 import {zipRangeStream,parseRange} from '../../../../../../../../lib/football-gallery-zip';
 import {archiveUrl} from '../../../../../../../../lib/football-gallery-tickets';
 export const runtime='nodejs';
@@ -27,7 +27,8 @@ export async function GET(request,{params}){
   const ids=job.manifest?.parts?.[index];
   if(!Array.isArray(ids)||!ids.length)return deny('ไม่พบไฟล์',404);
   // Re-check publication now: a file hidden after the job was prepared is never streamed.
-  const q=await db().query(`SELECT f.id,f.r2_key,f.original_filename,f.variant,f.size_bytes,f.crc32,f.sha256,f.storage,m.captured_at FROM fg_media_files f JOIN fg_media m ON m.id=f.media_id WHERE f.id=ANY($1::uuid[]) AND m.event_id=$2 AND m.status='published' AND m.publish_allowed=true AND m.metadata_reviewed=true AND f.verified_hash=true AND f.crc32 IS NOT NULL`,[ids,job.event_id]);
+  const eventIds=await archiveEventIds(job.event_id,grant.codeId,job.manifest?.combined===true);
+  const q=await db().query(`SELECT f.id,f.r2_key,f.original_filename,f.variant,f.size_bytes,f.crc32,f.sha256,f.storage,m.captured_at FROM fg_media_files f JOIN fg_media m ON m.id=f.media_id WHERE f.id=ANY($1::uuid[]) AND m.event_id=ANY($2::uuid[]) AND m.status='published' AND m.publish_allowed=true AND m.metadata_reviewed=true AND f.verified_hash=true AND f.crc32 IS NOT NULL`,[ids,eventIds]);
   if(q.rowCount!==ids.length)return deny('รายการไฟล์มีการเปลี่ยนแปลง กรุณาสร้างชุดดาวน์โหลดใหม่',410);
   // Drive originals are streamed by the download Worker, which re-checks this same authorisation.
   if(q.rows.some(f=>f.storage==='drive'))return NextResponse.redirect(archiveUrl(job.id,index,grant.codeId,job.event_id,job.expires_at),{status:307,headers:privateHeaders});

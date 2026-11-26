@@ -10,12 +10,12 @@ export async function GET(request){
  if(event!==null&&!isUuid(event))return send({message:'รหัสงานไม่ถูกต้อง'},400);
  try{
   // Correlated counts instead of joining players x media, which multiplied rows per event.
-  const q=await db().query(`SELECT e.id,e.title,e.slug,e.venue,e.event_date,e.status,e.privacy_approved_at,e.retention_until,e.deletion_after,e.locked,e.cover_media_id,(e.cover_drive_id IS NOT NULL) AS has_custom_cover,
+  const q=await db().query(`SELECT e.id,e.album_mode,e.parent_event_id,e.title,e.slug,e.venue,e.event_date,e.status,e.privacy_approved_at,e.retention_until,e.deletion_after,e.locked,e.cover_media_id,(e.cover_drive_id IS NOT NULL) AS has_custom_cover,
    (SELECT COUNT(*)::int FROM fg_players p WHERE p.event_id=e.id) AS players,
    (SELECT COUNT(*)::int FROM fg_media m WHERE m.event_id=e.id AND m.status<>'hidden') AS media,
    (SELECT COUNT(*)::int FROM fg_media m WHERE m.event_id=e.id AND m.status='published') AS published,
    (SELECT COUNT(*)::int FROM fg_removal_requests r WHERE r.event_id=e.id AND r.state IN('new','in_review')) AS open_removals
-   FROM fg_events e WHERE ($1::uuid IS NULL OR e.id=$1::uuid) ORDER BY e.created_at DESC LIMIT 100`,[event]);
+   FROM fg_events e WHERE ($1::uuid IS NULL OR e.id=$1::uuid OR e.parent_event_id=$1::uuid) ORDER BY e.created_at DESC`,[event]);
   return send({events:q.rows});
  }catch(e){console.error('fg admin events',e?.code||'unknown');return send({message:'ไม่สามารถอ่านข้อมูล'},503)}
 }
@@ -24,6 +24,21 @@ export async function GET(request){
 export async function PATCH(request){
  const {admin,error}=await adminGuard(request,{mutation:true});if(error)return error;
  let d;try{d=await request.json()}catch{return send({message:'ข้อมูลไม่ถูกต้อง'},400)}
+ if(isUuid(d?.event)&&['single','multi-day'].includes(d.albumMode)){
+  const client=await db().connect();
+  try{
+   await client.query('BEGIN');
+   const result=await client.query(`UPDATE fg_events SET album_mode=$2,updated_at=NOW()
+    WHERE id=$1 AND parent_event_id IS NULL RETURNING id`,[d.event,d.albumMode]);
+   if(!result.rowCount){await client.query('ROLLBACK');return send({message:'ไม่พบอัลบั้มหลัก'},404)}
+   await audit(client,{adminId:admin.id,eventId:d.event,action:'event.album_mode',detail:{mode:d.albumMode}});
+   await client.query('COMMIT');return send({ok:true});
+  }catch(err){
+   await client.query('ROLLBACK');
+   if(err.code==='23514'||err.code==='23503')return send({message:'เปลี่ยนรูปแบบไม่ได้ขณะที่อัลบั้มยังมีสื่อหรือวันแข่งขัน'},409);
+   console.error('fg album mode',err?.code||'unknown');return send({message:'เปลี่ยนรูปแบบอัลบั้มไม่สำเร็จ'},503);
+  }finally{client.release()}
+ }
  if(!isUuid(d?.event)||typeof d.date!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(d.date)||!oneYearAfterEvent(d.date))return send({message:'วันจัดงานไม่ถูกต้อง'},400);
  const client=await db().connect();
  try{
@@ -37,20 +52,24 @@ export async function PATCH(request){
 export async function POST(request){
  const {admin,error}=await adminGuard(request,{mutation:true});if(error)return error;
  let d;try{d=await request.json()}catch{return send({message:'ข้อมูลไม่ถูกต้อง'},400)}
- const locked=d?.locked===true;
+ const parent=d?.parentEventId??null;
+ const mode=d?.albumMode??'single';
+ if(!['single','multi-day'].includes(mode)||(parent!==null&&(!isUuid(parent)||mode!=='single')))return send({message:'รูปแบบอัลบั้มไม่ถูกต้อง'},400);
+ const locked=parent===null&&d?.locked===true;
  const title=typeof d?.title==='string'?d.title.trim():'';const venue=typeof d?.venue==='string'&&d.venue.trim()?d.venue.trim():null;
  // Date.parse accepts impossible dates such as 2025-02-30, which PostgreSQL then rejects with a 503.
  const rawDate=typeof d?.date==='string'?d.date.trim():'';
  if(rawDate&&(!/^\d{4}-\d{2}-\d{2}$/.test(rawDate)||!oneYearAfterEvent(rawDate)))return send({message:'วันจัดงานไม่ถูกต้อง'},400);
  const date=rawDate||null;
+ if(parent&&!date)return send({message:'กรุณาระบุวันแข่งขัน'},400);
  if(!title||title.length>180||(venue&&venue.length>180))return send({message:'กรุณากรอกชื่องาน'},400);
  const slug='event-'+randomBytes(10).toString('hex');
  const client=await db().connect();
  try{
   await client.query('BEGIN');
-  const q=await client.query(`INSERT INTO fg_events(slug,title,venue,event_date,status,locked) VALUES($1,$2,$3,$4,'draft',$5) RETURNING id,slug,title,venue,event_date,status,locked`,[slug,title,venue,date,locked]);
+  const q=await client.query(`INSERT INTO fg_events(slug,title,venue,event_date,status,locked,album_mode,parent_event_id) VALUES($1,$2,$3,$4,'draft',$5,$6,$7) RETURNING id,slug,title,venue,event_date,status,locked,album_mode,parent_event_id`,[slug,title,venue,date,locked,mode,parent]);
   await audit(client,{adminId:admin.id,eventId:q.rows[0].id,action:'event.create'});
   await client.query('COMMIT');
   return send({event:q.rows[0]},201);
- }catch(e){await client.query('ROLLBACK');console.error('fg event creation',e?.code||'unknown');return send({message:'สร้างงานไม่สำเร็จ'},503)}finally{client.release()}
+ }catch(e){await client.query('ROLLBACK');if(e.code==='23503')return send({message:'เลือกอัลบั้มหลักแบบหลายวัน'},409);console.error('fg event creation',e?.code||'unknown');return send({message:'สร้างงานไม่สำเร็จ'},503)}finally{client.release()}
 }

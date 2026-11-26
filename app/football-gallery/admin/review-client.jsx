@@ -16,7 +16,7 @@ const fmtDate=v=>v?new Date(v).toLocaleString('th-TH',{dateStyle:'medium',timeSt
 const inDays=n=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Bangkok'}).format(new Date(Date.now()+n*86400000));
 
 // view picks the part of the album workflow to show; state is kept while switching between them.
-export default function ReviewClient({event,players,retentionMonths,uploadKey=0,onUpdated,onPlayersChanged,view='all',onNavigate}){
+export default function ReviewClient({matchdayTargets=[],event,players,retentionMonths,uploadKey=0,onUpdated,onPlayersChanged,view='all',onNavigate}){
  const show=part=>view==='all'||view===part;
  const [items,setItems]=useState([]),[active,setActive]=useState(null),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false),[error,setError]=useState(''),[info,setInfo]=useState(''),[page,setPage]=useState(1),[hasMore,setHasMore]=useState(false),[filter,setFilter]=useState('');
  const [counts,setCounts]=useState({total:0,ready:0,published:0,uploading:0,hidden:0,filtered:0});
@@ -43,7 +43,7 @@ export default function ReviewClient({event,players,retentionMonths,uploadKey=0,
  const endHold=()=>{clearTimeout(holdTimer.current);holdStart.current=null};
  useEffect(()=>()=>clearTimeout(holdTimer.current),[]);
 
- const [tags,setTags]=useState([]),[approval,setApproval]=useState({noChildren:false}),[newName,setNewName]=useState('');
+ const [tags,setTags]=useState([]),[approval,setApproval]=useState({noChildren:false});
  const [privacy,setPrivacy]=useState({player:'',basis:'',evidence:'',attest:false});
  const [publish,setPublish]=useState({notice:'',edited:false,retention:addRetentionMonths(event.event_date,retentionMonths),attest:false});
  const [grants,setGrants]=useState([]),[grantLabel,setGrantLabel]=useState(''),[grantDays,setGrantDays]=useState(14),[issued,setIssued]=useState(null);
@@ -94,7 +94,7 @@ export default function ReviewClient({event,players,retentionMonths,uploadKey=0,
  useEffect(()=>{if(uploadKey)load(1)},[uploadKey]);
  useEffect(()=>{if(retentionMonths)setPublish(p=>p.retention?p:{...p,retention:addRetentionMonths(event.event_date,retentionMonths)})},[retentionMonths,event.event_date]);
  // Basis and evidence usually apply to the whole match, so they are kept between photos; the confirmations are per photo.
- const select=item=>{setActive(item);setTags(item.players||[]);setApproval({noChildren:false});setNewName('');setError('');setInfo('')};
+ const select=item=>{setActive(item);setTags(item.players||[]);setApproval({noChildren:false});setError('');setInfo('')};
  const run=async(task,ok)=>{if(busy)return;setBusy(true);setError('');setInfo('');try{await task();if(ok)setInfo(ok)}catch(e){setError(e.message)}finally{setBusy(false)}};
  const savePhotoTags=next=>{
   if(!active||busy)return;
@@ -109,9 +109,7 @@ export default function ReviewClient({event,players,retentionMonths,uploadKey=0,
  const review=(action,data={},ok)=>run(async()=>{await post('/review',{action,eventId:event.id,mediaId:active?.id,...data});await load(1);setActive(null);await onUpdated?.();await loadSide()},ok);
  const savedTags=active?.players||[];
  const tagsDirty=!!active&&(tags.length!==savedTags.length||tags.some(t=>!savedTags.includes(t)));
- // Typing a name that is not in the list adds the child to the album and selects them. "Name #10" also stores the shirt number.
- const addName=e=>{e.preventDefault();const raw=newName.trim();if(!raw||busy)return;const m=/^(.*?)\s*#\s*([0-9A-Za-z-]{1,12})$/.exec(raw);const name=(m?m[1]:raw).trim().slice(0,100);if(!name)return;
-  run(async()=>{const r=await fetch(api+'/players',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({event:event.id,name,jersey:m?m[2]:''})});const d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d.message||'เพิ่มชื่อไม่สำเร็จ');await onPlayersChanged?.();const next=[...new Set([...tags,d.player.id])];await post('/review',{action:'tag',eventId:event.id,mediaId:active.id,players:next});setTags(next);setActive(a=>a?{...a,players:next}:a);setItems(xs=>xs.map(x=>x.id===active.id?{...x,players:next}:x));setNewName('')},'เพิ่มชื่อแล้ว')};
+
  // Permanent delete: rows first on the server, then the files in Google Drive. "all" repeats in batches.
  const removeForever=({ids,all,label})=>{
   if(!confirm(`ลบถาวร ${label}?\n\nไฟล์ต้นฉบับใน Google Drive จะถูกลบด้วย และกู้คืนไม่ได้`))return;
@@ -200,6 +198,7 @@ export default function ReviewClient({event,players,retentionMonths,uploadKey=0,
   {show('review')&&<>
   <h2>จัดการรูปและแท็กนักฟุตบอล</h2><p>รูปที่อัปโหลดครบพร้อมให้แท็กได้เลย เลือกหลายรูปแล้วแท็กเด็กคนเดียวพร้อมกันได้ ส่วนการเปิดรูปให้ผู้ชมเห็นยังควบคุมแยกจากหน้าเผยแพร่</p>
    {active?<div className="fga-review-detail">
+    {event.status==='draft'&&matchdayTargets.length>0&&active.files.length>0&&active.files.every(f=>f.storage==='s3'&&f.verifiedBytes&&!f.pending)&&['review','published'].includes(active.status)&&<MatchdayMove targets={matchdayTargets} from={event.id} mediaId={active.id} onMoved={()=>{setActive(null);load();onUpdated?.()}}/>}
     <div className="fga-detail-nav"><button className="fga-link" onClick={()=>setActive(null)}>‹ กลับรายการ</button><span>{activeIndex+1} / {items.length}</span><button type="button" className="fga-chip" onClick={()=>navigatePhoto(-1)} disabled={busy||activeIndex<=0} aria-label="รูปก่อนหน้า">‹ ก่อนหน้า</button><button type="button" className="fga-chip" onClick={()=>navigatePhoto(1)} disabled={busy||loading||(activeIndex>=items.length-1&&!hasMore)} aria-label="รูปถัดไป">ถัดไป ›</button></div>
     <div className="fga-review-layout">
     <div className="fga-review-media">
@@ -215,9 +214,9 @@ export default function ReviewClient({event,players,retentionMonths,uploadKey=0,
     <section className="fga-step-card">
      <h3>แท็กชื่อนักฟุตบอล</h3>
      <p className="fga-hint">แตะชื่อเด็กเพื่อแท็ก รูปจะบันทึกทันทีโดยไม่ต้องกดอนุมัติซ้ำ หากต้องแท็กหลายรูปพร้อมกันให้กดค้างรูปจากหน้ารวม</p>
-     <div className="fga-pick">{players.map(p=><label key={p.id} className={tags.includes(p.id)?'on':''}><input type="checkbox" checked={tags.includes(p.id)} disabled={busy} onChange={e=>savePhotoTags(e.target.checked?[...tags,p.id]:tags.filter(x=>x!==p.id))}/>{p.name}{p.jersey?' #'+p.jersey:''}</label>)}
+     <div className="fga-pick">{players.map(p=><label key={p.id} className={tags.includes(p.id)?'on':''}><input type="checkbox" checked={tags.includes(p.id)} disabled={busy} onChange={e=>savePhotoTags(e.target.checked?[...tags,p.id]:tags.filter(x=>x!==p.id))}/>{p.registry_has_profile&&<img alt="" loading="lazy" decoding="async" src={api+'/player-registry?photo='+encodeURIComponent(p.registry_id)+'&v='+encodeURIComponent(p.registry_updated_at||'')} style={{width:28,height:28,borderRadius:'50%',objectFit:'cover',flexShrink:0}} onError={e=>{e.currentTarget.style.display='none'}}/>}{p.name}{p.age_group?' · '+p.age_group:''}{p.jersey?' #'+p.jersey:''}</label>)}
      </div>
-     <form className="fga-add-name" onSubmit={addName}><input value={newName} onChange={e=>setNewName(e.target.value)} placeholder="พิมพ์ชื่อเด็ก เช่น น้องบอล #10" maxLength={100} aria-label="เพิ่มชื่อเด็กที่ไม่มีในรายการ"/><button className="fga-quiet" disabled={busy||!newName.trim()}>เพิ่ม</button></form>
+     <p className="fga-meta">หากยังไม่มีรายชื่อ ให้ลงทะเบียนในเมนูจัดการเด็ก แล้วเลือกจากทะเบียนนักฟุตบอลด้านบน</p>
      {busy&&<p className="fga-hint" role="status">กำลังบันทึกแท็ก…</p>}
      {active.has_gps&&<p className="fga-gps-note" role="note">ไฟล์นี้มีตำแหน่งที่ถ่าย (GPS) ผู้ปกครองที่ดาวน์โหลดไฟล์ต้นฉบับจะเห็นตำแหน่งนี้ ถ้าไม่ควรเปิดเผย ให้กด "ซ่อนภาพนี้"</p>}
     </section>
@@ -233,7 +232,7 @@ export default function ReviewClient({event,players,retentionMonths,uploadKey=0,
    :<div className="fga-pick-bar" role="toolbar" aria-label="เลือกภาพเพื่อแท็กหรือลบ">
     <label className="fga-check"><input type="checkbox" checked={pickAll} onChange={e=>{setPickAll(e.target.checked);setPicked(e.target.checked?items.map(i=>i.id):[])}}/>เลือกทั้งหมดในหมวด "{filterLabel}"{hasMore?' (รวมที่ยังไม่ได้โหลด)':''}</label>
     <span>{pickAll?`ทั้งหมด ${items.length.toLocaleString('th-TH')}${hasMore?'+':''} รายการ`:`เลือกแล้ว ${picked.length.toLocaleString('th-TH')} รายการ`}</span>
-    <label className="fga-bulk-player">แท็กเด็กให้รูปที่เลือก<select aria-label="เลือกเด็กที่ต้องการแท็ก" value={bulkPlayer} onChange={e=>setBulkPlayer(e.target.value)}><option value="">เลือกนักฟุตบอล</option>{players.map(p=><option key={p.id} value={p.id}>{p.name}{p.jersey?' #'+p.jersey:''}</option>)}</select></label>
+    <label className="fga-bulk-player">แท็กเด็กให้รูปที่เลือก<select aria-label="เลือกเด็กที่ต้องการแท็ก" value={bulkPlayer} onChange={e=>setBulkPlayer(e.target.value)}><option value="">เลือกนักฟุตบอล</option>{players.map(p=><option key={p.id} value={p.id}>{p.name}{p.age_group?' · '+p.age_group:''}{p.jersey?' #'+p.jersey:''}</option>)}</select></label>
     <button className="fga-chip fga-bulk-save" disabled={busy||!bulkPlayer||picked.length===0||picked.some(id=>items.find(x=>x.id===id)?.kind!=='photo')} onClick={bulkTag}>แท็ก {picked.length} รูปพร้อมกัน</button>
     <button className="fga-chip fga-chip-danger" disabled={busy||(!pickAll&&picked.length===0)} onClick={()=>removeForever(pickAll?{all:true,label:`ทั้งหมดในหมวด "${filterLabel}" (${items.length.toLocaleString('th-TH')}${hasMore?'+':''} รายการ)`}:{ids:picked,label:`${picked.length.toLocaleString('th-TH')} รายการที่เลือก`})}>ลบถาวร</button>
     <button className="fga-chip" onClick={()=>{setPicking(false);setPicked([]);setPickAll(false)}}>ยกเลิก</button>
@@ -270,11 +269,11 @@ export default function ReviewClient({event,players,retentionMonths,uploadKey=0,
     </details>
     <p>{event.event_date&&retentionMonths?`เข้าถึงได้ไม่เกิน ${retentionMonths} เดือนหลังวันจัดงาน`:!event.event_date?'กรุณาบันทึกวันจัดงานก่อนเผยแพร่':'กำลังโหลดระยะเวลาที่เจ้าของตั้ง'} เมื่อครบกำหนดระบบจะปิดการเข้าถึง แต่ไฟล์ยังอยู่ในที่เก็บจนกว่าเจ้าของจะยืนยันและดำเนินการลบ</p>{event.event_date&&retentionMonths&&publish.retention>addRetentionMonths(event.event_date,retentionMonths)&&<p role="alert">กรุณาปรับวันสิ้นสุดให้ไม่เกินระยะเวลาที่ตั้งไว้</p>}
     <label className="fga-check"><input type="checkbox" checked={publish.attest} onChange={e=>setPublish(p=>({...p,attest:e.target.checked}))}/>ยืนยันว่ามีฐานทางกฎหมายสำหรับเผยแพร่ภาพเด็กทั้งหมดที่อัปโหลดในอัลบั้มนี้ และข้อความแจ้งผู้ปกครองถูกต้อง</label>
-    {event.published===0&&counts.ready===0&&<p className="fga-message" role="note">ยังไม่มีรูปที่ตรวจไฟล์ต้นฉบับครบ หากเผยแพร่ตอนนี้ ผู้ปกครองจะเห็นอัลบั้มว่าง</p>}<Missing items={publishMissing}/>
+    {event.album_mode!=='multi-day'&&event.published===0&&counts.ready===0&&<p className="fga-message" role="note">ยังไม่มีรูปที่ตรวจไฟล์ต้นฉบับครบ หากเผยแพร่ตอนนี้ ผู้ปกครองจะเห็นอัลบั้มว่าง</p>}<Missing items={publishMissing}/>
     <button disabled={busy||publishMissing.length>0} onClick={()=>review('publish-event',{notice,retentionUntil:publish.retention,confirmed:publish.attest},'เผยแพร่อัลบั้มส่วนตัวแล้ว')}>เผยแพร่อัลบั้มส่วนตัว</button></>}
   </div>
 
-  {event.status==='published'&&<div className="fga-review-policy"><h3>ส่งลิงก์ผู้ปกครอง</h3>
+  {event.status==='published'&&!event.parent_event_id&&<div className="fga-review-policy"><h3>ส่งลิงก์ผู้ปกครอง</h3>
    <label>ส่งให้ใคร (สำหรับผู้ดูแลจำ)<input value={grantLabel} onChange={e=>setGrantLabel(e.target.value)} maxLength={80} placeholder="เช่น กลุ่ม LINE ผู้ปกครอง U10"/></label>
    <label>หมดอายุใน (วัน)<input type="number" inputMode="numeric" min={1} max={90} value={grantDays} onChange={e=>setGrantDays(Number(e.target.value)||14)}/></label>
    <div className="fga-actions"><button onClick={()=>createGrant('invite')} disabled={busy}>สร้างลิงก์เชิญ LINE</button><button onClick={()=>createGrant('code')} disabled={busy}>สร้างรหัสเข้างาน</button></div>
@@ -283,7 +282,7 @@ export default function ReviewClient({event,players,retentionMonths,uploadKey=0,
    </div>}
    {grants.length>0&&<div className="fga-items">{grants.map(g=><div key={g.id}><strong>{g.type==='invite'?'ลิงก์ LINE':'รหัสเข้างาน'}{g.label?' · '+g.label:''}</strong><span>สร้าง {fmtDate(g.created_at)} · {g.revoked_at?'ยกเลิกแล้ว':g.active?'ใช้ได้ถึง '+fmtDate(g.expires_at):'หมดอายุ'}</span>{g.active&&<button className="fga-danger" disabled={busy} onClick={()=>revokeGrant(g)}>ยกเลิกสิทธิ์</button>}</div>)}</div>}
   </div>}
-  {event.status==='draft'&&<p className="fga-meta">หลังเผยแพร่แล้ว จะสร้างลิงก์เชิญ LINE หรือรหัสเข้างานให้ผู้ปกครองได้ที่หน้านี้</p>}
+  {event.status==='draft'&&!event.parent_event_id&&<p className="fga-meta">หลังเผยแพร่แล้ว จะสร้างลิงก์เชิญ LINE หรือรหัสเข้างานให้ผู้ปกครองได้ที่หน้านี้</p>}
   </>}
 
   {show('requests')&&<>
@@ -297,4 +296,24 @@ export default function ReviewClient({event,players,retentionMonths,uploadKey=0,
   </details>
   </>}
  </div>
+}
+
+function MatchdayMove({targets,from,mediaId,onMoved}){
+ const [to,setTo]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState('');
+ async function move(){
+  setBusy(true);setError('');
+  try{
+   const response=await fetch(api+'/media',{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify({mediaId,from,to})});
+   const data=await response.json();
+   if(!response.ok)throw Error(data.message);
+   onMoved();
+  }catch(err){setError(err.message||'ย้ายสื่อไม่สำเร็จ')}finally{setBusy(false)}
+ }
+ return <details className="fga-review-policy">
+  <summary>ย้ายไปวันแข่งขันอื่น</summary>
+  <label>วันแข่งขันปลายทาง<select value={to} onChange={e=>setTo(e.target.value)}><option value="">เลือกวันแข่งขัน</option>{targets.map(day=><option key={day.id} value={day.id}>{day.title} · {String(day.event_date).slice(0,10)}</option>)}</select></label>
+  <p>หลังย้าย สื่อจะรอตรวจสิทธิ์ก่อนเผยแพร่ในวันใหม่</p>
+  <button disabled={!to||busy} onClick={move}>ย้ายสื่อ</button>
+  {error&&<p role="alert">{error}</p>}
+ </details>;
 }

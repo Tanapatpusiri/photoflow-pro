@@ -26,12 +26,15 @@ export async function POST(request){
  const {admin,error}=await adminGuard(request,{mutation:true});if(error)return error;
  let d;try{d=await request.json()}catch{return reply({message:'ข้อมูลไม่ถูกต้อง'},400)}
  if(!ACTIONS.includes(d?.action)||!isUuid(d.event))return reply({message:'ข้อมูลไม่ถูกต้อง'},400);
- const ev=await db().query('SELECT id,locked,public_grant_id,event_date,cover_drive_id,cover_pending FROM fg_events WHERE id=$1',[d.event]);
+ const ev=await db().query('SELECT id,parent_event_id,locked,public_grant_id,event_date,cover_drive_id,cover_pending FROM fg_events WHERE id=$1',[d.event]);
  if(!ev.rowCount)return reply({message:'ไม่พบอัลบั้ม'},404);
  const e=ev.rows[0];
  const log=(client,action,resourceId)=>audit(client,{adminId:admin.id,eventId:e.id,action,resourceId});
  try{
-  if(d.action==='unlock'||d.action==='lock')return await setLock(e,d.action==='unlock',log);
+  if(d.action==='unlock'||d.action==='lock'){
+   if(e.parent_event_id)return reply({message:'วันแข่งขันใช้สิทธิ์เข้าชมจากอัลบั้มหลัก'},409);
+   return await setLock(e,d.action==='unlock',log);
+  }
   if(d.action==='cover-media'){
    if(!isUuid(d.mediaId))return reply({message:'ข้อมูลไม่ถูกต้อง'},400);
    const m=await db().query(`SELECT 1 FROM fg_media m JOIN fg_media_files f ON f.media_id=m.id AND f.variant='THUMB' AND f.verified_bytes=true WHERE m.id=$1 AND m.event_id=$2 AND m.kind='photo' AND m.status='published' AND m.publish_allowed=true AND m.metadata_reviewed=true`,[d.mediaId,e.id]);

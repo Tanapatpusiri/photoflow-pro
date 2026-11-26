@@ -152,7 +152,7 @@ async function init(admin,d,origin){
  try{
   await client.query('BEGIN');
   // Locking the event row serialises inits per event so a JPEG and its RAW uploaded in parallel pair correctly.
-  const ev=await client.query("SELECT id FROM fg_events WHERE id=$1 AND status IN('draft','published') FOR UPDATE",[d.event]);
+  const ev=await client.query("SELECT id FROM fg_events WHERE id=$1 AND album_mode='single' AND status IN('draft','published') FOR UPDATE",[d.event]);
   if(!ev.rowCount){await client.query('ROLLBACK');return send({message:'งานนี้ไม่เปิดรับอัปโหลด'},409)}
   const dup=await client.query(`SELECT f.id,f.media_id,f.verified_bytes,f.verified_hash FROM fg_media_files f JOIN fg_media m ON m.id=f.media_id WHERE m.event_id=$1 AND f.sha256=$2 AND f.size_bytes=$3 AND f.variant=$4 LIMIT 1`,[d.event,sha,bytes,type.variant]);
   if(dup.rowCount){

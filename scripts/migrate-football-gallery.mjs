@@ -5,7 +5,7 @@ import {readFile} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
 import {Pool} from 'pg';
 
-const files=['db/football_gallery_schema.sql','db/football_gallery_ingestion_extension.sql','db/football_gallery_003_production.sql','db/football_gallery_004_google_drive.sql','db/football_gallery_005_retention_deletion.sql','db/football_gallery_006_public_albums.sql','db/football_gallery_007_default_unlocked.sql'];
+const files=['db/football_gallery_schema.sql','db/football_gallery_ingestion_extension.sql','db/football_gallery_003_production.sql','db/football_gallery_004_google_drive.sql','db/football_gallery_005_retention_deletion.sql','db/football_gallery_006_public_albums.sql','db/football_gallery_007_default_unlocked.sql','db/football_gallery_008_player_registry.sql','db/football_gallery_009_registry_legacy.sql','db/football_gallery_010_matchdays.sql'];
 const {DATABASE_URL}=process.env;
 if(!DATABASE_URL){console.error('Set DATABASE_URL for the dedicated Football Gallery database.');process.exit(1)}
 const pool=new Pool({connectionString:DATABASE_URL,ssl:process.env.DATABASE_SSL==='disable'?false:{rejectUnauthorized:true}});
