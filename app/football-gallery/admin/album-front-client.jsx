@@ -44,10 +44,10 @@ export default function AlbumFront({event,onChanged}){
     <strong>{event.title}</strong>{event.locked&&<span>🔒 ล็อก</span>}
    </div>
    <div className="fga-front-controls">
-    <fieldset className="fga-front-lock"><legend>ใครเข้าอัลบั้มนี้ได้</legend>
+    {event.parent_event_id?<p className="fga-hint">ใช้สิทธิ์เข้าชมจากอัลบั้มหลัก</p>:<fieldset className="fga-front-lock"><legend>ใครเข้าอัลบั้มนี้ได้</legend>
      <label className="fga-check"><input type="radio" name={'lock-'+event.id} checked={!!event.locked} disabled={busy} onChange={()=>setLocked(true)}/><span><b>ล็อก</b> · ต้องใช้รหัสหรือลิงก์จากผู้จัดงาน</span></label>
      <label className="fga-check"><input type="radio" name={'lock-'+event.id} checked={!event.locked} disabled={busy} onChange={()=>setLocked(false)}/><span><b>เปิดให้ทุกคน</b> · ใครก็ดูและดาวน์โหลดได้ ไม่ต้องใช้รหัส</span></label>
-    </fieldset>
+    </fieldset>}
     <p className="fga-hint">รูปปกจะแสดงบนหน้าแรกของเว็บไซต์แม้อัลบั้มจะล็อกอยู่ กรุณาเลือกรูปที่ได้รับอนุญาตให้เผยแพร่เป็นหน้าปกแล้วเท่านั้น</p>
     <div className="fga-actions">
      <label className="fga-chip fga-file-chip">{busy?'กำลังบันทึก…':'อัปโหลดรูปหน้าปก'}<input type="file" accept="image/jpeg,image/png,image/webp,image/heic" disabled={busy} onChange={e=>{upload(e.target.files?.[0]);e.target.value=''}}/></label>

@@ -30,7 +30,8 @@ const matchesPlayer=(p,q)=>{const t=q.trim().toLowerCase();return !t||[p.name,p.
 function Empty({message,children,ball=false}){return <div className="fge-empty"><div className="fge-placeholder">{ball?<span className="fge-ball"><Icon name="ball" size={40}/></span>:<Icon name="image" size={40}/>}</div><p>{message}</p>{children}</div>}
 // Placeholder photos (with a light sweep) in the same two columns while photos are on their way.
 function Skeleton({count,label}){return <div className="fge-photo-grid fge-skeleton-grid" role="status"><span className="fge-sr-only">{label}</span>{[0,1].map(c=><div className="fge-photo-column" key={c}>{Array.from({length:Math.ceil(count/2)},(_,i)=><div className="fge-skeleton" key={i}/>)}</div>)}</div>}
-export default function EventExperience({slug,initialData=null}){
+export default function EventExperience({slug,initialData=null,matchdayDate=null}){
+ const [matchdays,setMatchdays]=useState(initialData?.matchdays??null);
  const [event,setEvent]=useState(initialData?.event||null),[players,setPlayers]=useState(initialData?.players||[]),[items,setItems]=useState([]),[error,setError]=useState(''),[loading,setLoading]=useState(!initialData),[needsAccess,setNeedsAccess]=useState(false);
  const [page,setPage]=useState('photos'),[tab,setTab]=useState('photo'),[player,setPlayer]=useState(null),[detail,setDetail]=useState(null),[filter,setFilter]=useState('all'),[favorites,setFavorites]=useState([]),[selected,setSelected]=useState([]),[pageNo,setPageNo]=useState(1),[hasMore,setHasMore]=useState(false),[query,setQuery]=useState('');
  // Player search: the box shows what was typed at once, the list follows in a View Transition.
@@ -77,9 +78,9 @@ export default function EventExperience({slug,initialData=null}){
  useEffect(()=>{if(initialData?.event)return;let live=true;(async()=>{setLoading(true);try{let r=await fetch(base(slug),{cache:'no-store'}),d=await r.json();
   // An unlocked album opens without a code: ask for its public pass once, then load again.
   if(!r.ok&&d.needsAccess){const o=await fetch('/api/football-gallery/open',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({slug}),cache:'no-store'});if(o.ok){r=await fetch(base(slug),{cache:'no-store'});d=await r.json()}}
-  if(!r.ok){if(d.needsAccess&&live)setNeedsAccess(true);throw Error(d.message||'ไม่สามารถเปิดอัลบั้ม')}if(live){setEvent(d.event);setPlayers(d.players||[]);setError('');if(!navigator.connection?.saveData){listMedia('photo',null,1).catch(()=>{})}}}catch(e){if(live)setError(e.message)}finally{if(live)setLoading(false)}})();return()=>{live=false}},[slug]);
+  if(!r.ok){if(d.needsAccess&&live)setNeedsAccess(true);throw Error(d.message||'ไม่สามารถเปิดอัลบั้ม')}if(live){setEvent(d.event);setMatchdays(d.matchdays??null);setPlayers(d.players||[]);setError('');if(!d.matchdays&&!navigator.connection?.saveData){listMedia('photo',null,1).catch(()=>{})}}}catch(e){if(live)setError(e.message)}finally{if(live)setLoading(false)}})();return()=>{live=false}},[slug]);
  useEffect(()=>{
-  if(!event||!isMediaPage)return;
+  if(!event||matchdays||!isMediaPage)return;
   let live=true;
   setLoading(true);
   setListFailed(false);
@@ -105,7 +106,7 @@ export default function EventExperience({slug,initialData=null}){
    }
   })();
   return()=>{live=false};
- },[slug,event,page,player,tab,pageNo,listRetry]);
+ },[matchdays,slug,event,page,player,tab,pageNo,listRetry]);
  useEffect(()=>{
   const target=loadMoreTarget.current;
   if(!target||!canLoadMore||typeof IntersectionObserver==='undefined')return;
@@ -171,7 +172,7 @@ export default function EventExperience({slug,initialData=null}){
   const t=withViewTransition(()=>{flushSync(()=>change('players'));card=id?document.querySelector('.fge-player[data-player-id="'+CSS.escape(id)+'"]'):null;
    if(card){const r=card.getBoundingClientRect();if(r.bottom<0||r.top>innerHeight)window.scrollTo({top:window.scrollY+r.top+r.height/2-innerHeight/2,behavior:'instant'});prev=card.style.viewTransitionName;card.style.viewTransitionName='fg-player-hero';const n=card.querySelector('strong');if(n)n.style.viewTransitionName='fg-player-name'}});
   const restore=()=>{if(card){card.style.viewTransitionName=prev;const n=card.querySelector('strong');if(n)n.style.viewTransitionName=''}};if(t)t.finished.then(restore,restore);else restore()};
- const goBack=()=>{if(page==='detail')closeDetail();else if(page==='removal'&&detail)setPage('detail');else if(page==='player')backToPlayers();else if(page==='downloads'&&(selected.length||player))setPage(player?'player':'photos');else if(page==='players'||page==='videos')change('photos');else if(page==='photos')window.location.assign('/football-gallery');else change('photos')};
+ const goBack=()=>{if(page==='detail')closeDetail();else if(page==='removal'&&detail)setPage('detail');else if(page==='player')backToPlayers();else if(page==='downloads'&&(selected.length||player))setPage(player?'player':'photos');else if(page==='players'||page==='videos')change('photos');else if(page==='photos')window.location.assign(event.parentSlug?'/football-gallery/'+encodeURIComponent(event.parentSlug):'/football-gallery');else change('photos')};
  // Photo detail: swipe left/right (or the arrow keys) to the next/previous photo of the list the
  // visitor came from. The photo follows the finger (transform only), with resistance at the ends.
  const detailIndex=detail?viewed.findIndex(item=>item.id===detail.id):-1;
@@ -286,6 +287,19 @@ export default function EventExperience({slug,initialData=null}){
   <p className="fge-hint">กดทีละชุด ไฟล์ ZIP เก็บต้นฉบับแบบไม่บีบอัด พร้อมไฟล์ SHA256SUMS.txt สำหรับตรวจความถูกต้อง หากดาวน์โหลดสะดุด กดชุดเดิมอีกครั้งเพื่อทำต่อ ลิงก์ใช้ได้ 24 ชั่วโมง</p></div>;
  if(loading&&!event)return <div className="fge-shell"><p className="fge-loading">กำลังโหลดอัลบั้ม…</p></div>;
  if(!event)return <div className="fge-shell"><div className="fge-nav"><a className="fge-back" href="/football-gallery" aria-label="กลับ"><Icon name="back"/></a></div><Empty message={error||'อัลบั้มนี้ยังไม่พร้อมให้เข้าชม'}>{needsAccess&&<a className="fge-primary fge-link-button" href="/football-gallery">กรอกรหัสอัลบั้ม</a>}</Empty></div>;
+ if(matchdays)return <main className="fge-shell">
+  <header className="fge-nav fge-album-heading"><a className="fge-back" href="/football-gallery" aria-label="ย้อนกลับ"><Icon name="back"/></a><h1>{event.title}</h1><span className="fge-nav-spacer"/></header>
+  <div className="fge-playergrid">{matchdays.filter(day=>!matchdayDate||day.date===matchdayDate).map(day=><a className="fge-player fge-matchday" key={day.slug} href={'/football-gallery/'+encodeURIComponent(day.slug)}>
+   {day.cover&&<div className="fge-player-cover"><img src={day.cover+'?w=360'} alt="" loading="lazy"/></div>}
+   <strong>{day.title}</strong><time dateTime={day.date}>{new Intl.DateTimeFormat('th-TH',{dateStyle:'medium',timeZone:'Asia/Bangkok'}).format(new Date(day.date))}</time>
+   <span>{fmt(day.photos)} รูป · {fmt(day.videos)} คลิป</span>
+  </a>)}</div>
+  {matchdayDate&&<a className="fge-primary fge-link-button" href={'/football-gallery/'+encodeURIComponent(slug)}>ดูทุกวันแข่งขัน</a>}
+  {matchdays.length>0&&<button className="fge-primary" disabled={preparing} onClick={()=>prepare({jpeg:true,raw:true,video:true},{scope:'event'})}>{preparing?'กำลังเตรียมไฟล์…':'ดาวน์โหลดต้นฉบับทุกวันแข่งขัน'}</button>}
+  {error&&<p role="alert">{error}</p>}
+  <Parts/>
+  {!matchdays.some(day=>!matchdayDate||day.date===matchdayDate)&&<Empty message="ยังไม่มีวันแข่งขันที่เปิดให้เข้าชม"/>}
+ </main>;
  return <main className="fge-shell">
   <header ref={heading} className="fge-nav fge-album-heading"><button onClick={goBack} className="fge-back" aria-label="ย้อนกลับ"><Icon name="back"/></button><h1>{event.title}</h1>{showFav?<button type="button" ref={favChip} className={'fge-fav-chip'+(filter==='favorites'?' active':'')} aria-pressed={filter==='favorites'} aria-label={'รายการโปรด '+fmt(favCount)+' รายการ'} onClick={toggleFavFilter}><Icon name="heart" size={16} filled/><span className="fge-fav-count" key={bump} data-bump={bump?'true':undefined}>{fmt(favCount)}</span></button>:<span className="fge-nav-spacer"/>}</header>
   {['photos','videos','players','player'].includes(page)&&<nav className="fge-album-tabs" aria-label="เนื้อหาอัลบั้ม">

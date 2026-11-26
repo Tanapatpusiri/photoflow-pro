@@ -33,7 +33,7 @@ export async function POST(request){
  const client=await db().connect();
  try{
   await client.query('BEGIN');
-  const ev=await client.query(`SELECT id,status,locked,public_grant_id,privacy_approved_at,event_date::text AS event_date,${TODAY_SQL}::text AS today FROM fg_events WHERE id=$1 FOR UPDATE`,[eventId]);
+  const ev=await client.query(`SELECT id,status,locked,parent_event_id,public_grant_id,privacy_approved_at,event_date::text AS event_date,${TODAY_SQL}::text AS today FROM fg_events WHERE id=$1 FOR UPDATE`,[eventId]);
   if(!ev.rowCount)throw new ReviewError('EVENT_NOT_FOUND',404);
   const media=async(lock=false)=>{
    if(!isUuid(id))throw new ReviewError('INVALID_INPUT',400);
@@ -157,7 +157,7 @@ export async function POST(request){
    // Public albums receive a system-only grant atomically at publication. No guest can
    // access an album before consent, retention and publish checks succeed.
    let publicGrantId=ev.rows[0].public_grant_id;
-   if(!ev.rows[0].locked&&!publicGrantId){
+   if(!ev.rows[0].parent_event_id&&!ev.rows[0].locked&&!publicGrantId){
     const code=await client.query(`INSERT INTO fg_event_codes(event_id,code_hash,expires_at,label) VALUES($1,$2,($3::date + INTERVAL '1 day'),$4) RETURNING id`,[eventId,sha256('public-album:'+randomUUID()+':'+randomUUID()),retention,PUBLIC_GRANT_LABEL]);
     publicGrantId=code.rows[0].id;
    }

@@ -80,7 +80,9 @@ export default function FootballGallery({initialAlbums=[]}) {
  const filtering=Boolean(shownQuery||date);
  const albums=initialAlbums.filter(album=>
   album.title.normalize('NFC').toLocaleLowerCase('th').includes(search)&&
-  (!date||(album.date&&filterDate.format(new Date(album.date))===date)));
+  (!date||(album.mode==='multi-day'&&!album.locked
+   ?album.matchdayDates?.includes(date)
+   :album.date&&filterDate.format(new Date(album.date))===date)));
  const albumOrder=JSON.stringify(albums.map(album=>album.slug));
  // Search and filters: the box shows what was typed at once; the list follows inside a View
  // Transition (grid only), so cards that stay slide to their new place and the rest fade out/in.
@@ -209,7 +211,7 @@ export default function FootballGallery({initialAlbums=[]}) {
        {a.locked&&<span className="fg-album-lock"><Icon name="lock" size={14}/><span className="fg-home-sr-only">ล็อก ต้องใช้รหัส</span></span>}
        <div className="fg-home-caption"><div><strong>{a.title}</strong>{a.date&&<time dateTime={filterDate.format(new Date(a.date))}>{thaiDate.format(new Date(a.date))}</time>}</div><span className="fg-home-arrow" aria-hidden="true"><Icon name="arrow" size={17}/></span></div>
       </>;
-      return a.locked?<button key={a.slug} type="button" className="fg-album-card" style={style} onClick={()=>askCode(a.title)}>{body}</button>:<Link key={a.slug} className="fg-album-card" style={style} href={"/football-gallery/"+encodeURIComponent(a.slug)} prefetch={false}>{body}</Link>})}</div>
+      return a.locked?<button key={a.slug} type="button" className="fg-album-card" style={style} onClick={()=>askCode(a.title)}>{body}</button>:<Link key={a.slug} className="fg-album-card" style={style} href={"/football-gallery/"+encodeURIComponent(a.slug)+(date&&a.mode==='multi-day'?'?date='+encodeURIComponent(date):'')} prefetch={false}>{body}</Link>})}</div>
       {singleColumn&&albums.length>1&&<div className="fg-carousel-dots" role="group" aria-label="ตำแหน่งอัลบั้ม">
        {albums.map((album,index)=><button key={album.slug} type="button" aria-label={'แสดงอัลบั้ม '+album.title} aria-current={index===activeAlbum?'true':undefined} onClick={()=>selectAlbum(index)}/>)}
       </div>}

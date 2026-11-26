@@ -2,7 +2,7 @@ import {NextResponse} from 'next/server';
 import {configured,db,storageDriver,grantActive,isUuid,privateHeaders} from '../../../../../lib/football-gallery-server';
 import {accessToken} from '../../../../../lib/football-gallery-drive';
 import {verifyTicket,workerAuthorized} from '../../../../../lib/football-gallery-tickets';
-import {grantFingerprint,partEntries,archiveName} from '../../../../../lib/football-gallery-archive';
+import {grantFingerprint,archiveEventIds,partEntries,archiveName} from '../../../../../lib/football-gallery-archive';
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
 const reply=(body,status=200)=>NextResponse.json(body,{status,headers:privateHeaders});
@@ -41,7 +41,8 @@ export async function POST(request){
   if(job.grant_fingerprint!==grantFingerprint({codeId:t.g}))return reply({error:'forbidden'},403);
   const ids=job.manifest?.parts?.[t.p];
   if(!Array.isArray(ids)||!ids.length)return reply({error:'not-found'},404);
-  const q=await db().query(`SELECT f.id,f.r2_key,f.original_filename,f.variant,f.size_bytes,f.crc32,f.sha256,f.storage,m.captured_at FROM fg_media_files f JOIN fg_media m ON m.id=f.media_id WHERE f.id=ANY($1::uuid[]) AND m.event_id=$2 AND f.storage='drive' AND f.crc32 IS NOT NULL AND ${PUBLISHED}`,[ids,t.e]);
+  const eventIds=await archiveEventIds(t.e,t.g,job.manifest?.combined===true);
+  const q=await db().query(`SELECT f.id,f.r2_key,f.original_filename,f.variant,f.size_bytes,f.crc32,f.sha256,f.storage,m.captured_at FROM fg_media_files f JOIN fg_media m ON m.id=f.media_id WHERE f.id=ANY($1::uuid[]) AND m.event_id=ANY($2::uuid[]) AND f.storage='drive' AND f.crc32 IS NOT NULL AND ${PUBLISHED}`,[ids,eventIds]);
   if(q.rowCount!==ids.length)return reply({error:'changed'},410);
   const order=new Map(ids.map((id,i)=>[id,i]));
   const files=q.rows.sort((a,b)=>order.get(a.id)-order.get(b.id));
