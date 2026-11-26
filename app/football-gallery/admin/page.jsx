@@ -6,6 +6,7 @@ import './admin-motion.css';
 import Uploader from './upload-client';
 import ReviewClient from './review-client';
 import ChildrenManager from './children-client';
+import PlayerRegistry from './player-registry-client';
 import AlbumFront from './album-front-client';
 import StorageCard from './storage-client';
 import RetentionReview from './retention-client';
@@ -89,7 +90,7 @@ export default function FootballAdmin(){
     <StorageCard/>
     <RetentionSettings onChange={setRetentionMonths}/>
     <RetentionReview onSelect={selectRetentionEvent} refreshKey={retentionRefresh}/>
-   </>:view==='children'?<ChildrenManager events={events} initialEvent={activeId} onChanged={id=>{if(id===activeId)loadPlayers(id);return load()}}/>
+   </>:view==='children'?<><PlayerRegistry/><ChildrenManager events={events} initialEvent={activeId} onChanged={id=>{if(id===activeId)loadPlayers(id);return load()}}/></>
    :!active?<>
     <div className="fga-row"><h2 className="fga-section-title">อัลบั้มทั้งหมด</h2><button className="fga-primary" onClick={()=>setShowCreate(s=>!s)} aria-expanded={showCreate}>{showCreate?'ปิด':'+ สร้างอัลบั้ม'}</button></div>
     {showCreate&&<section className="fga-card"><h2>สร้างอัลบั้มใหม่</h2><p>อัลบั้มใหม่จะเป็น Draft และผู้ปกครองยังเข้าไม่ได้ จนกว่าจะตรวจสิทธิ์และกดเผยแพร่</p><form onSubmit={createEvent}><label>ชื่องาน<input value={title} onChange={e=>setTitle(e.target.value)} required maxLength={180} placeholder="ชื่อการแข่งขัน"/></label><label>สถานที่<input value={venue} onChange={e=>setVenue(e.target.value)} maxLength={180} placeholder="สถานที่ (ไม่บังคับ)"/></label><label>วันที่งาน<input type="date" value={date} onChange={e=>setDate(e.target.value)}/></label><label className="fga-check fga-new-lock"><input type="checkbox" checked={newLocked} onChange={e=>setNewLocked(e.target.checked)}/><span><b>ล็อกอัลบั้มนี้</b> · หากเลือก ผู้ชมต้องมีรหัสหรือลิงก์เชิญ อัลบั้มที่ไม่เลือกจะเปิดให้เข้าชมได้หลังอนุมัติเผยแพร่</span></label><button disabled={busy||!title.trim()}>{busy?'กำลังบันทึก…':'สร้างอัลบั้ม'}</button></form></section>}
@@ -110,12 +111,14 @@ export default function FootballAdmin(){
     {!active.event_date&&['draft','published','suspended'].includes(active.status)&&<section className="fga-card fga-attention"><h2>ต้องระบุวันจัดงาน</h2><p>ใช้คำนวณวันสิ้นสุดการเข้าถึง และต้องมีก่อนเผยแพร่{active.status==='published'?' การบันทึกอาจเปิดให้ผู้มีสิทธิ์เข้าถึงอัลบั้มอีกครั้งทันทีหากยังไม่หมดอายุ':''}</p><form onSubmit={saveEventDate}><label>วันที่จัดงาน<input type="date" value={missingDate} onChange={e=>setMissingDate(e.target.value)} required/></label><button disabled={busy||!missingDate}>บันทึกวันจัดงาน</button></form></section>}
     <nav className="fga-tabs" aria-label="ขั้นตอนของอัลบั้ม">{ALBUM_TABS.map(([k,l])=><button key={k} className={albumTab===k?'active':''} aria-current={albumTab===k?'step':undefined} onClick={()=>setAlbumTab(k)}>{l}{counts[k]>0&&<span className={'fga-count'+(k==='requests'||k==='review'?' alert':'')}>{counts[k]}</span>}</button>)}</nav>
 
+    {albumTab==='players'&&<PlayerRegistry key={active.id} eventId={active.id} eventPlayers={players} onChanged={async()=>{await loadPlayers(active.id);await load()}}/>}
     {albumTab==='players'&&<section className="fga-card"><h2>นักฟุตบอลในอัลบั้มนี้</h2><p>เพิ่มชื่อเด็กก่อนแท็กภาพ ชื่อจะแสดงให้ผู้ปกครองเห็นหลังบันทึกสิทธิ์ของเด็กคนนั้นแล้ว</p>
-     {players.length===0?<p className="fga-meta">ยังไม่มีนักฟุตบอล</p>:<div className="fga-items">{players.map(p=><div key={p.id}><strong>{p.name} {p.jersey?'#'+p.jersey:''}</strong><span>{p.team||'ไม่ระบุทีม'} · {p.visible?'บันทึกสิทธิ์แล้ว · แสดงในอัลบั้ม':'ยังไม่บันทึกสิทธิ์'}</span></div>)}</div>}
+     {players.length===0?<p className="fga-meta">ยังไม่มีนักฟุตบอล</p>:<div className="fga-items">{players.map(p=><div key={p.id}><strong>{p.name} {p.jersey?'#'+p.jersey:''}</strong><span>{p.age_group?p.age_group+' · ':''}{p.team||'ไม่ระบุทีม'} · {p.visible?'บันทึกสิทธิ์แล้ว · แสดงในอัลบั้ม':'ยังไม่บันทึกสิทธิ์'}</span></div>)}</div>}
      <form onSubmit={addPlayer} className="fga-inline-form"><label>ชื่อเล่น/ชื่อแสดง<input value={name} onChange={e=>setName(e.target.value)} required maxLength={100}/></label><label>หมายเลขเสื้อ<input value={jersey} onChange={e=>setJersey(e.target.value)} maxLength={12} inputMode="numeric"/></label><label>ทีม<input value={team} onChange={e=>setTeam(e.target.value)} maxLength={100}/></label><button disabled={busy||!name.trim()}>เพิ่มนักฟุตบอล</button></form>
     </section>}
     {albumTab==='upload'&&<section className="fga-card"><h2>อัปโหลด JPEG / RAW / วิดีโอ</h2>{canUpload?<Uploader eventId={active.id} album={{media:active.media||0,pending:pending(active),live:active.status==='published'}} onUploaded={()=>{setUploadKey(n=>n+1);return load()}} onReview={()=>setAlbumTab('review')} onPublish={()=>setAlbumTab('publish')}/>:<p>อัลบั้มที่ระงับหรือเก็บถาวรไม่เปิดรับอัปโหลด</p>}
     </section>}
+    {albumTab==='review'&&<details className="fga-card"><summary>เพิ่มนักฟุตบอลจากทะเบียน</summary><PlayerRegistry key={active.id} eventId={active.id} eventPlayers={players} onChanged={async()=>{await loadPlayers(active.id);await load()}}/></details>}
     {albumTab==='publish'&&<AlbumFront event={active} onChanged={()=>load()}/>}
     {['players','review','publish','requests'].includes(albumTab)&&<section className="fga-card"><ReviewClient view={albumTab} event={active} players={players} retentionMonths={retentionMonths} uploadKey={uploadKey} onUpdated={load} onPlayersChanged={()=>loadPlayers()} onNavigate={setAlbumTab}/></section>}
     {albumTab==='retention'&&<RetentionDeletionReview key={active.id} event={active}/>}
