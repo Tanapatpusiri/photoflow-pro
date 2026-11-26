@@ -34,11 +34,13 @@ const matchesPlayer=(player,query)=>{
  const term=normalizePlayerText(query).replace(/^#\s*/,'');
  return !term||[player.name,player.nickname,player.jersey].some(value=>normalizePlayerText(value).includes(term));
 };
-function PlayerAvatar({src,first}){
- const [failed,setFailed]=useState(false);
+function PlayerAvatar({src,fallback,first}){
+ const [failed,setFailed]=useState([]);
+ const image=[src,fallback].find(url=>url&&!failed.includes(url));
+ const markFailed=()=>setFailed(urls=>urls.includes(image)?urls:[...urls,image]);
  return <span className="fge-profile-ring">
   <Icon name="profile" size={29}/>
-  {src&&!failed&&<img src={src} alt="" width={64} height={64} loading={first?'eager':'lazy'} fetchPriority="low" decoding="async" draggable={false} onError={()=>setFailed(true)}/>}
+  {image&&<img key={image} src={image} alt="" width={64} height={64} loading={first?'eager':'lazy'} fetchPriority="low" decoding="async" draggable={false} ref={node=>{if(node?.complete&&!node.naturalWidth)markFailed()}} onError={markFailed}/>}
  </span>;
 }
 function PlayerStrip({players,selected,onSelect,fileUrl}){
@@ -62,7 +64,7 @@ function PlayerStrip({players,selected,onSelect,fileUrl}){
   onPointerCancel={()=>{gesture.current=null}} onClickCapture={e=>{if(ignoreClick.current&&e.detail){e.preventDefault();e.stopPropagation()}}}>
   {players.map((p,index)=><button key={p.id} type="button" className="fge-profile" aria-pressed={selected===p.id}
    aria-label={p.jersey?(p.nickname||p.name)+' #'+p.jersey:p.nickname||p.name} onClick={()=>onSelect(p)}>
-    <PlayerAvatar src={p.coverUrl||(p.cover?fileUrl({id:p.cover}):'')} first={index<4}/>
+    <PlayerAvatar src={p.profileUrl} fallback={p.coverUrl||(p.cover?fileUrl({id:p.cover}):'')} first={index<4}/>
     <span className="fge-profile-name">{p.nickname||p.name}</span>
    </button>)}
  </div>;
