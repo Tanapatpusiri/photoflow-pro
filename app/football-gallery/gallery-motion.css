@@ -69,9 +69,8 @@
 @media (max-width:370px){.fge-album-tabs{--tabs-pad:4px;--tabs-gap:3px}}
 @supports selector(:has(*)){
  .fge-album-tabs,.fge-segments{position:relative;isolation:isolate}
- .fge-album-tabs::before{content:"";position:absolute;z-index:-1;top:var(--tabs-pad);bottom:var(--tabs-pad);left:var(--tabs-pad);width:calc((100% - 2 * var(--tabs-pad) - 2 * var(--tabs-gap)) / 3);border-radius:999px;background:#fff;box-shadow:0 2px 10px #00000012;transition:transform .28s cubic-bezier(.2,.8,.2,1)}
+ .fge-album-tabs::before{content:"";position:absolute;z-index:-1;top:var(--tabs-pad);bottom:var(--tabs-pad);left:var(--tabs-pad);width:calc((100% - 2 * var(--tabs-pad) - var(--tabs-gap)) / 2);border-radius:999px;background:#fff;box-shadow:0 2px 10px #00000012;transition:transform .28s cubic-bezier(.2,.8,.2,1)}
  .fge-album-tabs:has(button:nth-child(2).active)::before{transform:translateX(calc(100% + var(--tabs-gap)))}
- .fge-album-tabs:has(button:nth-child(3).active)::before{transform:translateX(calc(200% + 2 * var(--tabs-gap)))}
  .fge-album-tabs button{position:relative;transition:transform .15s ease-out,color .2s}
  .fge-album-tabs button.active{background:transparent;box-shadow:none}
  .fge-segments::before{content:"";position:absolute;z-index:-1;top:var(--tabs-pad);bottom:var(--tabs-pad);left:var(--tabs-pad);width:calc((100% - 2 * var(--tabs-pad) - var(--tabs-gap)) / 2);border-radius:999px;background:#fff;box-shadow:0 2px 6px #00000012;transition:transform .28s cubic-bezier(.2,.8,.2,1)}
