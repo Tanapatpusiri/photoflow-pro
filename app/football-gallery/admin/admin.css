@@ -239,3 +239,13 @@
 .fga-profile-crop-frame img{position:absolute;display:block;max-width:none;pointer-events:none}
 .fga-profile-crop input[type=range]{height:32px;padding:0;border:0;accent-color:#303033}
 .fga-profile-crop button{justify-self:start}
+
+.fga-face-groups{display:grid;gap:10px;padding:16px;border:1px solid #e4e4e7;border-radius:20px}
+.fga-face-groups h3,.fga-face-groups h4,.fga-face-groups p{margin:0}
+.fga-face-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(82px,1fr));gap:10px}
+.fga-face-grid button,.fga-face-grid label{display:grid;gap:5px;min-width:0;padding:6px;border:0;border-radius:14px;background:#f4f4f5;color:#222;text-align:left;overflow-wrap:anywhere}
+.fga-face-grid img{display:block;width:100%;aspect-ratio:1;object-fit:cover;border-radius:10px}
+.fga-face-grid span{font-size:12px;color:#626268}
+.fga-face-grid label span{display:flex;align-items:center;gap:5px}
+.fga-face-grid input[type=checkbox]{width:18px;height:18px;flex:none}
+.fga-face-groups select{width:100%;min-width:0;min-height:44px;border:1px solid #e4e4e7;border-radius:14px;background:#fff;padding:7px 10px;font:inherit;font-size:16px}

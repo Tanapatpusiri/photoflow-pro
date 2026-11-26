@@ -40,6 +40,7 @@ export default function FootballAdmin(){
  const [missingDate,setMissingDate]=useState('');
  const [retentionRefresh,setRetentionRefresh]=useState(0);
  const [uploadKey,setUploadKey]=useState(0);
+ const [faceGrouping,setFaceGrouping]=useState(null);
  const [retentionMonths,setRetentionMonths]=useState(null);
  const [view,setView]=useState('albums'),[albumTab,setAlbumTab]=useState('review');
  const [activeId,setActiveId]=useState(null),[players,setPlayers]=useState([]);
@@ -137,11 +138,11 @@ export default function FootballAdmin(){
 
     {!multiDay&&albumTab==='players'&&<PlayerRegistry key={active.id} eventId={active.id} eventPlayers={players} onChanged={async()=>{await loadPlayers(active.id);await load()}}/>}
     {!multiDay&&albumTab==='players'&&<ChildrenManager key={active.id} events={[active]} initialEvent={active.id} refreshKey={players.map(p=>p.id).join(',')} onChanged={async()=>{await loadPlayers(active.id);await load()}}/>}
-    {!multiDay&&albumTab==='upload'&&<section className="fga-card"><h2>อัปโหลด JPEG / RAW / วิดีโอ</h2>{canUpload?<Uploader eventId={active.id} album={{media:active.media||0,pending:pending(active),live:active.status==='published'}} onUploaded={()=>{setUploadKey(n=>n+1);return load()}} onReview={()=>setAlbumTab('review')} onPublish={()=>setAlbumTab('publish')}/>:<p>อัลบั้มที่ระงับหรือเก็บถาวรไม่เปิดรับอัปโหลด</p>}
+    {!multiDay&&albumTab==='upload'&&<section className="fga-card"><h2>อัปโหลด JPEG / RAW / วิดีโอ</h2>{canUpload?<Uploader eventId={active.id} album={{media:active.media||0,pending:pending(active),live:active.status==='published'}} onUploaded={()=>{setUploadKey(n=>n+1);return load()}} onReview={()=>setAlbumTab('review')} onGroup={()=>{setFaceGrouping({event:active.id,request:Date.now()});setAlbumTab('review')}} onPublish={()=>setAlbumTab('publish')}/>:<p>อัลบั้มที่ระงับหรือเก็บถาวรไม่เปิดรับอัปโหลด</p>}
     </section>}
     {!multiDay&&albumTab==='review'&&<details className="fga-card"><summary>เพิ่มนักฟุตบอลจากทะเบียน</summary><PlayerRegistry key={active.id} eventId={active.id} eventPlayers={players} onChanged={async()=>{await loadPlayers(active.id);await load()}}/></details>}
     {albumTab==='publish'&&<AlbumFront event={active} onChanged={()=>load()}/>}
-    {(multiDay?['publish','requests']:['players','review','publish','requests']).includes(albumTab)&&<section className="fga-card"><ReviewClient view={albumTab} event={active} matchdayTargets={active.parent_event_id?events.filter(e=>e.id!==active.id&&e.parent_event_id===active.parent_event_id&&['draft','published'].includes(e.status)):[]} players={players} retentionMonths={retentionMonths} uploadKey={uploadKey} onUpdated={load} onPlayersChanged={()=>loadPlayers()} onNavigate={setAlbumTab}/></section>}
+    {(multiDay?['publish','requests']:['players','review','publish','requests']).includes(albumTab)&&<section className="fga-card"><ReviewClient view={albumTab} event={active} faceGroupingRequest={faceGrouping?.event===active.id?faceGrouping.request:0} onFaceGroupingStart={()=>setFaceGrouping(null)} matchdayTargets={active.parent_event_id?events.filter(e=>e.id!==active.id&&e.parent_event_id===active.parent_event_id&&['draft','published'].includes(e.status)):[]} players={players} retentionMonths={retentionMonths} uploadKey={uploadKey} onUpdated={load} onPlayersChanged={()=>loadPlayers()} onNavigate={setAlbumTab}/></section>}
     {albumTab==='retention'&&<RetentionDeletionReview key={active.id} event={active}/>}
    </>}
   </>}
